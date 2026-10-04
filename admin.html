@@ -95,7 +95,11 @@
 <label>Category<input id="contentCategory" placeholder="Star Sports / Sony Sports / Other"></label>
 <label>Content Type<select id="contentKind"><option value="channel">Channel / Standalone</option><option value="series">Show / Series</option><option value="episode">Episode</option></select></label>
 <label>Parent Show<select id="parentId"><option value="">None</option></select></label>
-<label>Media Type<select id="mediaType"><option value="iframe">Embed / URL</option><option value="video">Video</option></select></label>
+<label>Media Type<select id="mediaType">
+<option value="iframe">Embed / Iframe</option>
+<option value="video">Direct Video (MP4 / WebM)</option>
+<option value="hls">HLS Stream (.m3u8)</option>
+</select></label>
 <label>Episode Number<input id="episodeNumber" type="number" min="1"></label>
 <label class="wide">Media URL<input id="mediaUrl" type="url" placeholder="https://..."></label>
 <label>Order<input id="sortOrder" type="number" value="0"></label>

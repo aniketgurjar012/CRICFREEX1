@@ -2,23 +2,13 @@
 
 const CONFIG=window.CRICFREEX_CONFIG;
 
-if(
-  !CONFIG?.SUPABASE_URL ||
-  !CONFIG?.SUPABASE_ANON_KEY
-){
-  throw new Error(
-    "CricFreeX Supabase configuration is missing."
-  );
-}
-
 const db=window.supabase.createClient(
   CONFIG.SUPABASE_URL,
   CONFIG.SUPABASE_ANON_KEY,
   {
     auth:{
       persistSession:true,
-      autoRefreshToken:true,
-      detectSessionInUrl:true
+      autoRefreshToken:true
     }
   }
 );
@@ -28,12 +18,11 @@ const $=id=>document.getElementById(id);
 let sections=[];
 let content=[];
 let settings={};
-let sessionUser=null;
-let loadingData=false;
+let loading=false;
 
-/* ============================================================
-   LOGIN / ACCESS
-============================================================ */
+/* =========================================================
+   AUTH
+========================================================= */
 
 function showLogin(){
   $("loginPage").classList.remove("hidden");
@@ -46,10 +35,7 @@ function showAdmin(){
 }
 
 async function verifyAdmin(user){
-
-  if(!user){
-    return false;
-  }
+  if(!user)return false;
 
   const {data,error}=await db
     .from("admins")
@@ -57,685 +43,426 @@ async function verifyAdmin(user){
     .eq("user_id",user.id)
     .maybeSingle();
 
-  if(error){
-    console.error(
-      "Admin verification failed:",
-      error
-    );
-
-    return false;
-  }
-
-  return Boolean(data);
+  return !error&&Boolean(data);
 }
 
 async function bootstrap(){
+  const {data}=await db.auth.getSession();
 
-  const {data,error}=
-    await db.auth.getSession();
-
-  if(error){
-    console.error(error);
+  if(!data.session){
     showLogin();
     return;
   }
 
-  const session=data.session;
-
-  if(!session){
-    showLogin();
-    return;
-  }
-
-  const allowed=
-    await verifyAdmin(
-      session.user
-    );
-
-  if(!allowed){
-
+  if(
+    !await verifyAdmin(
+      data.session.user
+    )
+  ){
     await db.auth.signOut();
-
     showLogin();
-
     return;
   }
-
-  sessionUser=session.user;
 
   showAdmin();
-
   await loadAll();
 }
 
-$("loginForm").addEventListener(
-  "submit",
-  async event=>{
+$("loginForm").onsubmit=async e=>{
+  e.preventDefault();
 
-    event.preventDefault();
+  $("loginError").textContent="";
+  $("loginButton").disabled=true;
+  $("loginButton").textContent="Signing in...";
 
-    $("loginError").textContent="";
+  const {data,error}=
+    await db.auth.signInWithPassword({
+      email:$("email").value.trim(),
+      password:$("password").value
+    });
 
-    $("loginButton").disabled=true;
-    $("loginButton").textContent=
-      "Signing in...";
-
-    try{
-
-      const {data,error}=
-        await db.auth
-          .signInWithPassword({
-            email:
-              $("email")
-                .value
-                .trim(),
-
-            password:
-              $("password").value
-          });
-
-      if(error){
-        throw error;
-      }
-
-      const allowed=
-        await verifyAdmin(
-          data.user
-        );
-
-      if(!allowed){
-
-        await db.auth.signOut();
-
-        $("loginError").textContent=
-          "Access denied.";
-
-        return;
-      }
-
-      sessionUser=data.user;
-
-      showAdmin();
-
-      await loadAll();
-
-    }catch(error){
-
-      console.error(error);
-
-      $("loginError").textContent=
-        "Invalid email or password.";
-
-    }finally{
-
-      $("loginButton").disabled=false;
-      $("loginButton").textContent=
-        "Continue";
-    }
-  }
-);
-
-$("logout").addEventListener(
-  "click",
-  async ()=>{
-
-    await db.auth.signOut();
-
-    location.reload();
-  }
-);
-
-$("openSite").addEventListener(
-  "click",
-  ()=>{
-
-    location.href="./index.html";
-  }
-);
-
-/* ============================================================
-   LOAD EVERYTHING
-============================================================ */
-
-async function loadAll(){
-
-  if(loadingData){
+  if(error){
+    $("loginError").textContent="Invalid login.";
+    $("loginButton").disabled=false;
+    $("loginButton").textContent="Continue";
     return;
   }
 
-  loadingData=true;
+  if(!await verifyAdmin(data.user)){
+    await db.auth.signOut();
+    $("loginError").textContent="Access denied.";
+    $("loginButton").disabled=false;
+    $("loginButton").textContent="Continue";
+    return;
+  }
+
+  showAdmin();
+  await loadAll();
+
+  $("loginButton").disabled=false;
+  $("loginButton").textContent="Continue";
+};
+
+$("logout").onclick=async()=>{
+  await db.auth.signOut();
+  location.reload();
+};
+
+$("openSite").onclick=()=>{
+  location.href="./index.html";
+};
+
+/* =========================================================
+   DATA
+========================================================= */
+
+async function loadAll(){
+  if(loading)return;
+
+  loading=true;
 
   try{
-
-    const [
-      sectionResult,
-      contentResult,
-      settingsResult
-    ]=await Promise.all([
-
-      db
-        .from("sections")
+    const [s,c,w]=await Promise.all([
+      db.from("sections")
         .select("*")
-        .order(
-          "sort_order",
-          {ascending:true}
-        ),
+        .order("sort_order"),
 
-      db
-        .from("content")
+      db.from("content")
         .select("*")
-        .order(
-          "sort_order",
-          {ascending:true}
-        ),
+        .order("sort_order"),
 
-      db
-        .from("site_settings")
+      db.from("site_settings")
         .select("*")
         .eq("id",1)
         .maybeSingle()
-
     ]);
 
-    if(sectionResult.error){
-      throw sectionResult.error;
-    }
+    if(s.error)throw s.error;
+    if(c.error)throw c.error;
+    if(w.error)throw w.error;
 
-    if(contentResult.error){
-      throw contentResult.error;
-    }
+    sections=s.data||[];
+    content=c.data||[];
+    settings=w.data||{};
 
-    if(settingsResult.error){
-      throw settingsResult.error;
-    }
-
-    sections=
-      sectionResult.data||[];
-
-    content=
-      contentResult.data||[];
-
-    settings=
-      settingsResult.data||{};
-
-    updateStatistics();
+    $("statSections").textContent=sections.length;
+    $("statContent").textContent=content.length;
+    $("statShows").textContent=
+      content.filter(x=>x.kind==="series").length;
+    $("statEpisodes").textContent=
+      content.filter(x=>x.kind==="episode").length;
 
     renderContent();
-
     renderSections();
-
     fillWebsite();
-
     fillSelectors();
 
   }catch(error){
-
-    console.error(
-      "Admin data load failed:",
-      error
-    );
-
-    alert(
-      "Could not load dashboard data: "+
-      error.message
-    );
-
+    console.error(error);
+    alert("Load failed: "+error.message);
   }finally{
-
-    loadingData=false;
+    loading=false;
   }
 }
 
-function updateStatistics(){
+/* =========================================================
+   TABS
+========================================================= */
 
-  $("statSections").textContent=
-    sections.length;
+document.querySelectorAll(".tab").forEach(button=>{
+  button.onclick=()=>{
+    document.querySelectorAll(".tab")
+      .forEach(x=>x.classList.remove("active"));
 
-  $("statContent").textContent=
-    content.length;
+    button.classList.add("active");
 
-  $("statShows").textContent=
-    content.filter(
-      item=>item.kind==="series"
-    ).length;
+    const tab=button.dataset.tab;
 
-  $("statEpisodes").textContent=
-    content.filter(
-      item=>item.kind==="episode"
-    ).length;
+    $("contentPanel").classList.toggle(
+      "hidden",
+      tab!=="content"
+    );
+
+    $("websitePanel").classList.toggle(
+      "hidden",
+      tab!=="website"
+    );
+
+    $("sectionsPanel").classList.toggle(
+      "hidden",
+      tab!=="sections"
+    );
+
+    $("editorPanel").classList.add("hidden");
+  };
+});
+
+/* =========================================================
+   CONTENT LIST
+========================================================= */
+
+function parentName(item){
+  if(!item.parent_id)return "";
+
+  return content.find(
+    x=>x.id===item.parent_id
+  )?.title||"Unknown Show";
 }
 
-/* ============================================================
-   ADMIN TABS
-============================================================ */
-
-document
-  .querySelectorAll(".tab")
-  .forEach(button=>{
-
-    button.addEventListener(
-      "click",
-      ()=>{
-
-        document
-          .querySelectorAll(".tab")
-          .forEach(item=>
-            item.classList
-              .remove("active")
-          );
-
-        button.classList.add(
-          "active"
-        );
-
-        const selected=
-          button.dataset.tab;
-
-        $("contentPanel")
-          .classList
-          .toggle(
-            "hidden",
-            selected!=="content"
-          );
-
-        $("websitePanel")
-          .classList
-          .toggle(
-            "hidden",
-            selected!=="website"
-          );
-
-        $("sectionsPanel")
-          .classList
-          .toggle(
-            "hidden",
-            selected!=="sections"
-          );
-
-        $("editorPanel")
-          .classList
-          .add("hidden");
-      }
-    );
-  });
-
-/* ============================================================
-   CONTENT LIST
-============================================================ */
-
 function renderContent(){
-
   const query=
-    $("contentSearch")
-      .value
+    $("contentSearch").value
       .trim()
       .toLowerCase();
 
-  const filtered=
-    content.filter(item=>{
+  $("contentList").replaceChildren();
 
-      if(!query){
-        return true;
-      }
+  const list=content.filter(item=>{
+    if(!query)return true;
 
-      return (
-        item.title
-          ?.toLowerCase()
-          .includes(query)
-        ||
-        item.public_id
-          ?.toLowerCase()
-          .includes(query)
-        ||
-        item.category
-          ?.toLowerCase()
-          .includes(query)
-        ||
-        item.section_slug
-          ?.toLowerCase()
-          .includes(query)
-        ||
-        item.kind
-          ?.toLowerCase()
-          .includes(query)
-      );
-    });
+    return [
+      item.title,
+      item.public_id,
+      item.category,
+      item.section_slug,
+      item.kind,
+      parentName(item)
+    ].some(
+      x=>x?.toLowerCase().includes(query)
+    );
+  });
 
-  $("contentList")
-    .replaceChildren();
-
-  if(!filtered.length){
-
+  if(!list.length){
     $("contentList").innerHTML=
       '<div class="empty">No content found.</div>';
-
     return;
   }
 
-  filtered.forEach(item=>{
-
-    const row=
-      document.createElement(
-        "div"
-      );
-
+  list.forEach(item=>{
+    const row=document.createElement("div");
     row.className="row";
 
-    let media;
+    let thumb;
 
     if(item.image_url){
-
-      media=
-        document.createElement(
-          "img"
-        );
-
-      media.className="thumb";
-
-      media.src=item.image_url;
-
-      media.alt="";
-
-      media.loading="lazy";
-
+      thumb=document.createElement("img");
+      thumb.className="thumb";
+      thumb.src=item.image_url;
+      thumb.loading="lazy";
+      thumb.alt="";
     }else{
-
-      media=
-        document.createElement(
-          "div"
-        );
-
-      media.className=
-        "thumb-placeholder";
-
-      media.textContent=
-        item.kind==="series"
-          ?"S"
-          :item.kind==="episode"
-            ?"E"
+      thumb=document.createElement("div");
+      thumb.className="thumb-placeholder";
+      thumb.textContent=
+        item.kind==="episode"
+          ?"E"
+          :item.kind==="series"
+            ?"S"
             :"CX";
     }
 
-    const info=
-      document.createElement(
-        "div"
-      );
+    const info=document.createElement("div");
 
-    const title=
-      document.createElement(
-        "b"
-      );
+    const title=document.createElement("b");
+    title.textContent=item.title;
 
-    title.textContent=
-      item.title;
+    const details=document.createElement("small");
 
-    const details=
-      document.createElement(
-        "small"
-      );
-
-    const detailsParts=[
+    const parts=[
       item.kind,
+      item.kind==="episode"
+        ?`Parent: ${parentName(item)}`
+        :null,
       item.section_slug,
       item.category,
       item.public_id,
+      item.media_type,
       item.published
         ?"Published"
         :"Draft"
     ].filter(Boolean);
 
-    details.textContent=
-      detailsParts.join(" • ");
+    details.textContent=parts.join(" • ");
 
-    info.append(
-      title,
-      details
-    );
+    info.append(title,details);
 
-    const actions=
-      document.createElement(
-        "div"
-      );
+    const actions=document.createElement("div");
+    actions.className="actions";
 
-    actions.className=
-      "actions";
+    const edit=document.createElement("button");
+    edit.className="ghost";
+    edit.textContent="Edit";
+    edit.onclick=()=>editContent(item);
 
-    const editButton=
-      document.createElement(
-        "button"
-      );
+    const remove=document.createElement("button");
+    remove.className="danger";
+    remove.textContent="Delete";
+    remove.onclick=()=>removeContent(item);
 
-    editButton.className=
-      "ghost";
+    actions.append(edit,remove);
 
-    editButton.textContent=
-      "Edit";
-
-    editButton.addEventListener(
-      "click",
-      ()=>editContent(item)
-    );
-
-    const deleteButton=
-      document.createElement(
-        "button"
-      );
-
-    deleteButton.className=
-      "danger";
-
-    deleteButton.textContent=
-      "Delete";
-
-    deleteButton.addEventListener(
-      "click",
-      ()=>removeContent(item)
-    );
-
-    actions.append(
-      editButton,
-      deleteButton
-    );
-
-    row.append(
-      media,
-      info,
-      actions
-    );
-
-    $("contentList")
-      .append(row);
+    row.append(thumb,info,actions);
+    $("contentList").append(row);
   });
 }
 
-$("contentSearch")
-  .addEventListener(
-    "input",
-    renderContent
-  );
+$("contentSearch").oninput=renderContent;
 
-/* ============================================================
-   FORM SELECTORS
-============================================================ */
+/* =========================================================
+   SELECTORS / EPISODE RULES
+========================================================= */
 
 function fillSelectors(){
+  const oldSection=$("contentSection").value;
+  const oldParent=$("parentId").value;
 
-  const currentSection=
-    $("contentSection").value;
-
-  const currentParent=
-    $("parentId").value;
-
-  $("contentSection")
-    .replaceChildren();
+  $("contentSection").replaceChildren();
 
   sections.forEach(section=>{
-
-    const option=
-      document.createElement(
-        "option"
-      );
-
-    option.value=
-      section.slug;
-
-    option.textContent=
-      section.name;
-
-    $("contentSection")
-      .append(option);
+    const option=document.createElement("option");
+    option.value=section.slug;
+    option.textContent=section.name;
+    $("contentSection").append(option);
   });
 
   if(
-    currentSection &&
-    sections.some(
-      item=>
-        item.slug===
-        currentSection
-    )
+    sections.some(x=>x.slug===oldSection)
   ){
-    $("contentSection").value=
-      currentSection;
+    $("contentSection").value=oldSection;
   }
 
   $("parentId").innerHTML=
-    '<option value="">None</option>';
+    '<option value="">Select Parent Show</option>';
 
   content
-    .filter(
-      item=>
-        item.kind==="series"
-    )
+    .filter(x=>x.kind==="series")
     .forEach(show=>{
-
-      const option=
-        document.createElement(
-          "option"
-        );
-
-      option.value=
-        show.id;
-
-      option.textContent=
-        show.title;
-
-      $("parentId")
-        .append(option);
+      const option=document.createElement("option");
+      option.value=show.id;
+      option.textContent=show.title;
+      $("parentId").append(option);
     });
 
   if(
-    currentParent &&
     content.some(
-      item=>
-        item.id===
-        currentParent &&
-        item.kind==="series"
+      x=>
+        x.id===oldParent &&
+        x.kind==="series"
     )
   ){
-    $("parentId").value=
-      currentParent;
+    $("parentId").value=oldParent;
   }
 }
 
-/* ============================================================
-   ADD / EDIT CONTENT
-============================================================ */
+function applyKindRules(){
+  const kind=$("contentKind").value;
+  const isEpisode=kind==="episode";
+
+  $("parentId").disabled=!isEpisode;
+  $("episodeNumber").disabled=!isEpisode;
+
+  if(!isEpisode){
+    $("parentId").value="";
+    $("episodeNumber").value="";
+  }
+}
+
+$("contentKind").addEventListener(
+  "change",
+  applyKindRules
+);
+
+$("parentId").addEventListener(
+  "change",
+  ()=>{
+    if(
+      $("contentKind").value!=="episode"
+    )return;
+
+    const show=content.find(
+      x=>
+        x.id===$("parentId").value &&
+        x.kind==="series"
+    );
+
+    if(!show)return;
+
+    /*
+      Episodes inherit show location.
+    */
+
+    $("contentSection").value=
+      show.section_slug||"";
+
+    $("contentCategory").value=
+      show.category||"series";
+  }
+);
+
+/* =========================================================
+   EDITOR
+========================================================= */
 
 function resetEditor(){
-
   $("contentForm").reset();
-
   $("contentId").value="";
-
   $("sortOrder").value="0";
-
   $("published").value="true";
-
-  $("contentKind").value=
-    "channel";
-
-  $("mediaType").value=
-    "iframe";
-
-  $("editorHeading")
-    .textContent=
-      "Add Content";
-
-  $("deleteContent")
-    .classList
-    .add("hidden");
+  $("contentKind").value="channel";
+  $("mediaType").value="iframe";
+  $("editorHeading").textContent="Add Content";
+  $("deleteContent").classList.add("hidden");
 
   fillSelectors();
 
   if(sections.length){
-
     $("contentSection").value=
       sections[0].slug;
   }
+
+  applyKindRules();
 }
 
-$("addContent").addEventListener(
-  "click",
-  ()=>{
-
-    resetEditor();
-
-    $("editorPanel")
-      .classList
-      .remove("hidden");
-
-    $("editorPanel")
-      .scrollIntoView({
-        behavior:"smooth",
-        block:"start"
-      });
-  }
-);
-
-$("closeEditor").addEventListener(
-  "click",
-  ()=>{
-
-    $("editorPanel")
-      .classList
-      .add("hidden");
-  }
-);
-
-function editContent(item){
-
+$("addContent").onclick=()=>{
   resetEditor();
 
-  $("editorHeading")
-    .textContent=
-      "Edit Content";
+  $("editorPanel").classList.remove("hidden");
 
-  $("contentId").value=
-    item.id;
+  $("editorPanel").scrollIntoView({
+    behavior:"smooth",
+    block:"start"
+  });
+};
 
-  $("contentTitle").value=
-    item.title||"";
+$("closeEditor").onclick=()=>{
+  $("editorPanel").classList.add("hidden");
+};
 
-  $("publicId").value=
-    item.public_id||"";
+function editContent(item){
+  resetEditor();
 
-  $("contentSection").value=
-    item.section_slug||"";
+  $("contentId").value=item.id;
+  $("contentTitle").value=item.title||"";
+  $("publicId").value=item.public_id||"";
+  $("contentSection").value=item.section_slug||"";
+  $("contentCategory").value=item.category||"";
+  $("contentKind").value=item.kind||"channel";
 
-  $("contentCategory").value=
-    item.category||"";
+  /*
+    Enable episode controls before
+    setting parent.
+  */
 
-  $("contentKind").value=
-    item.kind||"channel";
+  applyKindRules();
 
-  $("parentId").value=
-    item.parent_id||"";
+  if(item.kind==="episode"){
+    $("parentId").value=item.parent_id||"";
+    $("episodeNumber").value=
+      item.episode_number||"";
+  }
 
   $("mediaType").value=
     item.media_type||"iframe";
-
-  $("episodeNumber").value=
-    item.episode_number||"";
 
   $("mediaUrl").value=
     item.media_url||"";
@@ -744,781 +471,515 @@ function editContent(item){
     item.sort_order||0;
 
   $("published").value=
-    String(
-      item.published
-    );
+    String(item.published);
 
-  $("deleteContent")
-    .classList
-    .remove("hidden");
+  $("editorHeading").textContent="Edit Content";
+  $("deleteContent").classList.remove("hidden");
+  $("editorPanel").classList.remove("hidden");
 
-  $("editorPanel")
-    .classList
-    .remove("hidden");
-
-  $("editorPanel")
-    .scrollIntoView({
-      behavior:"smooth",
-      block:"start"
-    });
+  $("editorPanel").scrollIntoView({
+    behavior:"smooth"
+  });
 }
 
-/* ============================================================
-   STORAGE HELPERS
-============================================================ */
+/* =========================================================
+   STORAGE
+========================================================= */
 
-/*
-  Only URLs belonging to this project's PUBLIC
-  "media" bucket are considered deletable.
-
-  External iframe/video URLs are ignored.
-*/
-
-function getStoragePath(
-  publicUrl
-){
-
-  if(!publicUrl){
-    return null;
-  }
+function storagePath(urlValue){
+  if(!urlValue)return null;
 
   try{
+    const url=new URL(urlValue);
+    const project=new URL(CONFIG.SUPABASE_URL);
 
-    const url=
-      new URL(publicUrl);
-
-    const projectHost=
-      new URL(
-        CONFIG.SUPABASE_URL
-      ).host;
-
-    /*
-      Extra protection:
-      only operate on this
-      Supabase project.
-    */
-
-    if(
-      url.host!==
-      projectHost
-    ){
+    if(url.host!==project.host){
       return null;
     }
 
     const markers=[
-
       "/storage/v1/object/public/media/",
-
       "/storage/v1/object/sign/media/"
-
     ];
 
-    for(
-      const marker of markers
-    ){
+    for(const marker of markers){
+      const index=url.pathname.indexOf(marker);
 
-      const position=
-        url.pathname
-          .indexOf(marker);
-
-      if(position!==-1){
-
+      if(index!==-1){
         const path=
           url.pathname.slice(
-            position+
-            marker.length
+            index+marker.length
           );
 
-        if(!path){
-          return null;
-        }
-
-        return decodeURIComponent(
-          path
-        );
+        return path
+          ?decodeURIComponent(path)
+          :null;
       }
     }
 
     return null;
 
   }catch{
-
     return null;
   }
 }
 
-async function deleteStoragePaths(
-  paths
-){
+async function removePaths(paths){
+  const unique=[
+    ...new Set(
+      paths.filter(Boolean)
+    )
+  ];
 
-  const uniquePaths=
-    [
-      ...new Set(
-        paths.filter(Boolean)
-      )
-    ];
+  if(!unique.length)return;
 
-  if(!uniquePaths.length){
-    return;
-  }
+  const {error}=await db.storage
+    .from("media")
+    .remove(unique);
 
-  const {error}=
-    await db.storage
-      .from("media")
-      .remove(uniquePaths);
-
-  if(error){
-    throw error;
-  }
+  if(error)throw error;
 }
 
-async function deleteMediaFiles(
-  records
-){
+async function uploadFile(file,type){
+  if(!file)return null;
 
-  const paths=[];
+  const isVideo=type==="videos";
 
-  for(const record of records){
+  const allowed=isVideo
+    ?["video/mp4","video/webm"]
+    :["image/jpeg","image/png","image/webp"];
 
-    const imagePath=
-      getStoragePath(
-        record.image_url
-      );
-
-    if(imagePath){
-      paths.push(imagePath);
-    }
-
-    /*
-      media_url is deleted only
-      when it actually points to
-      this project's media bucket.
-
-      This means external iframe
-      URLs remain untouched.
-    */
-
-    const mediaPath=
-      getStoragePath(
-        record.media_url
-      );
-
-    if(mediaPath){
-      paths.push(mediaPath);
-    }
-  }
-
-  await deleteStoragePaths(
-    paths
-  );
-}
-
-/* ============================================================
-   FILE UPLOAD
-============================================================ */
-
-async function upload(
-  file,
-  folder
-){
-
-  if(!file){
-    return null;
-  }
-
-  const isVideo=
-    folder==="videos";
-
-  const maxSize=
-    isVideo
-      ?250*1024*1024
-      :8*1024*1024;
-
-  if(file.size>maxSize){
-
+  if(!allowed.includes(file.type)){
     throw new Error(
       isVideo
-        ?"Video is too large. Maximum 250 MB."
-        :"Image is too large. Maximum 8 MB."
+        ?"Only MP4/WebM videos are allowed."
+        :"Only JPG/PNG/WebP images are allowed."
     );
   }
 
-  const allowedImageTypes=[
-    "image/jpeg",
-    "image/png",
-    "image/webp"
-  ];
+  const max=isVideo
+    ?250*1024*1024
+    :8*1024*1024;
 
-  const allowedVideoTypes=[
-    "video/mp4",
-    "video/webm"
-  ];
-
-  if(
-    isVideo &&
-    !allowedVideoTypes.includes(
-      file.type
-    )
-  ){
+  if(file.size>max){
     throw new Error(
-      "Only MP4 and WebM video files are allowed."
+      isVideo
+        ?"Video exceeds 250 MB."
+        :"Image exceeds 8 MB."
     );
   }
 
-  if(
-    !isVideo &&
-    !allowedImageTypes.includes(
-      file.type
-    )
-  ){
-    throw new Error(
-      "Only JPG, PNG and WebP images are allowed."
-    );
-  }
-
-  let extension=
+  const ext=
     file.name
       .split(".")
       .pop()
-      ?.toLowerCase()
-      .replace(
-        /[^a-z0-9]/g,
-        ""
-      );
-
-  if(!extension){
-
-    extension=
-      isVideo
-        ?"mp4"
-        :"jpg";
-  }
+      ?.replace(/[^a-z0-9]/gi,"")
+      .toLowerCase()
+    ||
+    (isVideo?"mp4":"jpg");
 
   const path=
-    `${folder}/${crypto.randomUUID()}.${extension}`;
+    `${type}/${crypto.randomUUID()}.${ext}`;
 
-  const {error}=
-    await db.storage
-      .from("media")
-      .upload(
-        path,
-        file,
-        {
-          cacheControl:"3600",
-          upsert:false,
-          contentType:file.type
-        }
-      );
+  const {error}=await db.storage
+    .from("media")
+    .upload(
+      path,
+      file,
+      {
+        upsert:false,
+        contentType:file.type,
+        cacheControl:"3600"
+      }
+    );
 
-  if(error){
-    throw error;
-  }
+  if(error)throw error;
 
-  const {
-    data
-  }=
-    db.storage
-      .from("media")
-      .getPublicUrl(path);
+  const {data}=db.storage
+    .from("media")
+    .getPublicUrl(path);
 
-  if(
-    !data?.publicUrl
-  ){
+  if(!data?.publicUrl){
     throw new Error(
-      "Could not generate media URL."
+      "Could not obtain uploaded media URL."
     );
   }
 
   return data.publicUrl;
 }
 
-/* ============================================================
+/* =========================================================
    SAVE CONTENT
-============================================================ */
+========================================================= */
 
-$("contentForm")
-  .addEventListener(
-    "submit",
-    async event=>{
+$("contentForm").onsubmit=async event=>{
+  event.preventDefault();
 
-      event.preventDefault();
+  const button=$("saveContent");
 
-      const saveButton=
-        $("saveContent");
+  button.disabled=true;
+  button.textContent="Saving...";
 
-      saveButton.disabled=true;
+  let uploadedImage=null;
+  let uploadedVideo=null;
 
-      saveButton.textContent=
-        "Saving...";
+  try{
+    const id=$("contentId").value;
 
-      let newImageUrl=null;
-      let newVideoUrl=null;
+    const existing=id
+      ?content.find(x=>x.id===id)
+      :null;
 
-      try{
+    const kind=$("contentKind").value;
 
-        const id=
-          $("contentId").value;
+    const title=$("contentTitle")
+      .value
+      .trim();
 
-        const existing=
-          id
-            ?content.find(
-                item=>item.id===id
-              )
-            :null;
-
-        const imageFile=
-          $("imageUpload")
-            .files[0];
-
-        const videoFile=
-          $("videoUpload")
-            .files[0];
-
-        /*
-          Start with current values.
-        */
-
-        let imageUrl=
-          existing?.image_url||
-          null;
-
-        let mediaUrl=
-          $("mediaUrl")
-            .value
-            .trim()
-          ||
-          existing?.media_url
-          ||
-          null;
-
-        let mediaType=
-          $("mediaType").value;
-
-        /*
-          Upload replacements first.
-        */
-
-        if(imageFile){
-
-          newImageUrl=
-            await upload(
-              imageFile,
-              "images"
-            );
-
-          imageUrl=
-            newImageUrl;
-        }
-
-        if(videoFile){
-
-          newVideoUrl=
-            await upload(
-              videoFile,
-              "videos"
-            );
-
-          mediaUrl=
-            newVideoUrl;
-
-          mediaType="video";
-        }
-
-        const title=
-          $("contentTitle")
-            .value
-            .trim();
-
-        if(!title){
-
-          throw new Error(
-            "Title is required."
-          );
-        }
-
-        const kind=
-          $("contentKind").value;
-
-        const parentId=
-          $("parentId").value||
-          null;
-
-        /*
-          Episode must have a series.
-        */
-
-        if(
-          kind==="episode" &&
-          !parentId
-        ){
-
-          throw new Error(
-            "Select a parent show for the episode."
-          );
-        }
-
-        /*
-          A series itself cannot
-          have another parent.
-        */
-
-        const finalParent=
-          kind==="episode"
-            ?parentId
-            :null;
-
-        const payload={
-
-          title,
-
-          public_id:
-            $("publicId")
-              .value
-              .trim()
-            ||null,
-
-          section_slug:
-            $("contentSection")
-              .value,
-
-          category:
-            $("contentCategory")
-              .value
-              .trim()
-            ||null,
-
-          kind,
-
-          parent_id:
-            finalParent,
-
-          media_type:
-            mediaType,
-
-          media_url:
-            kind==="series"
-              ?null
-              :mediaUrl,
-
-          image_url:
-            imageUrl,
-
-          episode_number:
-            kind==="episode" &&
-            $("episodeNumber").value
-              ?Number(
-                  $("episodeNumber")
-                    .value
-                )
-              :null,
-
-          sort_order:
-            Number(
-              $("sortOrder")
-                .value
-            )||0,
-
-          published:
-            $("published")
-              .value===
-              "true",
-
-          updated_at:
-            new Date()
-              .toISOString()
-        };
-
-        let result;
-
-        if(id){
-
-          result=
-            await db
-              .from("content")
-              .update(payload)
-              .eq("id",id);
-
-        }else{
-
-          result=
-            await db
-              .from("content")
-              .insert(payload);
-        }
-
-        if(result.error){
-          throw result.error;
-        }
-
-        /*
-          Database save succeeded.
-
-          Now clean old files that
-          were replaced.
-        */
-
-        const oldPaths=[];
-
-        if(
-          existing &&
-          newImageUrl &&
-          existing.image_url &&
-          existing.image_url!==
-          newImageUrl
-        ){
-
-          const oldImagePath=
-            getStoragePath(
-              existing.image_url
-            );
-
-          if(oldImagePath){
-            oldPaths.push(
-              oldImagePath
-            );
-          }
-        }
-
-        if(
-          existing &&
-          newVideoUrl &&
-          existing.media_url &&
-          existing.media_url!==
-          newVideoUrl
-        ){
-
-          const oldVideoPath=
-            getStoragePath(
-              existing.media_url
-            );
-
-          if(oldVideoPath){
-            oldPaths.push(
-              oldVideoPath
-            );
-          }
-        }
-
-        if(oldPaths.length){
-
-          try{
-
-            await deleteStoragePaths(
-              oldPaths
-            );
-
-          }catch(cleanupError){
-
-            console.warn(
-              "Old media cleanup failed:",
-              cleanupError
-            );
-          }
-        }
-
-        $("editorPanel")
-          .classList
-          .add("hidden");
-
-        await loadAll();
-
-      }catch(error){
-
-        console.error(
-          "Save failed:",
-          error
-        );
-
-        /*
-          If upload succeeded but
-          database save failed,
-          remove the newly-created
-          files to avoid orphan files.
-        */
-
-        const cleanup=[];
-
-        const newImagePath=
-          getStoragePath(
-            newImageUrl
-          );
-
-        const newVideoPath=
-          getStoragePath(
-            newVideoUrl
-          );
-
-        if(newImagePath){
-          cleanup.push(
-            newImagePath
-          );
-        }
-
-        if(newVideoPath){
-          cleanup.push(
-            newVideoPath
-          );
-        }
-
-        if(cleanup.length){
-
-          try{
-
-            await deleteStoragePaths(
-              cleanup
-            );
-
-          }catch(cleanupError){
-
-            console.warn(
-              "Failed upload cleanup:",
-              cleanupError
-            );
-          }
-        }
-
-        alert(
-          "Save failed: "+
-          error.message
-        );
-
-      }finally{
-
-        saveButton.disabled=false;
-
-        saveButton.textContent=
-          "Save Content";
-      }
+    if(!title){
+      throw new Error("Title is required.");
     }
-  );
 
-/* ============================================================
-   DELETE CONTENT + STORAGE CLEANUP
-============================================================ */
+    let parent=null;
 
-async function getRecordsForDeletion(
-  item
-){
+    if(kind==="episode"){
+      const parentId=$("parentId").value;
 
-  /*
-    Normal content:
-    only itself.
+      if(!parentId){
+        throw new Error(
+          "Episode must have a Parent Show."
+        );
+      }
 
-    Series:
-    series + all directly attached
-    episodes.
-
-    Current data model only has
-    one episode level.
-  */
-
-  if(item.kind!=="series"){
-
-    return [{
-      id:item.id,
-      image_url:item.image_url,
-      media_url:item.media_url,
-      media_type:item.media_type
-    }];
-  }
-
-  const {data,error}=
-    await db
-      .from("content")
-      .select(
-        "id,image_url,media_url,media_type"
-      )
-      .or(
-        `id.eq.${item.id},parent_id.eq.${item.id}`
+      parent=content.find(
+        x=>
+          x.id===parentId &&
+          x.kind==="series"
       );
 
-  if(error){
-    throw error;
+      if(!parent){
+        throw new Error(
+          "Selected parent show is invalid."
+        );
+      }
+    }
+
+    const imageFile=
+      $("imageUpload").files[0];
+
+    const videoFile=
+      $("videoUpload").files[0];
+
+    let imageUrl=
+      existing?.image_url||null;
+
+    let mediaUrl=
+      $("mediaUrl").value.trim()
+      ||
+      existing?.media_url
+      ||
+      null;
+
+    let mediaType=
+      $("mediaType").value;
+
+    if(imageFile){
+      uploadedImage=
+        await uploadFile(
+          imageFile,
+          "images"
+        );
+
+      imageUrl=uploadedImage;
+    }
+
+    if(videoFile){
+      uploadedVideo=
+        await uploadFile(
+          videoFile,
+          "videos"
+        );
+
+      mediaUrl=uploadedVideo;
+      mediaType="video";
+    }
+
+    /*
+      Series = container.
+      Its media is not used by player.
+    */
+
+    if(kind==="series"){
+      mediaUrl=null;
+    }
+
+    const payload={
+      title,
+      public_id:
+        $("publicId").value.trim()||
+        null,
+
+      section_slug:
+        kind==="episode"
+          ?parent.section_slug
+          :$("contentSection").value,
+
+      category:
+        kind==="episode"
+          ?(parent.category||"series")
+          :($("contentCategory").value.trim()||null),
+
+      kind,
+
+      parent_id:
+        kind==="episode"
+          ?parent.id
+          :null,
+
+      media_type:
+        mediaType,
+
+      media_url:
+        mediaUrl,
+
+      image_url:
+        imageUrl,
+
+      episode_number:
+        kind==="episode"
+          ?(
+              $("episodeNumber").value
+                ?Number(
+                    $("episodeNumber").value
+                  )
+                :null
+            )
+          :null,
+
+      sort_order:
+        Number(
+          $("sortOrder").value
+        )||0,
+
+      published:
+        $("published").value==="true",
+
+      updated_at:
+        new Date().toISOString()
+    };
+
+    let result;
+
+    if(id){
+      result=await db
+        .from("content")
+        .update(payload)
+        .eq("id",id);
+    }else{
+      result=await db
+        .from("content")
+        .insert(payload);
+    }
+
+    if(result.error){
+      throw result.error;
+    }
+
+    /*
+      New DB state is safe.
+      Now remove replaced old media.
+    */
+
+    const oldPaths=[];
+
+    if(
+      existing?.image_url &&
+      uploadedImage &&
+      existing.image_url!==uploadedImage
+    ){
+      const path=
+        storagePath(
+          existing.image_url
+        );
+
+      if(path)oldPaths.push(path);
+    }
+
+    if(
+      existing?.media_url &&
+      uploadedVideo &&
+      existing.media_url!==uploadedVideo
+    ){
+      const path=
+        storagePath(
+          existing.media_url
+        );
+
+      if(path)oldPaths.push(path);
+    }
+
+    /*
+      If an existing channel/video is
+      converted into a Series, its old
+      uploaded player media is no longer
+      referenced.
+    */
+
+    if(
+      existing?.media_url &&
+      kind==="series"
+    ){
+      const path=
+        storagePath(
+          existing.media_url
+        );
+
+      if(path)oldPaths.push(path);
+    }
+
+    try{
+      await removePaths(oldPaths);
+    }catch(cleanError){
+      console.warn(
+        "Old media cleanup failed:",
+        cleanError
+      );
+    }
+
+    $("editorPanel")
+      .classList
+      .add("hidden");
+
+    await loadAll();
+
+  }catch(error){
+    console.error(error);
+
+    /*
+      Upload happened but DB save failed:
+      remove freshly uploaded orphan files.
+    */
+
+    const paths=[
+      storagePath(uploadedImage),
+      storagePath(uploadedVideo)
+    ];
+
+    try{
+      await removePaths(paths);
+    }catch(cleanError){
+      console.warn(
+        "Failed save cleanup:",
+        cleanError
+      );
+    }
+
+    alert(
+      "Save failed: "+
+      error.message
+    );
+
+  }finally{
+    button.disabled=false;
+    button.textContent="Save Content";
   }
+};
+
+/* =========================================================
+   COMPLETE DELETE
+========================================================= */
+
+async function collectDeletionRecords(item){
+  if(item.kind!=="series"){
+    return [item];
+  }
+
+  const {data,error}=await db
+    .from("content")
+    .select(
+      "id,image_url,media_url,media_type,parent_id"
+    )
+    .or(
+      `id.eq.${item.id},parent_id.eq.${item.id}`
+    );
+
+  if(error)throw error;
 
   return data||[];
 }
 
-async function removeContent(
-  item
-){
+async function removeContent(item){
+  const series=item.kind==="series";
 
-  const isSeries=
-    item.kind==="series";
+  const confirmText=series
+    ?`Delete "${item.title}"?\n\nThis will permanently delete the show, all episodes, all uploaded posters and all uploaded videos associated with them.`
+    :`Delete "${item.title}"?\n\nIts database record and uploaded media will be permanently deleted.`;
 
-  const message=
-    isSeries
-      ?
-      `Delete "${item.title}"?\n\nThis permanently deletes the show, its episodes, and associated uploaded media.`
-      :
-      `Delete "${item.title}"?\n\nThis permanently deletes its database record and associated uploaded media.`;
-
-  if(!window.confirm(message)){
-    return;
-  }
+  if(!confirm(confirmText))return;
 
   try{
-
     /*
-      Read URLs before deleting DB.
+      Collect storage URLs BEFORE DB deletion.
     */
 
     const records=
-      await getRecordsForDeletion(
-        item
-      );
+      await collectDeletionRecords(item);
+
+    const storagePaths=[];
+
+    records.forEach(record=>{
+      const image=
+        storagePath(
+          record.image_url
+        );
+
+      const media=
+        storagePath(
+          record.media_url
+        );
+
+      if(image)storagePaths.push(image);
+      if(media)storagePaths.push(media);
+    });
 
     /*
-      Database first.
+      Delete DB.
 
-      parent_id uses
-      ON DELETE CASCADE,
-      therefore deleting a series
-      automatically deletes its
-      episode rows.
+      Series children disappear through
+      ON DELETE CASCADE.
     */
 
-    const {error}=
-      await db
-        .from("content")
-        .delete()
-        .eq("id",item.id);
+    const {error}=await db
+      .from("content")
+      .delete()
+      .eq("id",item.id);
 
-    if(error){
-      throw error;
-    }
+    if(error)throw error;
 
     /*
-      Then remove uploaded media.
-
-      External URLs are ignored.
+      Delete every Supabase media object
+      associated with those records.
     */
 
     try{
-
-      await deleteMediaFiles(
-        records
+      await removePaths(
+        storagePaths
       );
-
-    }catch(mediaError){
-
-      console.warn(
-        "Record deleted but media cleanup failed:",
-        mediaError
+    }catch(storageError){
+      console.error(
+        "Storage cleanup failed:",
+        storageError
       );
 
       alert(
-        "Content was deleted, but some uploaded media could not be cleaned automatically."
+        "Database content was deleted, but some Storage files could not be removed automatically."
       );
     }
 
     if(
-      $("contentId").value===
-      item.id
+      $("contentId").value===item.id
     ){
-
       $("contentId").value="";
-
       $("editorPanel")
         .classList
         .add("hidden");
@@ -1527,11 +988,7 @@ async function removeContent(
     await loadAll();
 
   }catch(error){
-
-    console.error(
-      "Delete failed:",
-      error
-    );
+    console.error(error);
 
     alert(
       "Delete failed: "+
@@ -1540,32 +997,165 @@ async function removeContent(
   }
 }
 
-$("deleteContent")
-  .addEventListener(
-    "click",
-    ()=>{
-
-      const id=
-        $("contentId").value;
-
-      const item=
-        content.find(
-          contentItem=>
-            contentItem.id===id
-        );
-
-      if(item){
-        removeContent(item);
-      }
-    }
+$("deleteContent").onclick=()=>{
+  const item=content.find(
+    x=>
+      x.id===
+      $("contentId").value
   );
 
-/* ============================================================
+  if(item){
+    removeContent(item);
+  }
+};
+
+/* =========================================================
+   ORPHAN STORAGE CLEANUP
+========================================================= */
+
+/*
+  Removes files in media/images and media/videos
+  that are not referenced by ANY content record.
+
+  Can be called manually from DevTools:
+    cleanupOrphanMedia()
+
+  Or we can later add a Dashboard button.
+*/
+
+async function cleanupOrphanMedia(){
+  if(!confirm(
+    "Scan and permanently delete unreferenced uploaded images/videos?"
+  )){
+    return;
+  }
+
+  try{
+    const referenced=
+      new Set();
+
+    content.forEach(item=>{
+      const image=
+        storagePath(
+          item.image_url
+        );
+
+      const media=
+        storagePath(
+          item.media_url
+        );
+
+      if(image)referenced.add(image);
+      if(media)referenced.add(media);
+    });
+
+    const orphanPaths=[];
+
+    for(
+      const folder of [
+        "images",
+        "videos"
+      ]
+    ){
+      let offset=0;
+
+      while(true){
+        const {data,error}=
+          await db.storage
+            .from("media")
+            .list(
+              folder,
+              {
+                limit:100,
+                offset,
+                sortBy:{
+                  column:"name",
+                  order:"asc"
+                }
+              }
+            );
+
+        if(error)throw error;
+
+        const files=data||[];
+
+        files.forEach(file=>{
+          /*
+            Ignore placeholder folder entries.
+          */
+
+          if(!file.name)return;
+
+          const path=
+            `${folder}/${file.name}`;
+
+          if(!referenced.has(path)){
+            orphanPaths.push(path);
+          }
+        });
+
+        if(files.length<100){
+          break;
+        }
+
+        offset+=100;
+      }
+    }
+
+    if(!orphanPaths.length){
+      alert(
+        "No orphan media found."
+      );
+
+      return;
+    }
+
+    if(!confirm(
+      `Found ${orphanPaths.length} unreferenced file(s). Delete all?`
+    )){
+      return;
+    }
+
+    /*
+      Supabase remove can handle arrays.
+      Chunk to avoid oversized requests.
+    */
+
+    for(
+      let i=0;
+      i<orphanPaths.length;
+      i+=100
+    ){
+      await removePaths(
+        orphanPaths.slice(
+          i,
+          i+100
+        )
+      );
+    }
+
+    alert(
+      `${orphanPaths.length} orphan media file(s) deleted.`
+    );
+
+  }catch(error){
+    console.error(error);
+
+    alert(
+      "Orphan cleanup failed: "+
+      error.message
+    );
+  }
+}
+
+window.cleanupOrphanMedia=
+  cleanupOrphanMedia;
+
+/* =========================================================
    WEBSITE SETTINGS
-============================================================ */
+========================================================= */
 
 function fillWebsite(){
-
   $("siteName").value=
     settings.site_name||
     "CricFreeX";
@@ -1579,414 +1169,223 @@ function fillWebsite(){
     "YOUR GAME.|YOUR SCREEN.";
 
   $("siteHeroText").value=
-    settings.hero_text||
-    "";
+    settings.hero_text||"";
 }
 
-$("websiteForm")
-  .addEventListener(
-    "submit",
-    async event=>{
+$("websiteForm").onsubmit=async event=>{
+  event.preventDefault();
 
-      event.preventDefault();
+  const name=
+    $("siteName").value.trim();
 
-      const siteName=
-        $("siteName")
-          .value
-          .trim();
-
-      if(!siteName){
-
-        alert(
-          "Website name is required."
-        );
-
-        return;
-      }
-
-      const {error}=
-        await db
-          .from("site_settings")
-          .upsert({
-
-            id:1,
-
-            site_name:
-              siteName,
-
-            hero_kicker:
-              $("siteHeroKicker")
-                .value
-                .trim(),
-
-            hero_title:
-              $("siteHeroTitle")
-                .value
-                .trim(),
-
-            hero_text:
-              $("siteHeroText")
-                .value
-                .trim(),
-
-            updated_at:
-              new Date()
-                .toISOString()
-          });
-
-      if(error){
-
-        alert(
-          error.message
-        );
-
-        return;
-      }
-
-      await loadAll();
-
-      alert(
-        "Website updated."
-      );
-    }
-  );
-
-/* ============================================================
-   SECTIONS
-============================================================ */
-
-function renderSections(){
-
-  $("sectionList")
-    .replaceChildren();
-
-  if(!sections.length){
-
-    $("sectionList").innerHTML=
-      '<div class="empty">No sections.</div>';
-
+  if(!name){
+    alert("Website name is required.");
     return;
   }
 
+  const {error}=await db
+    .from("site_settings")
+    .upsert({
+      id:1,
+      site_name:name,
+      hero_kicker:
+        $("siteHeroKicker").value.trim(),
+      hero_title:
+        $("siteHeroTitle").value.trim(),
+      hero_text:
+        $("siteHeroText").value.trim(),
+      updated_at:
+        new Date().toISOString()
+    });
+
+  if(error){
+    alert(error.message);
+    return;
+  }
+
+  await loadAll();
+
+  alert("Website updated.");
+};
+
+/* =========================================================
+   SECTIONS
+========================================================= */
+
+function renderSections(){
+  $("sectionList").replaceChildren();
+
   sections.forEach(section=>{
+    const row=document.createElement("div");
+    row.className="section-row";
 
-    const row=
-      document.createElement(
-        "div"
-      );
+    const name=document.createElement("input");
+    name.value=section.name;
 
-    row.className=
-      "section-row";
+    const order=document.createElement("input");
+    order.type="number";
+    order.value=section.sort_order||0;
 
-    const name=
-      document.createElement(
-        "input"
-      );
+    const actions=document.createElement("div");
+    actions.className="actions";
 
-    name.value=
-      section.name;
+    const save=document.createElement("button");
+    save.className="ghost";
+    save.textContent="Save";
 
-    name.placeholder=
-      "Section name";
+    save.onclick=async()=>{
+      const newName=name.value.trim();
 
-    const order=
-      document.createElement(
-        "input"
-      );
-
-    order.type=
-      "number";
-
-    order.value=
-      section.sort_order||0;
-
-    const actions=
-      document.createElement(
-        "div"
-      );
-
-    actions.className=
-      "actions";
-
-    const save=
-      document.createElement(
-        "button"
-      );
-
-    save.className=
-      "ghost";
-
-    save.textContent=
-      "Save";
-
-    save.addEventListener(
-      "click",
-      async ()=>{
-
-        const newName=
-          name.value.trim();
-
-        if(!newName){
-
-          alert(
-            "Section name cannot be empty."
-          );
-
-          return;
-        }
-
-        const {error}=
-          await db
-            .from("sections")
-            .update({
-
-              name:newName,
-
-              sort_order:
-                Number(
-                  order.value
-                )||0
-
-            })
-            .eq(
-              "id",
-              section.id
-            );
-
-        if(error){
-
-          alert(
-            error.message
-          );
-
-          return;
-        }
-
-        await loadAll();
-      }
-    );
-
-    const remove=
-      document.createElement(
-        "button"
-      );
-
-    remove.className=
-      "danger";
-
-    remove.textContent=
-      "Delete";
-
-    remove.addEventListener(
-      "click",
-      async ()=>{
-
-        const used=
-          content.some(
-            item=>
-              item.section_slug===
-              section.slug
-          );
-
-        if(used){
-
-          alert(
-            "Move or delete the content inside this section first."
-          );
-
-          return;
-        }
-
-        if(
-          !window.confirm(
-            `Delete section "${section.name}"?`
-          )
-        ){
-          return;
-        }
-
-        const {error}=
-          await db
-            .from("sections")
-            .delete()
-            .eq(
-              "id",
-              section.id
-            );
-
-        if(error){
-
-          alert(
-            error.message
-          );
-
-          return;
-        }
-
-        await loadAll();
-      }
-    );
-
-    actions.append(
-      save,
-      remove
-    );
-
-    row.append(
-      name,
-      order,
-      actions
-    );
-
-    $("sectionList")
-      .append(row);
-  });
-}
-
-$("addSection")
-  .addEventListener(
-    "click",
-    async ()=>{
-
-      const value=
-        window.prompt(
-          "Section name:"
-        );
-
-      const name=
-        value?.trim();
-
-      if(!name){
+      if(!newName){
+        alert("Section name required.");
         return;
       }
 
-      const slug=
-        name
-          .toLowerCase()
-          .normalize("NFKD")
-          .replace(
-            /[^a-z0-9]+/g,
-            "-"
-          )
-          .replace(
-            /^-+|-+$/g,
-            ""
-          );
-
-      if(!slug){
-
-        alert(
-          "Invalid section name."
-        );
-
-        return;
-      }
-
-      const {error}=
-        await db
-          .from("sections")
-          .insert({
-
-            slug,
-
-            name,
-
-            icon:"＋",
-
-            sort_order:
-              sections.length+1,
-
-            published:true
-          });
+      const {error}=await db
+        .from("sections")
+        .update({
+          name:newName,
+          sort_order:
+            Number(order.value)||0
+        })
+        .eq("id",section.id);
 
       if(error){
-
-        alert(
-          error.message
-        );
-
+        alert(error.message);
         return;
       }
 
       await loadAll();
-    }
-  );
+    };
 
-/* ============================================================
+    const remove=document.createElement("button");
+    remove.className="danger";
+    remove.textContent="Delete";
+
+    remove.onclick=async()=>{
+      if(
+        content.some(
+          x=>
+            x.section_slug===
+            section.slug
+        )
+      ){
+        alert(
+          "Delete or move this section's content first."
+        );
+        return;
+      }
+
+      if(
+        !confirm(
+          `Delete section "${section.name}"?`
+        )
+      )return;
+
+      const {error}=await db
+        .from("sections")
+        .delete()
+        .eq("id",section.id);
+
+      if(error){
+        alert(error.message);
+        return;
+      }
+
+      await loadAll();
+    };
+
+    actions.append(save,remove);
+    row.append(name,order,actions);
+
+    $("sectionList").append(row);
+  });
+}
+
+$("addSection").onclick=async()=>{
+  const raw=prompt("Section name:");
+  const name=raw?.trim();
+
+  if(!name)return;
+
+  const slug=name
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[^a-z0-9]+/g,"-")
+    .replace(/^-+|-+$/g,"");
+
+  if(!slug){
+    alert("Invalid section name.");
+    return;
+  }
+
+  const {error}=await db
+    .from("sections")
+    .insert({
+      slug,
+      name,
+      icon:"＋",
+      sort_order:
+        sections.length+1,
+      published:true
+    });
+
+  if(error){
+    alert(error.message);
+    return;
+  }
+
+  await loadAll();
+};
+
+/* =========================================================
    REALTIME
-============================================================ */
+========================================================= */
 
-let refreshTimer=null;
+let realtimeTimer=null;
 
-function scheduleRefresh(){
+function refreshSoon(){
+  clearTimeout(realtimeTimer);
 
-  clearTimeout(
-    refreshTimer
-  );
-
-  refreshTimer=
+  realtimeTimer=
     setTimeout(
-      ()=>loadAll(),
-      200
+      loadAll,
+      250
     );
 }
 
-const realtime=
-  db.channel(
-    "cricfreex-admin-live"
+db.channel("cricfreex-admin-live")
+  .on(
+    "postgres_changes",
+    {
+      event:"*",
+      schema:"public",
+      table:"content"
+    },
+    refreshSoon
   )
-    .on(
-      "postgres_changes",
-      {
-        event:"*",
-        schema:"public",
-        table:"content"
-      },
-      scheduleRefresh
-    )
-    .on(
-      "postgres_changes",
-      {
-        event:"*",
-        schema:"public",
-        table:"sections"
-      },
-      scheduleRefresh
-    )
-    .on(
-      "postgres_changes",
-      {
-        event:"*",
-        schema:"public",
-        table:"site_settings"
-      },
-      scheduleRefresh
-    )
-    .subscribe();
+  .on(
+    "postgres_changes",
+    {
+      event:"*",
+      schema:"public",
+      table:"sections"
+    },
+    refreshSoon
+  )
+  .on(
+    "postgres_changes",
+    {
+      event:"*",
+      schema:"public",
+      table:"site_settings"
+    },
+    refreshSoon
+  )
+  .subscribe();
 
-/* ============================================================
-   AUTH STATE
-============================================================ */
-
-db.auth.onAuthStateChange(
-  async (
-    event,
-    session
-  )=>{
-
-    if(
-      event==="SIGNED_OUT"
-    ){
-
-      sessionUser=null;
-
-      showLogin();
-    }
-  }
-);
-
-/* ============================================================
+/* =========================================================
    START
-============================================================ */
+========================================================= */
 
 bootstrap();

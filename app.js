@@ -17,208 +17,93 @@ let section="sports";
 let filter="all";
 let activeSeries=null;
 let selected="";
+let restored=false;
 
-let initialURLRestored=false;
-
-/* ============================================================
-   HELPERS
-============================================================ */
-
-const esc=value=>
-  String(value??"")
-    .replace(
-      /[&<>"']/g,
-      char=>({
-        "&":"&amp;",
-        "<":"&lt;",
-        ">":"&gt;",
-        '"':"&quot;",
-        "'":"&#039;"
-      }[char])
-    );
+const esc=v=>
+  String(v??"").replace(
+    /[&<>"']/g,
+    c=>({
+      "&":"&amp;",
+      "<":"&lt;",
+      ">":"&gt;",
+      '"':"&quot;",
+      "'":"&#039;"
+    }[c])
+  );
 
 function brand(name){
-
-  if(
-    /^cricfreex$/i.test(
-      name||""
-    )
-  ){
+  if(/^cricfreex$/i.test(name||"")){
     return `CRIC<span class="brand-red">FREEX</span>`;
   }
 
-  return esc(
-    name||"CricFreeX"
-  );
+  return esc(name||"CricFreeX");
 }
 
-function mediaURL(value){
-
-  if(!value){
-    return null;
-  }
+function safeURL(value){
+  if(!value)return null;
 
   try{
+    const u=new URL(
+      value,
+      location.href
+    );
 
-    const url=
-      new URL(
-        value,
-        window.location.href
-      );
-
-    if(
-      ![
-        "https:",
-        "http:"
-      ].includes(url.protocol)
-    ){
-      return null;
-    }
-
-    return url.href;
+    return [
+      "https:",
+      "http:"
+    ].includes(u.protocol)
+      ?u.href
+      :null;
 
   }catch{
-
     return null;
   }
 }
-
-function sectionObj(){
-
-  return sections.find(
-    item=>
-      item.slug===section
-  );
-}
-
-function getItemByPublicId(
-  publicId
-){
-
-  if(!publicId){
-    return null;
-  }
-
-  return content.find(
-    item=>
-      item.public_id===
-      publicId
-  )||null;
-}
-
-function getParentSeries(
-  episode
-){
-
-  if(!episode?.parent_id){
-    return null;
-  }
-
-  return content.find(
-    item=>
-      item.id===
-      episode.parent_id &&
-      item.kind==="series"
-  )||null;
-}
-
-/* ============================================================
-   DATABASE LOAD
-============================================================ */
 
 async function load(){
-
   try{
-
-    const [
-      settingsResult,
-      sectionsResult,
-      contentResult
-    ]=await Promise.all([
-
-      db
-        .from("site_settings")
+    const [a,b,c]=await Promise.all([
+      db.from("site_settings")
         .select("*")
         .eq("id",1)
         .maybeSingle(),
 
-      db
-        .from("sections")
+      db.from("sections")
         .select("*")
         .eq("published",true)
-        .order(
-          "sort_order",
-          {ascending:true}
-        ),
+        .order("sort_order"),
 
-      db
-        .from("content")
+      db.from("content")
         .select("*")
         .eq("published",true)
-        .order(
-          "sort_order",
-          {ascending:true}
-        )
-
+        .order("sort_order")
     ]);
 
-    if(settingsResult.error){
-      throw settingsResult.error;
-    }
+    if(a.error)throw a.error;
+    if(b.error)throw b.error;
+    if(c.error)throw c.error;
 
-    if(sectionsResult.error){
-      throw sectionsResult.error;
-    }
-
-    if(contentResult.error){
-      throw contentResult.error;
-    }
-
-    if(settingsResult.data){
-      settings=
-        settingsResult.data;
-    }
-
-    sections=
-      sectionsResult.data||[];
-
-    content=
-      contentResult.data||[];
-
-    /*
-      Keep current section if it exists.
-
-      Otherwise use first available section.
-    */
+    settings=a.data||null;
+    sections=b.data||[];
+    content=c.data||[];
 
     if(
       !sections.some(
-        item=>
-          item.slug===section
+        x=>x.slug===section
       ) &&
       sections.length
     ){
-      section=
-        sections[0].slug;
+      section=sections[0].slug;
     }
 
     renderAll();
 
   }catch(error){
-
-    console.error(
-      "CricFreeX load error:",
-      error
-    );
+    console.error(error);
   }
 }
 
-/* ============================================================
-   SITE RENDER
-============================================================ */
-
 function renderAll(){
-
   const name=
     settings?.site_name||
     "CricFreeX";
@@ -229,23 +114,19 @@ function renderAll(){
   $("footerLogo").innerHTML=
     brand(name);
 
-  document.title=
-    `${name} — Sports & Entertainment`;
+  const parts=(
+    settings?.hero_title||
+    "YOUR GAME.|YOUR SCREEN."
+  ).split("|");
 
   $("heroKicker").textContent=
     settings?.hero_kicker||
     "CRICFREEX LIVE";
 
-  const heroParts=
-    (
-      settings?.hero_title||
-      "YOUR GAME.|YOUR SCREEN."
-    ).split("|");
-
   $("heroTitle").innerHTML=
-    `${esc(heroParts[0])}${
-      heroParts[1]
-        ?`<span>${esc(heroParts[1])}</span>`
+    `${esc(parts[0])}${
+      parts[1]
+        ?`<span>${esc(parts[1])}</span>`
         :""
     }`;
 
@@ -258,173 +139,95 @@ function renderAll(){
   render();
 }
 
-/* ============================================================
-   MAIN TABS
-============================================================ */
-
 function renderTabs(){
+  $("mainTabs").replaceChildren();
 
-  $("mainTabs")
-    .replaceChildren();
+  sections.forEach(s=>{
+    const b=document.createElement("button");
 
-  sections.forEach(item=>{
-
-    const button=
-      document.createElement(
-        "button"
-      );
-
-    button.type=
-      "button";
-
-    button.className=
+    b.className=
       "main-tab"+
       (
-        section===item.slug
+        section===s.slug
           ?" active"
           :""
       );
 
-    button.textContent=
-      `${item.icon||""} ${item.name}`
-        .trim();
+    b.textContent=
+      `${s.icon||""} ${s.name}`.trim();
 
-    button.addEventListener(
-      "click",
-      ()=>{
+    b.onclick=()=>{
+      section=s.slug;
+      filter="all";
+      activeSeries=null;
+      selected="";
+      $("search").value="";
 
-        section=
-          item.slug;
+      clearURL();
 
-        filter=
-          "all";
+      renderTabs();
+      renderFilters();
+      render();
+    };
 
-        activeSeries=
-          null;
-
-        selected=
-          "";
-
-        $("search").value=
-          "";
-
-        clearShareURL();
-
-        renderTabs();
-        renderFilters();
-        render();
-
-        $("channels")
-          .scrollIntoView({
-            behavior:"smooth",
-            block:"start"
-          });
-      }
-    );
-
-    $("mainTabs")
-      .append(button);
+    $("mainTabs").append(b);
   });
 }
 
-/* ============================================================
-   FILTERS
-============================================================ */
-
 function renderFilters(){
-
-  $("filters")
-    .replaceChildren();
+  $("filters").replaceChildren();
 
   if(activeSeries){
-
-    $("filters").style.display=
-      "none";
-
+    $("filters").style.display="none";
     return;
   }
 
-  $("filters").style.display=
-    "flex";
+  $("filters").style.display="flex";
 
   const categories=[
     "all",
     ...new Set(
       content
         .filter(
-          item=>
-            item.section_slug===
-              section &&
-            !item.parent_id
+          x=>
+            x.section_slug===section &&
+            !x.parent_id
         )
-        .map(
-          item=>item.category
-        )
+        .map(x=>x.category)
         .filter(Boolean)
     )
   ];
 
-  categories.forEach(
-    category=>{
+  categories.forEach(cat=>{
+    const b=document.createElement("button");
 
-      const button=
-        document.createElement(
-          "button"
-        );
-
-      button.type=
-        "button";
-
-      button.className=
-        "filter"+
-        (
-          filter===category
-            ?" active"
-            :""
-        );
-
-      button.textContent=
-        category==="all"
-          ?"All"
-          :category;
-
-      button.addEventListener(
-        "click",
-        ()=>{
-
-          filter=
-            category;
-
-          renderFilters();
-          render();
-        }
+    b.className=
+      "filter"+
+      (
+        filter===cat
+          ?" active"
+          :""
       );
 
-      $("filters")
-        .append(button);
-    }
-  );
+    b.textContent=
+      cat==="all"
+        ?"All"
+        :cat;
+
+    b.onclick=()=>{
+      filter=cat;
+      renderFilters();
+      render();
+    };
+
+    $("filters").append(b);
+  });
 }
 
-/* ============================================================
-   CONTENT CARD
-============================================================ */
+function makeCard(item,label,meta){
+  const b=document.createElement("button");
 
-function card(
-  item,
-  label,
-  meta
-){
-
-  const button=
-    document.createElement(
-      "button"
-    );
-
-  button.type=
-    "button";
-
-  button.className=
+  b.className=
     "channel-card"+
     (
       selected===item.id
@@ -432,661 +235,537 @@ function card(
         :""
     );
 
-  /*
-    Thumbnail
-  */
-
   if(item.image_url){
-
-    const image=
-      document.createElement(
-        "img"
-      );
-
-    image.className=
-      "channel-thumb";
-
-    image.src=
-      item.image_url;
-
-    image.alt="";
-
-    image.loading=
-      "lazy";
-
-    button.append(image);
+    const img=document.createElement("img");
+    img.className="channel-thumb";
+    img.src=item.image_url;
+    img.alt="";
+    img.loading="lazy";
+    b.append(img);
   }
 
-  /*
-    Top row
-  */
+  const top=document.createElement("div");
+  top.className="channel-top";
 
-  const top=
-    document.createElement(
-      "div"
-    );
+  const live=document.createElement("div");
+  live.className="channel-live";
 
-  top.className=
-    "channel-top";
-
-  const live=
-    document.createElement(
-      "div"
-    );
-
-  live.className=
-    "channel-live";
-
-  const dot=
-    document.createElement(
-      "i"
-    );
+  const dot=document.createElement("i");
 
   live.append(
     dot,
-    document.createTextNode(
-      label
-    )
+    document.createTextNode(label)
   );
 
-  const category=
-    document.createElement(
-      "div"
-    );
-
-  category.className=
-    "channel-category";
-
+  const category=document.createElement("div");
+  category.className="channel-category";
   category.textContent=
     item.category||
     item.kind||
     "";
 
-  top.append(
-    live,
-    category
-  );
+  top.append(live,category);
 
-  /*
-    Name
-  */
+  const name=document.createElement("div");
+  name.className="channel-name";
+  name.textContent=item.title;
 
-  const name=
-    document.createElement(
-      "div"
-    );
-
-  name.className=
-    "channel-name";
-
-  name.textContent=
-    item.title;
-
-  /*
-    Public ID / episode metadata
-  */
-
-  const id=
-    document.createElement(
-      "div"
-    );
-
-  id.className=
-    "channel-id";
-
+  const id=document.createElement("div");
+  id.className="channel-id";
   id.textContent=
     meta||
     item.public_id||
     "";
 
-  button.append(
-    top,
-    name,
-    id
-  );
+  b.append(top,name,id);
 
-  return button;
+  return b;
 }
 
-/* ============================================================
-   MAIN CONTENT RENDER
-============================================================ */
+function empty(text){
+  const e=document.createElement("div");
+  e.className="empty";
+  e.textContent=text;
+  $("channelGrid").append(e);
+}
 
 function render(){
-
-  const query=
-    $("search")
-      .value
+  const q=
+    $("search").value
       .trim()
       .toLowerCase();
 
-  $("channelGrid")
-    .replaceChildren();
-
-  /*
-    SERIES EPISODE VIEW
-  */
+  $("channelGrid").replaceChildren();
 
   if(activeSeries){
+    $("seriesBack").classList.add("show");
 
-    $("seriesBack")
-      .classList
-      .add("show");
-
-    $("kicker").textContent=
-      "EPISODES";
-
+    $("kicker").textContent="EPISODES";
     $("sectionTitle").textContent=
       activeSeries.title;
 
-    const episodes=
-      content.filter(item=>{
-
-        const belongs=
-          item.parent_id===
-            activeSeries.id &&
-          item.kind==="episode";
-
-        if(!belongs){
-          return false;
-        }
-
-        if(!query){
-          return true;
-        }
-
-        return (
-          item.title
-            ?.toLowerCase()
-            .includes(query)
-          ||
-          item.public_id
-            ?.toLowerCase()
-            .includes(query)
-          ||
-          String(
-            item.episode_number||
-            ""
-          ).includes(query)
-        );
-      });
-
-    $("channelCount")
-      .textContent=
-        `${episodes.length} episode${
-          episodes.length===1
-            ?""
-            :"s"
-        }`;
-
-    if(!episodes.length){
-
-      empty(
-        "No episodes found."
-      );
-
-      return;
-    }
-
-    episodes.forEach(
-      episode=>{
-
-        const button=
-          card(
-            episode,
-            "WATCH",
-            `EPISODE ${
-              episode.episode_number||
-              ""
-            }`
-          );
-
-        button.addEventListener(
-          "click",
-          ()=>play(episode)
-        );
-
-        $("channelGrid")
-          .append(button);
-      }
+    const episodes=content.filter(x=>
+      x.kind==="episode" &&
+      x.parent_id===activeSeries.id &&
+      (
+        !q ||
+        x.title
+          ?.toLowerCase()
+          .includes(q)
+        ||
+        x.public_id
+          ?.toLowerCase()
+          .includes(q)
+      )
     );
 
-    return;
-  }
-
-  /*
-    NORMAL SECTION VIEW
-  */
-
-  $("seriesBack")
-    .classList
-    .remove("show");
-
-  const current=
-    sectionObj();
-
-  $("kicker").textContent=
-    (
-      current?.name||
-      "EXPLORE"
-    ).toUpperCase();
-
-  $("sectionTitle").textContent=
-    current?.name||
-    "Content";
-
-  const list=
-    content.filter(item=>{
-
-      const sectionMatch=
-        item.section_slug===
-        section;
-
-      const parentMatch=
-        !item.parent_id;
-
-      const categoryMatch=
-        filter==="all"||
-        item.category===filter;
-
-      const searchMatch=
-        !query
-        ||
-        item.title
-          ?.toLowerCase()
-          .includes(query)
-        ||
-        item.public_id
-          ?.toLowerCase()
-          .includes(query);
-
-      return (
-        sectionMatch &&
-        parentMatch &&
-        categoryMatch &&
-        searchMatch
-      );
-    });
-
-  $("channelCount")
-    .textContent=
-      `${list.length} item${
-        list.length===1
+    $("channelCount").textContent=
+      `${episodes.length} episode${
+        episodes.length===1
           ?""
           :"s"
       }`;
 
-  if(!list.length){
+    if(!episodes.length){
+      empty("No episodes found.");
+      return;
+    }
 
-    empty(
-      "No content found."
-    );
+    episodes.forEach(ep=>{
+      const b=makeCard(
+        ep,
+        "WATCH",
+        `EPISODE ${
+          ep.episode_number||""
+        }`
+      );
+
+      b.onclick=()=>play(ep);
+
+      $("channelGrid").append(b);
+    });
 
     return;
   }
 
-  list.forEach(item=>{
+  $("seriesBack").classList.remove("show");
 
-    const isSeries=
+  const s=sections.find(
+    x=>x.slug===section
+  );
+
+  $("kicker").textContent=
+    (s?.name||"EXPLORE")
+      .toUpperCase();
+
+  $("sectionTitle").textContent=
+    s?.name||"Content";
+
+  const list=content.filter(x=>
+    x.section_slug===section &&
+    !x.parent_id &&
+    x.kind!=="episode" &&
+    (
+      filter==="all" ||
+      x.category===filter
+    ) &&
+    (
+      !q ||
+      x.title
+        ?.toLowerCase()
+        .includes(q)
+      ||
+      x.public_id
+        ?.toLowerCase()
+        .includes(q)
+    )
+  );
+
+  $("channelCount").textContent=
+    `${list.length} item${
+      list.length===1?"":"s"
+    }`;
+
+  if(!list.length){
+    empty("No content found.");
+    return;
+  }
+
+  list.forEach(item=>{
+    const series=
       item.kind==="series";
 
-    let episodeCount=0;
+    const count=series
+      ?content.filter(
+          x=>
+            x.kind==="episode" &&
+            x.parent_id===item.id
+        ).length
+      :0;
 
-    if(isSeries){
-
-      episodeCount=
-        content.filter(
-          episode=>
-            episode.parent_id===
-              item.id &&
-            episode.kind===
-              "episode"
-        ).length;
-    }
-
-    const button=
-      card(
-        item,
-        isSeries
-          ?"SERIES"
-          :"LIVE",
-        isSeries
-          ?`${episodeCount} EPISODES`
-          :item.public_id
-      );
-
-    button.addEventListener(
-      "click",
-      ()=>{
-        if(isSeries){
-          openSeries(item);
-        }else{
-          play(item);
-        }
-      }
+    const b=makeCard(
+      item,
+      series?"SERIES":"LIVE",
+      series
+        ?`${count} EPISODES`
+        :item.public_id
     );
 
-    $("channelGrid")
-      .append(button);
+    b.onclick=()=>
+      series
+        ?openSeries(item)
+        :play(item);
+
+    $("channelGrid").append(b);
   });
 }
 
-function empty(text){
+function clearURL(){
+  const u=new URL(location.href);
 
-  const element=
-    document.createElement(
-      "div"
-    );
-
-  element.className=
-    "empty";
-
-  element.textContent=
-    text;
-
-  $("channelGrid")
-    .append(element);
-}
-
-/* ============================================================
-   SHAREABLE URL
-============================================================ */
-
-function clearShareURL(){
-
-  const url=
-    new URL(
-      window.location.href
-    );
-
-  url.searchParams.delete(
-    "channel"
-  );
-
-  url.searchParams.delete(
-    "show"
-  );
-
-  url.searchParams.delete(
+  [
+    "channel",
+    "show",
     "episode"
+  ].forEach(
+    key=>u.searchParams.delete(key)
   );
 
   history.replaceState(
     {},
     "",
-    url
+    u
   );
 }
 
-function updateShareURL(
-  item
-){
+function updateURL(item){
+  const u=new URL(location.href);
 
-  const url=
-    new URL(
-      window.location.href
+  [
+    "channel",
+    "show",
+    "episode"
+  ].forEach(
+    key=>u.searchParams.delete(key)
+  );
+
+  if(item.kind==="episode"){
+    const parent=content.find(
+      x=>x.id===item.parent_id
     );
 
-  url.searchParams.delete(
-    "channel"
-  );
-
-  url.searchParams.delete(
-    "show"
-  );
-
-  url.searchParams.delete(
-    "episode"
-  );
-
-  /*
-    EPISODE
-  */
-
-  if(
-    item.kind==="episode"
-  ){
-
-    const parent=
-      getParentSeries(item);
-
     if(parent?.public_id){
-
-      url.searchParams.set(
+      u.searchParams.set(
         "show",
         parent.public_id
       );
     }
 
     if(item.public_id){
-
-      url.searchParams.set(
+      u.searchParams.set(
         "episode",
         item.public_id
       );
     }
 
-  /*
-    SERIES
-  */
-
-  }else if(
-    item.kind==="series"
-  ){
-
+  }else if(item.kind==="series"){
     if(item.public_id){
-
-      url.searchParams.set(
+      u.searchParams.set(
         "show",
         item.public_id
       );
     }
 
-  /*
-    CHANNEL / MOVIE / OTHER
-  */
-
-  }else{
-
-    if(item.public_id){
-
-      url.searchParams.set(
-        "channel",
-        item.public_id
-      );
-    }
+  }else if(item.public_id){
+    u.searchParams.set(
+      "channel",
+      item.public_id
+    );
   }
 
   history.replaceState(
     {},
     "",
-    url
+    u
   );
 }
 
-/* ============================================================
-   OPEN SERIES
-============================================================ */
+function openSeries(item,update=true){
+  activeSeries=item;
+  section=item.section_slug;
+  filter="all";
+  selected="";
+  $("search").value="";
 
-function openSeries(
-  item,
-  options={}
-){
-
-  activeSeries=
-    item;
-
-  section=
-    item.section_slug||
-    section;
-
-  filter=
-    "all";
-
-  selected=
-    "";
-
-  $("search").value=
-    "";
-
-  if(
-    options.updateURL!==
-    false
-  ){
-
-    updateShareURL(item);
+  if(update){
+    updateURL(item);
   }
 
   renderTabs();
   renderFilters();
   render();
 
-  if(
-    options.scroll!==
-    false
-  ){
-
-    $("channels")
-      .scrollIntoView({
-        behavior:"smooth",
-        block:"start"
-      });
-  }
+  $("channels").scrollIntoView({
+    behavior:"smooth"
+  });
 }
 
-/* ============================================================
-   PLAYER
-============================================================ */
+function play(item,update=true){
 
-function playerUnavailable(){
-
-  $("playingStatus")
-    .textContent=
-      "UNAVAILABLE";
-
-  $("playerWrap")
-    .innerHTML=
-      '<div class="player-empty"><div><strong>Source not configured</strong>No media source is configured.</div></div>';
-}
-
-function play(
-  item,
-  options={}
-){
-
-  selected=
-    item.id;
-
-  section=
-    item.section_slug||
-    section;
+  selected=item.id;
 
   /*
-    If episode opened from direct URL,
-    restore its series view.
+    Episode hai to parent show restore.
   */
 
-  if(
-    item.kind==="episode"
-  ){
+  if(item.kind==="episode"){
 
-    const parent=
-      getParentSeries(item);
+    const parent=content.find(
+      x=>
+        x.id===item.parent_id &&
+        x.kind==="series"
+    );
 
     if(parent){
       activeSeries=parent;
+      section=parent.section_slug;
     }
 
   }else{
+
+    section=item.section_slug;
     activeSeries=null;
   }
 
-  $("playingTitle")
-    .textContent=
-      item.title;
-
-  $("playingCategory")
-    .textContent=
-      (
-        item.category||
-        item.kind||
-        "CRICFREEX"
-      ).toUpperCase();
-
-  $("playingStatus")
-    .textContent=
-      "LOADING";
-
-  if(
-    options.updateURL!==
-    false
-  ){
-
-    updateShareURL(item);
+  if(update){
+    updateURL(item);
   }
+
+  $("playingTitle").textContent=
+    item.title;
+
+  $("playingCategory").textContent=
+    (
+      item.category||
+      item.kind||
+      "CRICFREEX"
+    ).toUpperCase();
+
+  $("playingStatus").textContent=
+    "LOADING";
 
   renderTabs();
   renderFilters();
   render();
 
-  const url=
-    mediaURL(
-      item.media_url
-    );
+  const url=safeURL(
+    item.media_url
+  );
 
-  $("playerWrap")
-    .replaceChildren();
+  $("playerWrap").replaceChildren();
 
   if(!url){
 
-    playerUnavailable();
+    $("playingStatus").textContent=
+      "UNAVAILABLE";
 
-    if(
-      options.scroll!==
-      false
-    ){
-
-      $("watch")
-        .scrollIntoView({
-          behavior:"smooth",
-          block:"start"
-        });
-    }
+    $("playerWrap").innerHTML=
+      '<div class="player-empty"><div><strong>Source not configured</strong>No media source is configured.</div></div>';
 
     return;
   }
 
   /*
-    DIRECT VIDEO
+    ==========================================
+    HLS / M3U8
+    ==========================================
   */
 
   if(
-    item.media_type===
-    "video"
+    item.media_type==="hls" ||
+    /\.m3u8($|\?)/i.test(url)
   ){
 
     const video=
-      document.createElement(
-        "video"
-      );
+      document.createElement("video");
 
     video.className=
       "stream-video";
 
-    video.controls=
-      true;
+    video.controls=true;
+    video.playsInline=true;
+    video.autoplay=true;
+    video.preload="metadata";
 
-    video.playsInline=
-      true;
+    video.setAttribute(
+      "controlsList",
+      "nodownload"
+    );
 
-    video.autoplay=
-      true;
+    video.setAttribute(
+      "disablePictureInPicture",
+      ""
+    );
 
-    video.preload=
-      "metadata";
+    $("playerWrap").append(video);
 
-    video.controlsList=
-      "nodownload";
+    /*
+      Safari / iPhone / iPad:
+      native HLS support.
+    */
+
+    if(
+      video.canPlayType(
+        "application/vnd.apple.mpegurl"
+      )
+    ){
+
+      video.src=url;
+
+      video.addEventListener(
+        "loadedmetadata",
+        ()=>{
+
+          $("playingStatus")
+            .textContent=
+              "NOW PLAYING";
+
+          video.play()
+            .catch(()=>{});
+        }
+      );
+
+    /*
+      Chrome / Edge / Android:
+      HLS.js
+    */
+
+    }else if(
+      window.Hls &&
+      Hls.isSupported()
+    ){
+
+      const hls=
+        new Hls({
+          enableWorker:true,
+          lowLatencyMode:false,
+          backBufferLength:30
+        });
+
+      hls.loadSource(url);
+
+      hls.attachMedia(video);
+
+      hls.on(
+        Hls.Events.MANIFEST_PARSED,
+        ()=>{
+
+          $("playingStatus")
+            .textContent=
+              "NOW PLAYING";
+
+          video.play()
+            .catch(()=>{});
+        }
+      );
+
+      hls.on(
+        Hls.Events.ERROR,
+        (
+          event,
+          data
+        )=>{
+
+          console.error(
+            "HLS error:",
+            data
+          );
+
+          if(!data.fatal){
+            return;
+          }
+
+          switch(data.type){
+
+            case Hls.ErrorTypes.NETWORK_ERROR:
+
+              $("playingStatus")
+                .textContent=
+                  "RECONNECTING";
+
+              hls.startLoad();
+
+              break;
+
+            case Hls.ErrorTypes.MEDIA_ERROR:
+
+              $("playingStatus")
+                .textContent=
+                  "RECOVERING";
+
+              hls.recoverMediaError();
+
+              break;
+
+            default:
+
+              $("playingStatus")
+                .textContent=
+                  "ERROR";
+
+              hls.destroy();
+
+              break;
+          }
+        }
+      );
+
+      /*
+        Save instance so switching content
+        can destroy old HLS player.
+      */
+
+      video._hls=
+        hls;
+
+    }else{
+
+      $("playingStatus")
+        .textContent=
+          "UNSUPPORTED";
+
+      $("playerWrap").innerHTML=
+        '<div class="player-empty"><div><strong>HLS unavailable</strong>This browser cannot play this stream.</div></div>';
+
+      return;
+    }
+
+  /*
+    ==========================================
+    NORMAL MP4 / WEBM VIDEO
+    ==========================================
+  */
+
+  }else if(
+    item.media_type==="video"
+  ){
+
+    const video=
+      document.createElement("video");
+
+    video.className=
+      "stream-video";
+
+    video.controls=true;
+
+    video.playsInline=true;
+    video.autoplay=true;
+    video.preload="metadata";
+
+    video.setAttribute(
+      "controlsList",
+      "nodownload"
+    );
 
     video.addEventListener(
       "loadeddata",
@@ -1110,37 +789,40 @@ function play(
 
     video.src=url;
 
-    $("playerWrap")
-      .append(video);
+    $("playerWrap").append(
+      video
+    );
 
   /*
-    IFRAME
+    ==========================================
+    IFRAME — EXISTING BEHAVIOUR
+    ==========================================
   */
 
   }else{
 
-    const frame=
+    const iframe=
       document.createElement(
         "iframe"
       );
 
-    frame.className=
+    iframe.className=
       "stream-frame";
 
-    frame.title=
+    iframe.title=
       item.title||
       "CricFreeX Player";
 
-    frame.allow=
+    iframe.allow=
       "autoplay; encrypted-media; fullscreen; picture-in-picture";
 
-    frame.allowFullscreen=
+    iframe.allowFullscreen=
       true;
 
-    frame.referrerPolicy=
+    iframe.referrerPolicy=
       "strict-origin-when-cross-origin";
 
-    frame.addEventListener(
+    iframe.addEventListener(
       "load",
       ()=>{
 
@@ -1150,7 +832,7 @@ function play(
       }
     );
 
-    frame.addEventListener(
+    iframe.addEventListener(
       "error",
       ()=>{
 
@@ -1160,329 +842,111 @@ function play(
       }
     );
 
-    frame.src=url;
+    iframe.src=url;
 
-    $("playerWrap")
-      .append(frame);
+    $("playerWrap").append(
+      iframe
+    );
   }
 
-  if(
-    options.scroll!==
-    false
-  ){
-
-    $("watch")
-      .scrollIntoView({
-        behavior:"smooth",
-        block:"start"
-      });
-  }
+  $("watch").scrollIntoView({
+    behavior:"smooth",
+    block:"start"
+  });
 }
-
-/* ============================================================
-   RESTORE SHARED URL
-============================================================ */
-
-function restoreSharedURL(){
-
-  const params=
+function restoreURL(){
+  const p=
     new URLSearchParams(
-      window.location.search
+      location.search
     );
 
-  const channelId=
-    params.get("channel");
-
-  const showId=
-    params.get("show");
-
-  const episodeId=
-    params.get("episode");
-
-  /*
-    Priority:
-    episode > channel > show
-
-    Episode may also contain ?show=
-    but episode public_id alone is enough.
-  */
+  const episodeId=p.get("episode");
+  const channelId=p.get("channel");
+  const showId=p.get("show");
 
   if(episodeId){
-
-    const episode=
-      content.find(
-        item=>
-          item.public_id===
-            episodeId &&
-          item.kind===
-            "episode"
-      );
+    const episode=content.find(
+      x=>
+        x.kind==="episode" &&
+        x.public_id===episodeId
+    );
 
     if(episode){
-
-      const parent=
-        getParentSeries(
-          episode
-        );
-
-      section=
-        episode.section_slug||
-        parent?.section_slug||
-        section;
-
-      activeSeries=
-        parent;
-
-      filter=
-        "all";
-
-      selected=
-        episode.id;
-
-      $("search").value=
-        "";
-
-      renderTabs();
-      renderFilters();
-      render();
-
-      play(
-        episode,
-        {
-          updateURL:false,
-          scroll:true
-        }
-      );
-
-      return true;
+      play(episode,false);
+      return;
     }
   }
-
-  /*
-    CHANNEL / MOVIE / NORMAL CONTENT
-  */
 
   if(channelId){
+    const channel=content.find(
+      x=>
+        x.public_id===channelId &&
+        x.kind!=="episode" &&
+        x.kind!=="series"
+    );
 
-    const item=
-      content.find(
-        entry=>
-          entry.public_id===
-            channelId &&
-          entry.kind!==
-            "series" &&
-          entry.kind!==
-            "episode"
-      );
-
-    if(item){
-
-      section=
-        item.section_slug||
-        section;
-
-      filter=
-        "all";
-
-      activeSeries=
-        null;
-
-      selected=
-        item.id;
-
-      $("search").value=
-        "";
-
-      renderTabs();
-      renderFilters();
-      render();
-
-      play(
-        item,
-        {
-          updateURL:false,
-          scroll:true
-        }
-      );
-
-      return true;
+    if(channel){
+      play(channel,false);
+      return;
     }
   }
-
-  /*
-    SERIES
-  */
 
   if(showId){
-
-    const show=
-      content.find(
-        item=>
-          item.public_id===
-            showId &&
-          item.kind===
-            "series"
-      );
+    const show=content.find(
+      x=>
+        x.kind==="series" &&
+        x.public_id===showId
+    );
 
     if(show){
-
-      section=
-        show.section_slug||
-        section;
-
-      filter=
-        "all";
-
-      activeSeries=
-        show;
-
-      selected=
-        "";
-
-      $("search").value=
-        "";
-
-      renderTabs();
-      renderFilters();
-      render();
-
-      $("channels")
-        .scrollIntoView({
-          behavior:"smooth",
-          block:"start"
-        });
-
-      return true;
+      openSeries(show,false);
     }
   }
-
-  return false;
 }
 
-/* ============================================================
-   BACK FROM SERIES
-============================================================ */
+$("seriesBack").onclick=()=>{
+  activeSeries=null;
+  selected="";
+  filter="all";
+  $("search").value="";
+  clearURL();
+  renderFilters();
+  render();
+};
 
-$("seriesBack")
-  .addEventListener(
-    "click",
-    ()=>{
+$("search").oninput=render;
 
-      activeSeries=null;
+$("brand").onclick=()=>
+  scrollTo({
+    top:0,
+    behavior:"smooth"
+  });
 
-      selected="";
+$("exploreButton").onclick=()=>
+  $("channels").scrollIntoView({
+    behavior:"smooth"
+  });
 
-      filter="all";
+$("watchButton").onclick=()=>
+  $("watch").scrollIntoView({
+    behavior:"smooth"
+  });
 
-      $("search").value="";
+$("adminEntry").onclick=()=>
+  location.href="./admin.html";
 
-      clearShareURL();
+let timer=null;
 
-      renderFilters();
-      render();
-    }
+function refresh(){
+  clearTimeout(timer);
+
+  timer=setTimeout(
+    load,
+    250
   );
-
-/* ============================================================
-   SEARCH
-============================================================ */
-
-$("search")
-  .addEventListener(
-    "input",
-    render
-  );
-
-/* ============================================================
-   HEADER / HERO CONTROLS
-============================================================ */
-
-$("brand")
-  .addEventListener(
-    "click",
-    ()=>{
-
-      window.scrollTo({
-        top:0,
-        behavior:"smooth"
-      });
-    }
-  );
-
-$("exploreButton")
-  .addEventListener(
-    "click",
-    ()=>{
-
-      $("channels")
-        .scrollIntoView({
-          behavior:"smooth",
-          block:"start"
-        });
-    }
-  );
-
-$("watchButton")
-  .addEventListener(
-    "click",
-    ()=>{
-
-      $("watch")
-        .scrollIntoView({
-          behavior:"smooth",
-          block:"start"
-        });
-    }
-  );
-
-/* ============================================================
-   INVISIBLE ADMIN ENTRY
-============================================================ */
-
-$("adminEntry")
-  .addEventListener(
-    "click",
-    ()=>{
-
-      window.location.href=
-        "./admin.html";
-    }
-  );
-
-/* ============================================================
-   REALTIME DATABASE UPDATES
-============================================================ */
-
-let realtimeTimer=null;
-
-function realtimeReload(){
-
-  clearTimeout(
-    realtimeTimer
-  );
-
-  realtimeTimer=
-    setTimeout(
-      async ()=>{
-
-        /*
-          Keep current public URL.
-
-          Do not automatically reopen/scroll
-          everything on each realtime event.
-        */
-
-        await load();
-
-      },
-      250
-    );
 }
 
-db
-  .channel(
-    "cricfreex-public"
-  )
+db.channel("cricfreex-public")
   .on(
     "postgres_changes",
     {
@@ -1490,7 +954,7 @@ db
       schema:"public",
       table:"site_settings"
     },
-    realtimeReload
+    refresh
   )
   .on(
     "postgres_changes",
@@ -1499,7 +963,7 @@ db
       schema:"public",
       table:"sections"
     },
-    realtimeReload
+    refresh
   )
   .on(
     "postgres_changes",
@@ -1508,36 +972,17 @@ db
       schema:"public",
       table:"content"
     },
-    realtimeReload
+    refresh
   )
   .subscribe();
 
-/* ============================================================
-   BROWSER BACK / FORWARD
-============================================================ */
-
-window.addEventListener(
-  "popstate",
-  ()=>{
-
-    restoreSharedURL();
-  }
-);
-
-/* ============================================================
-   START APPLICATION
-============================================================ */
-
-async function startApp(){
-
+async function start(){
   await load();
 
-  if(!initialURLRestored){
-
-    initialURLRestored=true;
-
-    restoreSharedURL();
+  if(!restored){
+    restored=true;
+    restoreURL();
   }
 }
 
-startApp();
+start();
