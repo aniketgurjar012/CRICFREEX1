@@ -512,10 +512,14 @@ function openSeries(item,update=true){
 
 function play(item,update=true){
 
+  /* =========================================================
+     BASIC PLAYER STATE
+  ========================================================= */
+
   selected=item.id;
 
   /*
-    Episode hai to parent show restore.
+    Episode hai to uska parent show restore karo.
   */
 
   if(item.kind==="episode"){
@@ -527,19 +531,42 @@ function play(item,update=true){
     );
 
     if(parent){
+
       activeSeries=parent;
-      section=parent.section_slug;
+
+      section=
+        parent.section_slug||
+        item.section_slug||
+        section;
+
+    }else{
+
+      section=
+        item.section_slug||
+        section;
+
     }
 
   }else{
 
-    section=item.section_slug;
+    section=
+      item.section_slug||
+      section;
+
     activeSeries=null;
   }
+
+  /*
+    Shareable URL update.
+  */
 
   if(update){
     updateURL(item);
   }
+
+  /*
+    Player information.
+  */
 
   $("playingTitle").textContent=
     item.title;
@@ -554,15 +581,29 @@ function play(item,update=true){
   $("playingStatus").textContent=
     "LOADING";
 
+  /*
+    Keep currently selected card highlighted.
+  */
+
   renderTabs();
   renderFilters();
   render();
 
-  const url=safeURL(
-    item.media_url
-  );
+  /*
+    Validate media URL.
+  */
 
-  $("playerWrap").replaceChildren();
+  const url=
+    safeURL(
+      item.media_url
+    );
+
+  /*
+    Completely clear previous player.
+  */
+
+  $("playerWrap")
+    .replaceChildren();
 
   if(!url){
 
@@ -570,16 +611,133 @@ function play(item,update=true){
       "UNAVAILABLE";
 
     $("playerWrap").innerHTML=
-      '<div class="player-empty"><div><strong>Source not configured</strong>No media source is configured.</div></div>';
+      `
+      <div class="player-empty">
+        <div>
+          <strong>
+            Source not configured
+          </strong>
+          No media source is configured.
+        </div>
+      </div>
+      `;
+
+    $("watch").scrollIntoView({
+      behavior:"smooth",
+      block:"start"
+    });
 
     return;
   }
 
-  /*
-    ==========================================
-    HLS / M3U8
-    ==========================================
-  */
+  /* =========================================================
+     EXTERNAL STREAM / DOWNLOAD LINK
+  ========================================================= */
+
+  if(item.media_type==="link"){
+
+    $("playingStatus").textContent=
+      "LINK READY";
+
+    const wrapper=
+      document.createElement(
+        "div"
+      );
+
+    wrapper.className=
+      "link-player";
+
+    const inner=
+      document.createElement(
+        "div"
+      );
+
+    inner.className=
+      "link-player-inner";
+
+    const icon=
+      document.createElement(
+        "div"
+      );
+
+    icon.className=
+      "link-player-icon";
+
+    icon.textContent="↗";
+
+    const heading=
+      document.createElement(
+        "h2"
+      );
+
+    heading.textContent=
+      "Stream / Download Available";
+
+    const message=
+      document.createElement(
+        "p"
+      );
+
+    message.textContent=
+      "This content is available through an external link. Continue using the button below.";
+
+    const openButton=
+      document.createElement(
+        "a"
+      );
+
+    openButton.className=
+      "link-open-button";
+
+    openButton.href=url;
+
+    openButton.target=
+      "_blank";
+
+    openButton.rel=
+      "noopener noreferrer";
+
+    openButton.textContent=
+      "Open Stream / Download Link ↗";
+
+    const note=
+      document.createElement(
+        "small"
+      );
+
+    note.className=
+      "link-note";
+
+    note.textContent=
+      "The link will open in a new tab.";
+
+    inner.append(
+      icon,
+      heading,
+      message,
+      openButton,
+      note
+    );
+
+    wrapper.append(
+      inner
+    );
+
+    $("playerWrap").append(
+      wrapper
+    );
+
+    $("watch").scrollIntoView({
+      behavior:"smooth",
+      block:"start"
+    });
+
+    return;
+  }
+
+  /* =========================================================
+     HLS / M3U8
+  ========================================================= */
 
   if(
     item.media_type==="hls" ||
@@ -587,14 +745,19 @@ function play(item,update=true){
   ){
 
     const video=
-      document.createElement("video");
+      document.createElement(
+        "video"
+      );
 
     video.className=
       "stream-video";
 
     video.controls=true;
+
     video.playsInline=true;
+
     video.autoplay=true;
+
     video.preload="metadata";
 
     video.setAttribute(
@@ -602,16 +765,17 @@ function play(item,update=true){
       "nodownload"
     );
 
-    video.setAttribute(
-      "disablePictureInPicture",
-      ""
+    /*
+      Add video to player first.
+    */
+
+    $("playerWrap").append(
+      video
     );
 
-    $("playerWrap").append(video);
-
     /*
-      Safari / iPhone / iPad:
-      native HLS support.
+      Safari / iPhone / iPad
+      have native HLS playback.
     */
 
     if(
@@ -626,43 +790,66 @@ function play(item,update=true){
         "loadedmetadata",
         ()=>{
 
-          $("playingStatus")
-            .textContent=
-              "NOW PLAYING";
+          $("playingStatus").textContent=
+            "NOW PLAYING";
 
           video.play()
             .catch(()=>{});
         }
       );
 
+      video.addEventListener(
+        "error",
+        ()=>{
+
+          $("playingStatus").textContent=
+            "ERROR";
+        }
+      );
+
+    }
+
     /*
-      Chrome / Edge / Android:
-      HLS.js
+      Chrome / Edge / Android etc.
     */
 
-    }else if(
+    else if(
       window.Hls &&
       Hls.isSupported()
     ){
 
       const hls=
         new Hls({
+
           enableWorker:true,
+
           lowLatencyMode:false,
+
           backBufferLength:30
+
         });
 
-      hls.loadSource(url);
+      /*
+        Keep reference on video.
+      */
 
-      hls.attachMedia(video);
+      video._hls=
+        hls;
+
+      hls.loadSource(
+        url
+      );
+
+      hls.attachMedia(
+        video
+      );
 
       hls.on(
         Hls.Events.MANIFEST_PARSED,
         ()=>{
 
-          $("playingStatus")
-            .textContent=
-              "NOW PLAYING";
+          $("playingStatus").textContent=
+            "NOW PLAYING";
 
           video.play()
             .catch(()=>{});
@@ -677,81 +864,102 @@ function play(item,update=true){
         )=>{
 
           console.error(
-            "HLS error:",
+            "HLS playback error:",
             data
           );
+
+          /*
+            Ignore recoverable errors.
+          */
 
           if(!data.fatal){
             return;
           }
 
-          switch(data.type){
+          /*
+            Network failure:
+            attempt reconnect.
+          */
 
-            case Hls.ErrorTypes.NETWORK_ERROR:
+          if(
+            data.type===
+            Hls.ErrorTypes.NETWORK_ERROR
+          ){
 
-              $("playingStatus")
-                .textContent=
-                  "RECONNECTING";
+            $("playingStatus").textContent=
+              "RECONNECTING";
 
-              hls.startLoad();
+            hls.startLoad();
 
-              break;
-
-            case Hls.ErrorTypes.MEDIA_ERROR:
-
-              $("playingStatus")
-                .textContent=
-                  "RECOVERING";
-
-              hls.recoverMediaError();
-
-              break;
-
-            default:
-
-              $("playingStatus")
-                .textContent=
-                  "ERROR";
-
-              hls.destroy();
-
-              break;
+            return;
           }
+
+          /*
+            Media decode problem:
+            attempt recovery.
+          */
+
+          if(
+            data.type===
+            Hls.ErrorTypes.MEDIA_ERROR
+          ){
+
+            $("playingStatus").textContent=
+              "RECOVERING";
+
+            hls.recoverMediaError();
+
+            return;
+          }
+
+          /*
+            Non-recoverable.
+          */
+
+          $("playingStatus").textContent=
+            "ERROR";
+
+          hls.destroy();
         }
       );
 
-      /*
-        Save instance so switching content
-        can destroy old HLS player.
-      */
-
-      video._hls=
-        hls;
-
     }else{
 
-      $("playingStatus")
-        .textContent=
-          "UNSUPPORTED";
+      $("playingStatus").textContent=
+        "UNSUPPORTED";
 
       $("playerWrap").innerHTML=
-        '<div class="player-empty"><div><strong>HLS unavailable</strong>This browser cannot play this stream.</div></div>';
+        `
+        <div class="player-empty">
+          <div>
+            <strong>
+              HLS unavailable
+            </strong>
+            This browser cannot play this stream.
+          </div>
+        </div>
+        `;
 
-      return;
     }
 
-  /*
-    ==========================================
-    NORMAL MP4 / WEBM VIDEO
-    ==========================================
-  */
+    $("watch").scrollIntoView({
+      behavior:"smooth",
+      block:"start"
+    });
 
-  }else if(
-    item.media_type==="video"
-  ){
+    return;
+  }
+
+  /* =========================================================
+     DIRECT MP4 / WEBM VIDEO
+  ========================================================= */
+
+  if(item.media_type==="video"){
 
     const video=
-      document.createElement("video");
+      document.createElement(
+        "video"
+      );
 
     video.className=
       "stream-video";
@@ -759,7 +967,9 @@ function play(item,update=true){
     video.controls=true;
 
     video.playsInline=true;
+
     video.autoplay=true;
+
     video.preload="metadata";
 
     video.setAttribute(
@@ -771,9 +981,26 @@ function play(item,update=true){
       "loadeddata",
       ()=>{
 
-        $("playingStatus")
-          .textContent=
-            "NOW PLAYING";
+        $("playingStatus").textContent=
+          "NOW PLAYING";
+      }
+    );
+
+    video.addEventListener(
+      "playing",
+      ()=>{
+
+        $("playingStatus").textContent=
+          "NOW PLAYING";
+      }
+    );
+
+    video.addEventListener(
+      "waiting",
+      ()=>{
+
+        $("playingStatus").textContent=
+          "BUFFERING";
       }
     );
 
@@ -781,9 +1008,8 @@ function play(item,update=true){
       "error",
       ()=>{
 
-        $("playingStatus")
-          .textContent=
-            "ERROR";
+        $("playingStatus").textContent=
+          "ERROR";
       }
     );
 
@@ -793,67 +1019,80 @@ function play(item,update=true){
       video
     );
 
-  /*
-    ==========================================
-    IFRAME — EXISTING BEHAVIOUR
-    ==========================================
-  */
+    /*
+      Autoplay may be blocked.
+      That's normal; controls remain available.
+    */
 
-  }else{
+    video.play()
+      .catch(()=>{});
 
-    const iframe=
-      document.createElement(
-        "iframe"
-      );
+    $("watch").scrollIntoView({
+      behavior:"smooth",
+      block:"start"
+    });
 
-    iframe.className=
-      "stream-frame";
-
-    iframe.title=
-      item.title||
-      "CricFreeX Player";
-
-    iframe.allow=
-      "autoplay; encrypted-media; fullscreen; picture-in-picture";
-
-    iframe.allowFullscreen=
-      true;
-
-    iframe.referrerPolicy=
-      "strict-origin-when-cross-origin";
-
-    iframe.addEventListener(
-      "load",
-      ()=>{
-
-        $("playingStatus")
-          .textContent=
-            "NOW PLAYING";
-      }
-    );
-
-    iframe.addEventListener(
-      "error",
-      ()=>{
-
-        $("playingStatus")
-          .textContent=
-            "ERROR";
-      }
-    );
-
-    iframe.src=url;
-
-    $("playerWrap").append(
-      iframe
-    );
+    return;
   }
+
+  /* =========================================================
+     IFRAME / EMBED
+  ========================================================= */
+
+  const iframe=
+    document.createElement(
+      "iframe"
+    );
+
+  iframe.className=
+    "stream-frame";
+
+  iframe.title=
+    item.title||
+    "CricFreeX Player";
+
+  iframe.allow=
+    "autoplay; encrypted-media; fullscreen; picture-in-picture";
+
+  iframe.allowFullscreen=
+    true;
+
+  iframe.referrerPolicy=
+    "strict-origin-when-cross-origin";
+
+  iframe.addEventListener(
+    "load",
+    ()=>{
+
+      $("playingStatus").textContent=
+        "NOW PLAYING";
+    }
+  );
+
+  iframe.addEventListener(
+    "error",
+    ()=>{
+
+      $("playingStatus").textContent=
+        "ERROR";
+    }
+  );
+
+  iframe.src=url;
+
+  $("playerWrap").append(
+    iframe
+  );
 
   $("watch").scrollIntoView({
     behavior:"smooth",
     block:"start"
   });
 }
+
+
+
+
 function restoreURL(){
   const p=
     new URLSearchParams(
