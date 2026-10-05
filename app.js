@@ -697,8 +697,7 @@ function play(item,update=true){
     openButton.rel=
       "noopener noreferrer";
 
-    openButton.textContent=
-      "Open Stream / Download Link ↗";
+   openButton.textContent=url;
 
     const note=
       document.createElement(
