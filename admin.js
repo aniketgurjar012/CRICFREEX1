@@ -15,10 +15,28 @@ const db=window.supabase.createClient(
 
 const $=id=>document.getElementById(id);
 
+const CRICKET_WATCH_LINK_PREFIX="__cricket_watch__:";
+const CRICKET_API_BASE=String(
+  CONFIG.CRICKET_API_URL||""
+).replace(/\/+$/,"");
+
 let sections=[];
 let content=[];
 let settings={};
 let loading=false;
+let watchMatches={live:[],upcoming:[]};
+let selectedMatchLinks=[];
+let matchRequest=0;
+
+function isCricketWatchLink(item){
+  return String(item?.category||"")
+    .startsWith(CRICKET_WATCH_LINK_PREFIX);
+}
+
+function cricketWatchMatchId(item){
+  return String(item?.category||"")
+    .slice(CRICKET_WATCH_LINK_PREFIX.length);
+}
 
 /* =========================================================
    AUTH
@@ -142,15 +160,38 @@ async function loadAll(){
     if(w.error)throw w.error;
 
     sections=s.data||[];
+    if(!sections.length){
+      const {data:defaultSection,error}=await db
+        .from("sections")
+        .insert({
+          name:"Live Channels",
+          slug:"sports",
+          sort_order:0,
+          published:true
+        })
+        .select("*")
+        .single();
+
+      if(error)throw error;
+      sections=[defaultSection];
+    }
+
+    $("adminLoadStatus").classList.add("hidden");
+    $("adminLoadStatus").textContent="";
     content=c.data||[];
     settings=w.data||{};
 
     $("statSections").textContent=sections.length;
-    $("statContent").textContent=content.length;
+    $("statContent").textContent=
+      content.filter(x=>!isCricketWatchLink(x)).length;
     $("statShows").textContent=
-      content.filter(x=>x.kind==="series").length;
+      content.filter(
+        x=>!isCricketWatchLink(x)&&x.kind==="series"
+      ).length;
     $("statEpisodes").textContent=
-      content.filter(x=>x.kind==="episode").length;
+      content.filter(
+        x=>!isCricketWatchLink(x)&&x.kind==="episode"
+      ).length;
 
     renderContent();
     renderSections();
@@ -159,7 +200,9 @@ async function loadAll(){
 
   }catch(error){
     console.error(error);
-    alert("Load failed: "+error.message);
+    $("adminLoadStatus").textContent=
+      `Admin data could not be loaded: ${error.message}`;
+    $("adminLoadStatus").classList.remove("hidden");
   }finally{
     loading=false;
   }
@@ -193,8 +236,322 @@ document.querySelectorAll(".tab").forEach(button=>{
       tab!=="sections"
     );
 
+    $("watchLinksPanel").classList.toggle(
+      "hidden",
+      tab!=="watchLinks"
+    );
+
     $("editorPanel").classList.add("hidden");
+    if(tab==="watchLinks"){
+      loadCricketMatches(
+        $("watchMatchCategory").value
+      );
+    }
   };
+});
+
+function setWatchLinkStatus(message,isError=false){
+  const status=$("watchLinkStatus");
+  status.textContent=message;
+  status.style.color=isError?"#ff858c":"";
+}
+
+function matchOptionLabel(match){
+  const teams=[
+    match.team1?.teamSName||match.team1?.teamName,
+    match.team2?.teamSName||match.team2?.teamName
+  ].filter(Boolean).join(" vs ");
+  return [
+    teams||"Match",
+    match.description,
+    match.series,
+    match.state
+  ].filter(Boolean).join(" · ");
+}
+
+function renderWatchMatchOptions(category){
+  const select=$("watchMatch");
+  const previous=select.value;
+  select.replaceChildren();
+  const placeholder=document.createElement("option");
+  placeholder.value="";
+  placeholder.textContent="Select a match";
+  select.append(placeholder);
+
+  watchMatches[category].forEach(match=>{
+    const option=document.createElement("option");
+    option.value=String(match.id);
+    option.textContent=matchOptionLabel(match);
+    select.append(option);
+  });
+
+  if(watchMatches[category].some(
+    match=>String(match.id)===previous
+  )){
+    select.value=previous;
+  }else{
+    select.value="";
+    selectedMatchLinks=[];
+    $("watchLinkRows").replaceChildren();
+  }
+}
+
+async function loadCricketMatches(category){
+  const requestId=++matchRequest;
+  setWatchLinkStatus(`Loading ${category} matches…`);
+  try{
+    const response=await fetch(
+      `${CRICKET_API_BASE}/api/matches/${category}`,
+      {headers:{Accept:"application/json"}}
+    );
+    let result;
+    try{
+      result=await response.json();
+    }catch{
+      throw new Error(
+        `Cricket API returned an unreadable response (HTTP ${response.status}).`
+      );
+    }
+    if(!response.ok){
+      throw new Error(
+        typeof result.detail==="string"
+          ?result.detail
+          :`Cricket API request failed (HTTP ${response.status}).`
+      );
+    }
+    if(result.success===false){
+      throw new Error(result.detail||"Could not load cricket matches.");
+    }
+    if(requestId!==matchRequest)return;
+
+    watchMatches[category]=Array.isArray(result.matches)
+      ?result.matches
+      :[];
+    renderWatchMatchOptions(category);
+    setWatchLinkStatus(
+      watchMatches[category].length
+        ?`${watchMatches[category].length} ${category} matches loaded.`
+        :"No matches are currently available in this category."
+    );
+  }catch(error){
+    if(requestId!==matchRequest)return;
+    renderWatchMatchOptions(category);
+    setWatchLinkStatus(
+      `Could not load ${category} matches: ${error.message}`,
+      true
+    );
+  }
+}
+
+function addWatchLinkRow(item={}){
+  if($("watchLinkRows").children.length>=3){
+    setWatchLinkStatus("A match can have up to three watch servers.");
+    return;
+  }
+
+  const row=document.createElement("div");
+  row.className="watch-link-row";
+  row.dataset.id=item.id||"";
+
+  const titleLabel=document.createElement("label");
+  titleLabel.textContent=`Server ${$("watchLinkRows").children.length+1} Title`;
+  const title=document.createElement("input");
+  title.type="text";
+  title.maxLength=150;
+  title.required=true;
+  title.placeholder="Official stream / Alternate link";
+  title.value=item.title||"";
+  titleLabel.append(title);
+
+  const urlLabel=document.createElement("label");
+  urlLabel.textContent="Watch URL";
+  const url=document.createElement("input");
+  url.type="url";
+  url.required=true;
+  url.maxLength=2048;
+  url.placeholder="https://…";
+  url.value=item.media_url||"";
+  urlLabel.append(url);
+
+  const remove=document.createElement("button");
+  remove.type="button";
+  remove.className="danger";
+  remove.textContent="Remove";
+  remove.addEventListener("click",()=>{
+    row.remove();
+    [...$("watchLinkRows").children].forEach((server,index)=>{
+      server.querySelector("label").firstChild.textContent=`Server ${index+1} Title`;
+    });
+    updateWatchLinkControls();
+  });
+
+  row.append(titleLabel,urlLabel,remove);
+  $("watchLinkRows").append(row);
+  updateWatchLinkControls();
+}
+
+function updateWatchLinkControls(){
+  const count=$("watchLinkRows").children.length;
+  $("addWatchLink").disabled=count>=3;
+  $("addWatchLink").textContent=count>=3
+    ?"Maximum 3 servers"
+    :"+ Add another server";
+}
+
+function loadSelectedMatchLinks(){
+  const matchId=$("watchMatch").value;
+  selectedMatchLinks=matchId
+    ?content.filter(item=>
+      isCricketWatchLink(item)&&
+      cricketWatchMatchId(item)===matchId
+    )
+    :[];
+  $("watchLinkRows").replaceChildren();
+  selectedMatchLinks.forEach(addWatchLinkRow);
+  if(matchId&&!selectedMatchLinks.length){
+    addWatchLinkRow();
+  }
+}
+
+$("watchMatchCategory").addEventListener("change",()=>{
+  $("watchMatch").value="";
+  $("watchLinkRows").replaceChildren();
+  selectedMatchLinks=[];
+  loadCricketMatches($("watchMatchCategory").value);
+});
+
+$("watchMatch").addEventListener(
+  "change",
+  loadSelectedMatchLinks
+);
+
+$("addWatchLink").addEventListener("click",()=>{
+  if(!$("watchMatch").value){
+    setWatchLinkStatus("Select a match before adding watch links.",true);
+    return;
+  }
+  addWatchLinkRow();
+});
+
+$("refreshWatchMatches").addEventListener("click",()=>{
+  loadCricketMatches($("watchMatchCategory").value);
+});
+
+$("watchLinksForm").addEventListener("submit",async event=>{
+  event.preventDefault();
+  const matchId=$("watchMatch").value;
+  const rows=[...$("watchLinkRows").children];
+  if(!matchId){
+    setWatchLinkStatus("Select a match before saving links.",true);
+    return;
+  }
+
+  const records=[];
+  try{
+    rows.forEach((row,index)=>{
+      const title=row.querySelector('input[type="text"]').value.trim();
+      const rawUrl=row.querySelector('input[type="url"]').value.trim();
+      let url;
+      try{
+        url=new URL(rawUrl);
+      }catch{
+        throw new Error(`Link ${index+1} needs a valid URL.`);
+      }
+      if(!title){
+        throw new Error(`Link ${index+1} needs a title.`);
+      }
+      if(!["http:","https:"].includes(url.protocol)){
+        throw new Error(`Link ${index+1} must use HTTP or HTTPS.`);
+      }
+      if(url.username||url.password){
+        throw new Error(`Link ${index+1} cannot include embedded credentials.`);
+      }
+      records.push({
+        id:row.dataset.id||null,
+        title,
+        media_url:url.href,
+        sort_order:index
+      });
+    });
+  }catch(error){
+    setWatchLinkStatus(error.message,true);
+    return;
+  }
+  if(records.length>3){
+    setWatchLinkStatus("A match can have up to three watch servers.",true);
+    return;
+  }
+
+  const button=$("saveWatchLinks");
+  button.disabled=true;
+  button.textContent="Saving…";
+  try{
+    const existingIds=new Set(
+      selectedMatchLinks.map(item=>item.id)
+    );
+    const keptIds=new Set(
+      records.map(item=>item.id).filter(Boolean)
+    );
+    const sectionSlug=sections[0]?.slug;
+    if(!sectionSlug){
+      throw new Error(
+        "The default Live Channels section is unavailable. Refresh Admin and try again."
+      );
+    }
+
+    for(const record of records){
+      const payload={
+        title:record.title,
+        public_id:null,
+        section_slug:sectionSlug,
+        category:`${CRICKET_WATCH_LINK_PREFIX}${matchId}`,
+        kind:"channel",
+        parent_id:null,
+        media_type:"link",
+        media_url:record.media_url,
+        image_url:null,
+        episode_number:null,
+        sort_order:record.sort_order,
+        published:true,
+        updated_at:new Date().toISOString()
+      };
+      const result=record.id
+        ?await db.from("content").update(payload).eq("id",record.id)
+        :await db.from("content").insert(payload);
+      if(result.error)throw result.error;
+    }
+
+    const removedIds=[...existingIds].filter(id=>!keptIds.has(id));
+    if(removedIds.length){
+      const {error}=await db.from("content")
+        .delete()
+        .in("id",removedIds);
+      if(error)throw error;
+    }
+
+    const matchCategory=`${CRICKET_WATCH_LINK_PREFIX}${matchId}`;
+    const {data:savedLinks,error:readError}=await db
+      .from("content")
+      .select("*")
+      .eq("category",matchCategory)
+      .order("sort_order");
+    if(readError)throw readError;
+
+    content=content.filter(item=>
+      !isCricketWatchLink(item)||
+      cricketWatchMatchId(item)!==matchId
+    ).concat(savedLinks||[]);
+    loadSelectedMatchLinks();
+    setWatchLinkStatus(
+      `${records.length} watch link${records.length===1?"":"s"} saved. They are now available on this match card.`
+    );
+  }catch(error){
+    console.error(error);
+    setWatchLinkStatus(`Could not save match links: ${error.message}`,true);
+  }finally{
+    button.disabled=false;
+    button.textContent="Save Match Links";
+  }
 });
 
 /* =========================================================
@@ -218,6 +575,7 @@ function renderContent(){
   $("contentList").replaceChildren();
 
   const list=content.filter(item=>{
+    if(isCricketWatchLink(item))return false;
     if(!query)return true;
 
     return [
@@ -418,6 +776,10 @@ function resetEditor(){
   if(sections.length){
     $("contentSection").value=
       sections[0].slug;
+  }else{
+    throw new Error(
+      "No content section is available. Refresh Admin and try again."
+    );
   }
 
   applyKindRules();
@@ -543,30 +905,16 @@ async function removePaths(paths){
 async function uploadFile(file,type){
   if(!file)return null;
 
-  const isVideo=type==="videos";
-
-  const allowed=isVideo
-    ?["video/mp4","video/webm"]
-    :["image/jpeg","image/png","image/webp"];
+  const allowed=["video/mp4","video/webm"];
 
   if(!allowed.includes(file.type)){
-    throw new Error(
-      isVideo
-        ?"Only MP4/WebM videos are allowed."
-        :"Only JPG/PNG/WebP images are allowed."
-    );
+    throw new Error("Only MP4/WebM videos are allowed.");
   }
 
-  const max=isVideo
-    ?250*1024*1024
-    :8*1024*1024;
+  const max=250*1024*1024;
 
   if(file.size>max){
-    throw new Error(
-      isVideo
-        ?"Video exceeds 250 MB."
-        :"Image exceeds 8 MB."
-    );
+    throw new Error("Video exceeds 250 MB.");
   }
 
   const ext=
@@ -576,7 +924,7 @@ async function uploadFile(file,type){
       ?.replace(/[^a-z0-9]/gi,"")
       .toLowerCase()
     ||
-    (isVideo?"mp4":"jpg");
+    "mp4";
 
   const path=
     `${type}/${crypto.randomUUID()}.${ext}`;
@@ -620,7 +968,6 @@ $("contentForm").onsubmit=async event=>{
   button.disabled=true;
   button.textContent="Saving...";
 
-  let uploadedImage=null;
   let uploadedVideo=null;
 
   try{
@@ -664,14 +1011,8 @@ $("contentForm").onsubmit=async event=>{
       }
     }
 
-    const imageFile=
-      $("imageUpload").files[0];
-
     const videoFile=
       $("videoUpload").files[0];
-
-    let imageUrl=
-      existing?.image_url||null;
 
     let mediaUrl=
       $("mediaUrl").value.trim()
@@ -682,16 +1023,6 @@ $("contentForm").onsubmit=async event=>{
 
     let mediaType=
       $("mediaType").value;
-
-    if(imageFile){
-      uploadedImage=
-        await uploadFile(
-          imageFile,
-          "images"
-        );
-
-      imageUrl=uploadedImage;
-    }
 
     if(videoFile){
       uploadedVideo=
@@ -743,7 +1074,7 @@ $("contentForm").onsubmit=async event=>{
         mediaUrl,
 
       image_url:
-        imageUrl,
+        existing?.image_url||null,
 
       episode_number:
         kind==="episode"
@@ -791,19 +1122,6 @@ $("contentForm").onsubmit=async event=>{
     */
 
     const oldPaths=[];
-
-    if(
-      existing?.image_url &&
-      uploadedImage &&
-      existing.image_url!==uploadedImage
-    ){
-      const path=
-        storagePath(
-          existing.image_url
-        );
-
-      if(path)oldPaths.push(path);
-    }
 
     if(
       existing?.media_url &&
@@ -861,7 +1179,6 @@ $("contentForm").onsubmit=async event=>{
     */
 
     const paths=[
-      storagePath(uploadedImage),
       storagePath(uploadedVideo)
     ];
 
@@ -1215,6 +1532,15 @@ $("websiteForm").onsubmit=async event=>{
 function renderSections(){
   $("sectionList").replaceChildren();
 
+  if(!sections.length){
+    const empty=document.createElement("div");
+    empty.className="empty";
+    empty.textContent=
+      "No sections are configured. New content can still be added to Live Channels.";
+    $("sectionList").append(empty);
+    return;
+  }
+
   sections.forEach(section=>{
     const row=document.createElement("div");
     row.className="section-row";
@@ -1302,42 +1628,6 @@ function renderSections(){
   });
 }
 
-$("addSection").onclick=async()=>{
-  const raw=prompt("Section name:");
-  const name=raw?.trim();
-
-  if(!name)return;
-
-  const slug=name
-    .toLowerCase()
-    .normalize("NFKD")
-    .replace(/[^a-z0-9]+/g,"-")
-    .replace(/^-+|-+$/g,"");
-
-  if(!slug){
-    alert("Invalid section name.");
-    return;
-  }
-
-  const {error}=await db
-    .from("sections")
-    .insert({
-      slug,
-      name,
-      icon:"＋",
-      sort_order:
-        sections.length+1,
-      published:true
-    });
-
-  if(error){
-    alert(error.message);
-    return;
-  }
-
-  await loadAll();
-};
-
 /* =========================================================
    REALTIME
 ========================================================= */
@@ -1383,6 +1673,15 @@ db.channel("cricfreex-admin-live")
     refreshSoon
   )
   .subscribe();
+
+window.setInterval(()=>{
+  if(
+    document.visibilityState==="visible"&&
+    document.querySelector('.tab[data-tab="watchLinks"]')?.classList.contains("active")
+  ){
+    loadCricketMatches($("watchMatchCategory").value);
+  }
+},60000);
 
 /* =========================================================
    START

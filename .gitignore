@@ -1,8 +1,9 @@
-@"
 .env
 .env.*
 node_modules/
 dist/
 .vscode/
 .DS_Store
-"@ | Set-Content .gitignore
+__pycache__/
+*.py[cod]
+.venv/

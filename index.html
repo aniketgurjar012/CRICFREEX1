@@ -3,10 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="description" content="CricFreeX — Sports and entertainment.">
+<meta name="description" content="CricFreeX — live cricket scores, fixtures, scorecards, series, rankings and cricket news.">
 <meta name="theme-color" content="#050507">
 <meta name="referrer" content="strict-origin-when-cross-origin">
-<title>CricFreeX — Sports & Entertainment</title>
+<title>CricFreeX — Cricket Centre</title>
+<link rel="stylesheet" href="./cricket.css?v=9">
 <style>
 :root{--bg:#050507;--panel:#0d0d12;--panel2:#121218;--white:#fff;--muted:#8b8b96;--red:#e50914;--red2:#ff3440;--green:#20df7b;--border:rgba(255,255,255,.08);--max:1500px}
 *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;min-height:100vh;color:#fff;background:radial-gradient(circle at 50% -10%,#1b0a0c,transparent 28%),var(--bg);font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;overflow-x:hidden}button,input{font:inherit}button{color:inherit;cursor:pointer}::selection{background:var(--red);color:#fff}::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-track{background:#08080a}::-webkit-scrollbar-thumb{background:#292930;border-radius:20px}
@@ -132,68 +133,24 @@ white-space:nowrap;
 }
 @media(max-width:1150px){.channel-grid{grid-template-columns:repeat(4,1fr)}}@media(max-width:900px){.nav-links{display:none}.channel-grid{grid-template-columns:repeat(3,1fr)}.controls{flex-direction:column-reverse;align-items:stretch}.search{flex:auto}.features{grid-template-columns:1fr}}@media(max-width:620px){.nav{height:62px;padding:0 15px}.brand-word{font-size:20px}.brand-mark{width:29px;height:29px}.hero{min-height:480px;padding:120px 18px 55px}.hero h1{font-size:clamp(47px,15vw,70px);letter-spacing:-3px}.page{width:calc(100% - 24px)}.channel-grid{grid-template-columns:repeat(2,1fr);gap:7px}.channel-card{min-height:115px;padding:12px}.channel-name{margin-top:28px;font-size:12px}.stream-frame,.stream-video{height:75vh;min-height:520px}.watch-badges{display:none}.footer{flex-direction:column}}
 </style>
-<script data-cfasync="false" src="https://czernik.org/14/b1d631aaf91e70142f856d397dfa9240"></script>  
 </head>
 <body>
-<header class="nav"><div class="brand" id="brand"><div class="brand-mark">CX</div><span class="brand-word" id="brandWord">CRIC<span class="brand-red">FREEX</span></span></div><nav class="nav-links"><a href="#home">Home</a><a href="#channels">Explore</a><a href="#watch">Watch</a></nav><div class="nav-right"><div class="live-chip"><span class="pulse"></span>LIVE</div></div></header>
-<section class="hero" id="home"><div class="hero-grid"></div><div class="hero-content"><div class="hero-tag"><span class="pulse"></span><span id="heroKicker">CRICFREEX LIVE</span></div><h1 id="heroTitle">YOUR GAME.<span>YOUR SCREEN.</span></h1><p id="heroText">Sports, shows,movies and entertainment organised in one place and that's all in free. Browse a category, choose available content and start watching.</p><div class="hero-actions"><button class="btn btn-red" id="exploreButton">▶ Explore</button><button class="btn btn-dark" id="watchButton">Watch Live</button></div></div></section>
+<header class="nav"><div class="brand" id="brand"><div class="brand-mark">CX</div><span class="brand-word" id="brandWord">CRIC<span class="brand-red">FREEX</span></span></div><nav class="nav-links"><a href="#cricketCenter">Cricket Centre</a><a href="#home">Home</a></nav><div class="nav-right"><div class="live-chip"><span class="pulse"></span>CRICKET</div></div></header>
+<section class="hero" id="home"><div class="hero-grid"></div><div class="hero-content"><div class="hero-tag"><span class="pulse"></span><span id="heroKicker">CRICFREEX CRICKET</span></div><h1 id="heroTitle">CRICKET.<span>LIVE &amp; IN-DEPTH.</span></h1><p id="heroText">Live scores, match details, series, rankings and cricket coverage—together in one place.</p><div class="hero-actions"><button class="btn btn-red" id="exploreButton">▶ Live Scores</button><button class="btn btn-dark" id="watchButton">Live Channels</button></div></div></section>
   
 <main class="page">
-<div class="main-tabs" id="mainTabs"></div>
-<section id="channels"><div class="section-head"><div><div class="section-kicker" id="kicker">LIVE SPORTS</div><h2 class="section-title" id="sectionTitle">Sports Channels</h2><div class="section-sub" id="channelCount"></div></div></div><div class="controls"><div class="filters" id="filters"></div><div class="search"><span>⌕</span><input id="search" type="search" maxlength="80" placeholder="Search channels..." autocomplete="off"></div></div><button class="series-back" id="seriesBack">← Back to Entertainment</button><div class="channel-grid" id="channelGrid"></div></section>
-<div style="text-align: center; margin: 15px 0;">
-  <script>
-  atOptions = {
-    'key' : '757da95dcabb0cfbf7c591faf64812ec',
-    'format' : 'iframe',
-    'height' : 50,
-    'width' : 320,
-    'params' : {}
-  };
-</script>
-<script src="https://czernik.org/22/757da95dcabb0cfbf7c591faf64812ec"></script>
+<div class="main-tabs" id="mainTabs" hidden></div>
+<section id="channels" hidden><div class="section-head"><div><div class="section-kicker" id="kicker">LIVE CHANNELS</div><h2 class="section-title" id="sectionTitle">Live Channels</h2><div class="section-sub" id="channelCount"></div></div></div><div class="controls"><div class="filters" id="filters"></div><div class="search"><span>⌕</span><input id="search" type="search" maxlength="80" placeholder="Search live channels..." autocomplete="off"></div></div><button class="series-back" id="seriesBack">← Back to Live Channels</button><div class="channel-grid" id="channelGrid"></div></section>
+<section id="cricketCenter" class="cricket-center" hidden></section>
 
-<section class="watch" id="watch"><div class="watch-head"><div class="watch-left"><div class="watch-icon">CX</div><div><div class="playing-title" id="playingTitle">Select something to watch</div><div class="playing-info"><span class="pulse"></span><span id="playingStatus">READY</span><span>•</span><span id="playingCategory">CRICFREEX</span></div></div></div><div class="watch-badges"><div class="badge">LIVE</div><div class="badge">HD</div></div></div><div class="player-wrap" id="playerWrap"><div class="player-empty"><div><strong>Choose your content</strong>Select an available channel or episode above.</div></div></div></section>
+<section class="watch" id="watch" hidden><div class="watch-head"><div class="watch-left"><div class="watch-icon">CX</div><div><div class="playing-title" id="playingTitle">Select something to watch</div><div class="playing-info"><span class="pulse"></span><span id="playingStatus">READY</span><span>•</span><span id="playingCategory">CRICFREEX</span></div></div></div><div class="watch-badges"><div class="badge">LIVE</div><div class="badge">HD</div></div></div><div class="player-wrap" id="playerWrap"><div class="player-empty"><div><strong>Choose your content</strong>Select an available channel or episode above.</div></div></div></section>
  
-<section class="features"><div class="feature"><small>01 / SPORTS</small><h3>Organised sports</h3><p>Browse sports channels by network and category.</p></div><div class="feature"><small>02 / SHOWS</small><h3>Episode-wise entertainment</h3><p>Open a show and browse its episodes without cluttering the main section.</p></div><div class="feature"><small>03 / MOVIES</small><h3>NEW MOVIES</h3><p>A Newly relesed movies and web series in HD Quality</p></div></section>
-<div style="text-align: center; margin: 15px 0;">
-<script async="async" data-cfasync="false" src="https://czernik.org/21/d290586d9b23f3eb556e166907b6d52f"></script>
-<div id="container-d290586d9b23f3eb556e166907b6d52f"></div>
-  <script>
-  atOptions = {
-    'key' : '757da95dcabb0cfbf7c591faf64812ec',
-    'format' : 'iframe',
-    'height' : 50,
-    'width' : 320,
-    'params' : {}
-  };
-</script>
-<script src="https://czernik.org/22/757da95dcabb0cfbf7c591faf64812ec"></script>
-    <script>
-  atOptions = {
-    'key' : '0ca1f2b01941fc3a73c8af0a22ef2ec5',
-    'format' : 'iframe',
-    'height' : 300,
-    'width' : 160,
-    'params' : {}
-  };
-</script>
-<script src="https://czernik.org/22/0ca1f2b01941fc3a73c8af0a22ef2ec5"></script>
-</div>
-<a
-  id="watchNowAd"
-  class="watch-now-ad"
-  href="https://budgetezy.org/4/40b54ce1f939a745da61752af380404f"
-  target="_blank"
-  rel="noopener noreferrer sponsored"
->
-  <span>▶ Watch Now</span>
-</a>
 </main>
+<section id="cricketWatchPlayer" class="cricket-watch-player-dock" aria-label="Cricket match player" hidden></section>
 <footer><div class="footer"><div class="footer-brand-wrap"><div class="footer-logo" id="footerLogo">CRIC<span>FREEX</span></div><button class="admin-entry" id="adminEntry" aria-label=" " tabindex="-1"></button></div><small>© 2026 CricFreeX</small></div></footer>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
 <script src="./config.js"></script>
-<script src="./app.js"></script>
+<script src="./app.js?v=12"></script>
+<script src="./cricket.js?v=11"></script>
 </body>
 </html>

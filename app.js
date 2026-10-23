@@ -13,6 +13,8 @@ let settings=null;
 let sections=[];
 let content=[];
 
+const CRICKET_WATCH_LINK_PREFIX="__cricket_watch__:";
+
 let section="sports";
 let filter="all";
 let activeSeries=null;
@@ -31,12 +33,30 @@ const esc=v=>
     }[c])
   );
 
+function isCricketWatchLink(item){
+  return String(item?.category||"")
+    .startsWith(CRICKET_WATCH_LINK_PREFIX);
+}
+
 function brand(name){
   if(/^cricfreex$/i.test(name||"")){
     return `CRIC<span class="brand-red">FREEX</span>`;
   }
 
   return esc(name||"CricFreeX");
+}
+
+function liveChannelSections(){
+  return sections.filter(s=>
+    s.slug==="sports" ||
+    /^live channels?$/i.test(s.name||"")
+  );
+}
+
+function sectionName(item){
+  return item?.slug==="sports"
+    ?"Live Channels"
+    :item?.name||"Live Channels";
 }
 
 function safeURL(value){
@@ -58,6 +78,53 @@ function safeURL(value){
   }catch{
     return null;
   }
+}
+
+function embedURL(value){
+  const safe=safeURL(value);
+  if(!safe)return null;
+
+  const url=new URL(safe);
+  const host=url.hostname.toLowerCase().replace(/^www\./,"");
+  let videoId="";
+
+  if(host==="youtu.be"){
+    videoId=url.pathname.split("/").filter(Boolean)[0]||"";
+  }else if(
+    host==="youtube.com"||
+    host==="m.youtube.com"||
+    host==="youtube-nocookie.com"
+  ){
+    videoId=url.searchParams.get("v")||"";
+    if(!videoId){
+      const parts=url.pathname.split("/").filter(Boolean);
+      if(["embed","live","shorts"].includes(parts[0])){
+        videoId=parts[1]||"";
+      }
+    }
+  }
+
+  if(videoId&&/^[\w-]{6,}$/.test(videoId)){
+    const embed=new URL(
+      `https://www.youtube-nocookie.com/embed/${videoId}`
+    );
+    const start=url.searchParams.get("start")||
+      url.searchParams.get("t");
+    if(start){
+      const seconds=String(start).match(/^\d+/)?.[0];
+      if(seconds)embed.searchParams.set("start",seconds);
+    }
+    return embed.href;
+  }
+
+  if(host==="vimeo.com"||host==="player.vimeo.com"){
+    const videoId=url.pathname.split("/").filter(Boolean).pop()||"";
+    if(/^\d+$/.test(videoId)){
+      return `https://player.vimeo.com/video/${videoId}`;
+    }
+  }
+
+  return url.href;
 }
 
 async function load(){
@@ -86,6 +153,13 @@ async function load(){
     settings=a.data||null;
     sections=b.data||[];
     content=c.data||[];
+    window.CRICFREEX_CONTENT=content;
+    window.dispatchEvent(
+      new CustomEvent(
+        "cricfreex:content-updated",
+        {detail:content}
+      )
+    );
 
     if(
       !sections.some(
@@ -131,8 +205,7 @@ function renderAll(){
     }`;
 
   $("heroText").textContent=
-    settings?.hero_text||
-    "Sports, shows and entertainment organised in one fast, responsive interface.";
+    "Live scores, match details, series, rankings and cricket coverage—together in one place.";
 
   renderTabs();
   renderFilters();
@@ -142,36 +215,24 @@ function renderAll(){
 function renderTabs(){
   $("mainTabs").replaceChildren();
 
-  sections.forEach(s=>{
-    const b=document.createElement("button");
-
-    b.className=
-      "main-tab"+
-      (
-        section===s.slug
-          ?" active"
-          :""
-      );
-
-    b.textContent=
-      `${s.icon||""} ${s.name}`.trim();
-
-    b.onclick=()=>{
-      section=s.slug;
-      filter="all";
-      activeSeries=null;
-      selected="";
-      $("search").value="";
-
-      clearURL();
-
-      renderTabs();
-      renderFilters();
-      render();
-    };
-
-    $("mainTabs").append(b);
-  });
+  const cricket=document.createElement("button");
+  cricket.type="button";
+  const cricketActive=
+    $("cricketCenter") &&
+    !$("cricketCenter").hidden;
+  cricket.className=
+    "main-tab cricket-main-tab"+
+    (cricketActive?" active":"");
+  cricket.textContent="🏏 Cricket Centre";
+  cricket.setAttribute("aria-label","Open Cricket Centre");
+  cricket.setAttribute(
+    "aria-pressed",
+    String(Boolean(cricketActive))
+  );
+  cricket.onclick=()=>{
+    window.CricfreexCricket?.open();
+  };
+  $("mainTabs").append(cricket);
 }
 
 function renderFilters(){
@@ -190,6 +251,7 @@ function renderFilters(){
       content
         .filter(
           x=>
+            !isCricketWatchLink(x) &&
             x.section_slug===section &&
             !x.parent_id
         )
@@ -355,13 +417,13 @@ function render(){
   );
 
   $("kicker").textContent=
-    (s?.name||"EXPLORE")
-      .toUpperCase();
+    sectionName(s).toUpperCase();
 
   $("sectionTitle").textContent=
-    s?.name||"Content";
+    sectionName(s);
 
   const list=content.filter(x=>
+    !isCricketWatchLink(x) &&
     x.section_slug===section &&
     !x.parent_id &&
     x.kind!=="episode" &&
@@ -422,6 +484,7 @@ function render(){
 
 function clearURL(){
   const u=new URL(location.href);
+  if(u.hash==="#cricketCenter")u.hash="";
 
   [
     "channel",
@@ -440,6 +503,7 @@ function clearURL(){
 
 function updateURL(item){
   const u=new URL(location.href);
+  u.hash="";
 
   [
     "channel",
@@ -564,6 +628,16 @@ function play(item,update=true){
     updateURL(item);
   }
 
+  $("cricketCenter").hidden=true;
+  $("channels").hidden=false;
+  $("mainTabs").hidden=false;
+  document.body.classList.remove("cricket-active");
+  if(location.hash==="#cricketCenter"){
+    const url=new URL(location.href);
+    url.hash="";
+    history.replaceState({}, "", url);
+  }
+
   /*
     Player information.
   */
@@ -604,6 +678,7 @@ function play(item,update=true){
 
   $("playerWrap")
     .replaceChildren();
+  $("watch").hidden=false;
 
   if(!url){
 
@@ -1053,20 +1128,10 @@ function play(item,update=true){
   iframe.allow=
     "autoplay; encrypted-media; fullscreen; picture-in-picture";
 
-  iframe.allowFullscreen=
-    true;
-
   iframe.referrerPolicy=
     "strict-origin-when-cross-origin";
 
-  iframe.addEventListener(
-    "load",
-    ()=>{
-
-      $("playingStatus").textContent=
-        "NOW PLAYING";
-    }
-  );
+  $("playingStatus").textContent="EMBED PLAYER";
 
   iframe.addEventListener(
     "error",
@@ -1077,11 +1142,34 @@ function play(item,update=true){
     }
   );
 
-  iframe.src=url;
+  iframe.src=embedURL(url)||url;
 
   $("playerWrap").append(
-    iframe
+    iframe,
+    Object.assign(document.createElement("a"),{
+      className:"link-open-button",
+      href:url,
+      target:"_blank",
+      rel:"noopener noreferrer",
+      textContent:"Open source in a new tab"
+    })
   );
+
+  const embedNote=document.createElement("p");
+  embedNote.className="link-note";
+  const sourceURL=new URL(url);
+  const localSource=[
+    "localhost",
+    "127.0.0.1",
+    "::1"
+  ].includes(sourceURL.hostname);
+  embedNote.textContent=localSource
+    ?`This link points to ${sourceURL.host}. It only works when that service is running on the viewer's device. Use a reachable stream URL for other viewers.`
+    :"If the player is blank, the source may block embedding. Open the source in a new tab.";
+  if(localSource){
+    $("playingStatus").textContent="LOCAL SOURCE";
+  }
+  $("playerWrap").append(embedNote);
 
   $("watch").scrollIntoView({
     behavior:"smooth",
@@ -1161,14 +1249,25 @@ $("brand").onclick=()=>
   });
 
 $("exploreButton").onclick=()=>
-  $("channels").scrollIntoView({
-    behavior:"smooth"
-  });
+  window.CricfreexCricket?.selectPage("live");
 
-$("watchButton").onclick=()=>
-  $("watch").scrollIntoView({
-    behavior:"smooth"
-  });
+$("watchButton").onclick=()=>{
+  const channelSections=liveChannelSections();
+  section=channelSections[0]?.slug||sections[0]?.slug||"sports";
+  filter="all";
+  activeSeries=null;
+  selected="";
+  $("search").value="";
+  clearURL();
+  $("cricketCenter").hidden=true;
+  $("channels").hidden=false;
+  $("mainTabs").hidden=false;
+  document.body.classList.remove("cricket-active");
+  renderTabs();
+  renderFilters();
+  render();
+  $("channels").scrollIntoView({behavior:"smooth",block:"start"});
+};
 
 $("adminEntry").onclick=()=>
   location.href="./admin.html";
