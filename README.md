@@ -16,7 +16,7 @@ Port 8765 keeps CricFreeX separate from other local cricket apps that commonly u
 
 ## Configuration and deployment
 
-- `config.js` contains the existing Supabase client configuration and an optional `CRICKET_API_URL`. Leave it empty when the website and API are served from the same origin. For a separate API host, set its base URL and configure that host to allow requests from the website origin.
+- `config.js` contains the existing Supabase client configuration and the `CRICKET_API_URL` base URL. It is set to the Render API deployment for Vercel hosting. The public, read-only cricket API allows cross-origin GET requests so a separately hosted frontend can call it.
 - Deploy the Python app and static files together, or serve the frontend separately and configure the API origin. A static-only host cannot serve the cricket API.
 - In Admin, use **Cricket Watch Links** to choose a live or upcoming match and add up to three titled URLs; this does not require creating a live-channel record. The public match card shows only **Server 1**, **Server 2** and **Server 3** buttons; titles and URLs are not printed on the page. Selecting a server loads its player in an on-page iframe. YouTube and Vimeo watch URLs are converted to embed URLs; other providers may block iframe playback, in which case **Open source in a new tab** is available. Link records use the existing `content` table and require no schema migration.
 - Admin content editing no longer offers poster/thumbnail uploads or previews. Existing image references are preserved on edits. If the sections table is empty, new content can still be assigned to the built-in **Live Channels** section slug without creating a database section.

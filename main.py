@@ -8,10 +8,17 @@ from urllib.parse import urlparse
 import requests
 from bs4 import BeautifulSoup
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 app = FastAPI(title="CricFreeX Cricket Centre")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["GET"],
+    allow_headers=["*"],
+)
 PROJECT_DIR = Path(__file__).resolve().parent
 
 BASE = "https://www.cricbuzz.com"
