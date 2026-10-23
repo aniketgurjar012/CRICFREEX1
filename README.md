@@ -1,4 +1,4 @@
-# CricFreeX
+# CRICFREEX1
 
 CricFreeX is a cricket-focused live centre for current and upcoming scores, results, scorecards, squads, team schedules and results, series statistics, historical archives, ICC rankings, cricket news and embedded match streams.
 
