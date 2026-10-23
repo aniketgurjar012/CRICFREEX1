@@ -347,23 +347,14 @@
     frame.title = `${active.serverLabel} · ${active.match.team1?.teamName || "Team 1"} vs ${active.match.team2?.teamName || "Team 2"}`;
     frame.allow = "autoplay; encrypted-media; picture-in-picture; fullscreen";
     frame.referrerPolicy = "strict-origin-when-cross-origin";
-    const openSource = element(
-      "a",
-      "cricket-action-button",
-      "Open source in a new tab"
-    );
-    openSource.href = active.sourceURL || active.url;
-    openSource.target = "_blank";
-    openSource.rel = "noopener noreferrer";
     watchPlayer.append(
       head,
       server,
       frame,
-      openSource,
       element(
         "p",
         "cricket-watch-note",
-        "If the player does not load, this server may not allow embedded playback."
+        "This server may not allow embedded playback."
       )
     );
   }

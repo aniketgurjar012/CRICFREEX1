@@ -1144,16 +1144,7 @@ function play(item,update=true){
 
   iframe.src=embedURL(url)||url;
 
-  $("playerWrap").append(
-    iframe,
-    Object.assign(document.createElement("a"),{
-      className:"link-open-button",
-      href:url,
-      target:"_blank",
-      rel:"noopener noreferrer",
-      textContent:"Open source in a new tab"
-    })
-  );
+  $("playerWrap").append(iframe);
 
   const embedNote=document.createElement("p");
   embedNote.className="link-note";
@@ -1165,7 +1156,7 @@ function play(item,update=true){
   ].includes(sourceURL.hostname);
   embedNote.textContent=localSource
     ?`This link points to ${sourceURL.host}. It only works when that service is running on the viewer's device. Use a reachable stream URL for other viewers.`
-    :"If the player is blank, the source may block embedding. Open the source in a new tab.";
+    :"The source may block playback when embedded.";
   if(localSource){
     $("playingStatus").textContent="LOCAL SOURCE";
   }
