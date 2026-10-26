@@ -2,6 +2,8 @@ import json
 import re
 import time
 import threading
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -11,12 +13,13 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 app = FastAPI(title="CricFreeX Cricket Centre")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_methods=["GET"],
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 PROJECT_DIR = Path(__file__).resolve().parent
@@ -1261,6 +1264,82 @@ def v4_article(path: str):
 
     except Exception as error:
         raise HTTPException(502, str(error))
+
+
+SUGGESTIONS_FILE = PROJECT_DIR / "suggestions.json"
+suggestions_lock = threading.Lock()
+
+
+def load_suggestions():
+    if not SUGGESTIONS_FILE.exists():
+        return []
+    try:
+        with open(SUGGESTIONS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return data if isinstance(data, list) else []
+    except Exception:
+        return []
+
+
+def save_suggestions(items):
+    with open(SUGGESTIONS_FILE, "w", encoding="utf-8") as f:
+        json.dump(items, f, indent=2, ensure_ascii=False)
+
+
+class SuggestionPayload(BaseModel):
+    message: str
+
+
+@app.get("/api/suggestions")
+def get_suggestions():
+    with suggestions_lock:
+        items = load_suggestions()
+    return {
+        "success": True,
+        "suggestions": sorted(
+            items,
+            key=lambda x: str(x.get("created_at", "")),
+            reverse=True
+        )
+    }
+
+
+@app.post("/api/suggestions")
+def create_suggestion(payload: SuggestionPayload):
+    text = (payload.message or "").strip()
+    words = [w for w in text.split() if w]
+    word_count = len(words)
+    if word_count < 5:
+        raise HTTPException(status_code=400, detail="Message must contain at least 5 words.")
+    if word_count > 1000:
+        raise HTTPException(status_code=400, detail="Message cannot exceed 1000 words.")
+
+    new_item = {
+        "id": str(uuid.uuid4()),
+        "message": text,
+        "word_count": word_count,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "status": "pending"
+    }
+
+    with suggestions_lock:
+        items = load_suggestions()
+        items.insert(0, new_item)
+        save_suggestions(items)
+
+    return {"success": True, "suggestion": new_item}
+
+
+@app.delete("/api/suggestions/{item_id}")
+def delete_suggestion(item_id: str):
+    with suggestions_lock:
+        items = load_suggestions()
+        initial_len = len(items)
+        items = [x for x in items if str(x.get("id")) != str(item_id)]
+        save_suggestions(items)
+
+    return {"success": True, "deleted": initial_len > len(items)}
+
 
 @app.get("/")
 def home():

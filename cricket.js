@@ -182,6 +182,90 @@
     ].includes(String(match.state || "").trim().toLowerCase());
   }
 
+  function isCompletedMatch(match) {
+    const s = String(match?.state || "").trim().toLowerCase();
+    if ([
+      "complete",
+      "completed",
+      "abandon",
+      "abandoned",
+      "cancelled",
+      "canceled",
+      "no result",
+      "drawn",
+      "forfeit"
+    ].includes(s)) {
+      return true;
+    }
+    const status = String(match?.status || "").trim().toLowerCase();
+    return (
+      status.includes("won by") ||
+      status.includes("match tied") ||
+      status.includes("no result") ||
+      status.includes("match drawn") ||
+      status.includes("match abandoned") ||
+      status.includes("match cancelled")
+    );
+  }
+
+  function isUpcomingMatch(match) {
+    const s = String(match?.state || "").trim().toLowerCase();
+    return ["preview", "upcoming", "scheduled"].includes(s);
+  }
+
+  function shouldAllowWatchLinks(match) {
+    if (state.page === "upcoming" || state.page === "recent") {
+      return false;
+    }
+    if (isUpcomingMatch(match) || isCompletedMatch(match)) {
+      return false;
+    }
+    if (state.page === "live") {
+      return isLiveMatch(match) || !isUpcomingMatch(match);
+    }
+    return isLiveMatch(match);
+  }
+
+  async function pruneCompletedWatchLinks(knownRecentMatches) {
+    if (!watchLinks.length) return;
+    try {
+      let recentMatches = knownRecentMatches;
+      if (!recentMatches) {
+        const res = await request("/api/matches/recent");
+        recentMatches = Array.isArray(res?.matches) ? res.matches : [];
+      }
+      const finishedIds = new Set((recentMatches || []).map(m => String(m.id)));
+      if (state.matches && state.matches.length) {
+        state.matches.forEach(m => {
+          if (isCompletedMatch(m)) finishedIds.add(String(m.id));
+        });
+      }
+
+      const itemsToDelete = watchLinks.filter(item =>
+        finishedIds.has(String(item.category).slice(watchLinkPrefix.length))
+      );
+      if (!itemsToDelete.length) return;
+
+      const deleteIds = itemsToDelete.map(item => item.id);
+      watchLinks = watchLinks.filter(item => !deleteIds.includes(item.id));
+      if (window.CRICFREEX_CONTENT) {
+        window.CRICFREEX_CONTENT = window.CRICFREEX_CONTENT.filter(item => !deleteIds.includes(item.id));
+      }
+
+      if (state.activeWatch && finishedIds.has(String(state.activeWatch.match?.id))) {
+        state.activeWatch = null;
+        renderWatchPlayer();
+      }
+
+      const supabaseClient = window.cricfreexDb || (window.supabase && config.SUPABASE_URL ? window.supabase.createClient(config.SUPABASE_URL, config.SUPABASE_ANON_KEY) : null);
+      if (supabaseClient) {
+        await supabaseClient.from("content").delete().in("id", deleteIds);
+      }
+    } catch (err) {
+      console.warn("pruneCompletedWatchLinks error:", err);
+    }
+  }
+
   function matchCard(match, onSelect, allowWatchLinks) {
     const card = element("article", "cricket-match-card");
     const summary = element("button", "cricket-match-main");
@@ -238,7 +322,7 @@
         String(item.category).slice(watchLinkPrefix.length) === String(match.id)
       ).sort((left, right) =>
         Number(left.sort_order || 0) - Number(right.sort_order || 0)
-      ).slice(0, 3)
+      ).slice(0, 6)
       : [];
     const validLinks = matchLinks.flatMap(item => {
       try {
@@ -382,7 +466,7 @@
       grid.appendChild(matchCard(
         match,
         () => onSelect(match),
-        ["live", "upcoming"].includes(state.page)
+        shouldAllowWatchLinks(match)
       ));
     });
     (root.querySelector(".cricket-content") || root).appendChild(grid);
@@ -592,6 +676,11 @@
     if (requestId !== state.request) return;
     const matches = result.matches || [];
     state.matches = matches;
+    if (category === "recent") {
+      pruneCompletedWatchLinks(matches);
+    } else if (category === "live") {
+      pruneCompletedWatchLinks();
+    }
     renderMatchList(
       matches,
       match => openMatch(match, category),
@@ -1821,6 +1910,9 @@
     if (!root.hidden && state.page === "live" && !document.hidden) {
       renderPageContent(true);
     }
+    if (!document.hidden && watchLinks.length) {
+      pruneCompletedWatchLinks();
+    }
   }, 30000);
 
   window.addEventListener("cricfreex:content-updated", event => {
@@ -1829,7 +1921,7 @@
     );
     if (
       !root.hidden &&
-      ["live", "upcoming"].includes(state.page) &&
+      state.page === "live" &&
       !document.hidden
     ) {
       renderPageContent(true);

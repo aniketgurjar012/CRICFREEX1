@@ -823,3 +823,162 @@ body {
   color: var(--cricket-muted);
   font-size: 14px;
 }
+
+/* =========================================================
+   LIGHT THEME STYLES (CRICKET CENTRE)
+========================================================= */
+
+[data-theme="light"] .cricket-center {
+  --cricket-ink: #0d0f14;
+  --cricket-muted: #525866;
+  --cricket-subtle: #6b7280;
+  --cricket-accent: #c40812;
+  --cricket-line: rgba(0, 0, 0, .10);
+  background:
+    radial-gradient(circle at 95% 0, #e5091410, transparent 34%),
+    linear-gradient(145deg, #ffffff, #f7f8fa);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, .05);
+  color: var(--cricket-ink);
+}
+
+[data-theme="light"] .cricket-tabs {
+  background: #eceff4;
+  border-color: rgba(0, 0, 0, .08);
+}
+
+[data-theme="light"] .cricket-tab {
+  color: #4b5260;
+}
+
+[data-theme="light"] .cricket-tab:hover {
+  color: #0d0f14;
+}
+
+[data-theme="light"] .cricket-search-label,
+[data-theme="light"] .cricket-ranking-select {
+  color: #4b5260;
+}
+
+[data-theme="light"] .cricket-search-label input,
+[data-theme="light"] .cricket-ranking-select select {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, .15);
+  color: #0d0f14;
+}
+
+[data-theme="light"] .cricket-action-button {
+  background: #eef1f6;
+  border-color: rgba(0, 0, 0, .12);
+  color: #1f242e;
+}
+
+[data-theme="light"] .cricket-action-button:hover {
+  background: #e2e6ee;
+  border-color: rgba(0, 0, 0, .2);
+}
+
+[data-theme="light"] .cricket-match-card,
+[data-theme="light"] .cricket-directory-card {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, .09);
+  color: #0d0f14;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .03);
+}
+
+[data-theme="light"] .cricket-match-card:hover,
+[data-theme="light"] .cricket-directory-card:hover {
+  background-color: #f9fafb;
+  border-color: #c4081260;
+}
+
+[data-theme="light"] .cricket-match-series,
+[data-theme="light"] .cricket-match-meta,
+[data-theme="light"] .cricket-count,
+[data-theme="light"] .cricket-subtitle,
+[data-theme="light"] .cricket-copy,
+[data-theme="light"] .cricket-message {
+  color: #565d6b;
+}
+
+[data-theme="light"] .cricket-state {
+  border-color: rgba(0, 0, 0, .12);
+  color: #565d6b;
+}
+
+[data-theme="light"] .cricket-state.is-live {
+  border-color: #0d8a4340;
+  color: #0d8a43;
+}
+
+[data-theme="light"] .cricket-team-name {
+  color: #0d0f14;
+}
+
+[data-theme="light"] .cricket-team-score {
+  color: #0d0f14;
+}
+
+[data-theme="light"] .cricket-watch-link {
+  border-color: #0d8a4350;
+  background: #0d8a4315;
+  color: #0b7337;
+}
+
+[data-theme="light"] .cricket-watch-link:hover {
+  border-color: #0d8a4390;
+  background: #0d8a4325;
+  color: #065427;
+}
+
+[data-theme="light"] .cricket-watch-link.is-selected {
+  border-color: #0d8a43;
+  background: #0d8a4332;
+  color: #065427;
+  box-shadow: 0 0 0 2px #0d8a4330;
+}
+
+[data-theme="light"] .cricket-table-wrap {
+  border-color: rgba(0, 0, 0, .09);
+  background: #ffffff;
+}
+
+[data-theme="light"] .cricket-table {
+  background: #ffffff;
+}
+
+[data-theme="light"] .cricket-table th {
+  background: #f4f5f8;
+  color: #374151;
+  border-bottom-color: rgba(0, 0, 0, .09);
+}
+
+[data-theme="light"] .cricket-table td {
+  color: #111827;
+  border-bottom-color: rgba(0, 0, 0, .06);
+}
+
+[data-theme="light"] .cricket-table tr:hover td {
+  background: #f9fafb;
+}
+
+[data-theme="light"] .cricket-commentary-text,
+[data-theme="light"] .cricket-copy {
+  color: #111827;
+}
+
+[data-theme="light"] .cricket-watch-player-dock {
+  background: linear-gradient(145deg, #ffffff, #f7f8fa);
+  border-color: rgba(0, 0, 0, .10);
+  color: #0d0f14;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, .08);
+}
+
+[data-theme="light"] .cricket-watch-player-server {
+  color: #0b7337;
+}
+
+[data-theme="light"] .cricket-watch-frame {
+  background: #f0f2f5;
+  border-color: rgba(0, 0, 0, .10);
+}
+

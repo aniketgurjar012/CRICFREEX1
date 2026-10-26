@@ -6,6 +6,11 @@
 <meta name="robots" content="noindex,nofollow">
 <meta name="theme-color" content="#050507">
 <title>CX</title>
+<script>
+if(localStorage.getItem("cricfreex_theme")==="light"){
+  document.documentElement.setAttribute("data-theme","light");
+}
+</script>
 <style>
 :root{--bg:#050507;--card:#0d0d12;--card2:#111117;--white:#fff;--muted:#8b8b96;--red:#e50914;--red2:#ff3440;--green:#20df7b;--border:#ffffff14;--max:1350px}
 *{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 50% -10%,#1d090c,transparent 30%),var(--bg);color:#fff;font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif}button,input,textarea,select{font:inherit}button{cursor:pointer}.hidden{display:none!important}
@@ -20,9 +25,45 @@
 .watch-link-row button{height:42px}
 .watch-match-status{grid-column:1/-1}
 @media(max-width:700px){.watch-link-row{grid-template-columns:1fr}.watch-link-list,.watch-match-status{grid-column:auto}}
+.suggestion-item{border:1px solid var(--border);border-radius:12px;padding:16px;background:#09090d;display:flex;flex-direction:column;gap:10px}
+.suggestion-header{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.suggestion-badge{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:800;color:var(--green);border:1px solid #20df7b33;background:#20df7b0e;padding:4px 8px;border-radius:20px}
+.suggestion-time{font-size:11px;color:var(--muted)}
+.suggestion-text{font-size:13px;line-height:1.6;color:#e8e8ed;white-space:pre-wrap;word-break:break-word;margin:0}
+.suggestion-actions{display:flex;gap:8px;justify-content:flex-end}
+.theme-toggle{display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;padding:0;border:1px solid var(--border);border-radius:10px;background:#18181e;color:#fff;cursor:pointer;transition:transform .25s ease,background .2s}
+.theme-toggle:hover{background:#22222a;transform:rotate(18deg) scale(1.05)}
+.theme-icon{width:18px;height:18px;display:block}
+.icon-sun{display:none}
+[data-theme="light"] .icon-moon{display:none}
+[data-theme="light"] .icon-sun{display:block}
+[data-theme="light"]{--bg:#f5f6f8;--card:#ffffff;--card2:#eceff3;--white:#0a0b0d;--muted:#565d6b;--red:#c40812;--red2:#b00008;--green:#0d8a43;--border:rgba(0,0,0,.09)}
+[data-theme="light"] body{background:radial-gradient(circle at 50% -10%,#ffe8ea,transparent 30%),var(--bg);color:#0a0b0d}
+[data-theme="light"] .topbar{background:#ffffffea;border-bottom-color:rgba(0,0,0,.09)}
+[data-theme="light"] .field input,[data-theme="light"] .field textarea,[data-theme="light"] .field select,[data-theme="light"] .editor input,[data-theme="light"] .editor textarea,[data-theme="light"] .editor select{background:#fff;border-color:rgba(0,0,0,.15);color:#0a0b0d}
+[data-theme="light"] .ghost{background:#eef1f6;color:#1f242e;border-color:rgba(0,0,0,.12)}
+[data-theme="light"] .welcome{border-color:rgba(0,0,0,.09);background:radial-gradient(circle at 90% 0,#e5091418,transparent 35%),linear-gradient(135deg,#ffffff,#f7f8fa);color:#0a0b0d}
+[data-theme="light"] .live{border-color:#0d8a4340;background:#0d8a4315;color:#0b7337}
+[data-theme="light"] .tab{background:#ffffff;border-color:rgba(0,0,0,.1);color:#565d6b}
+[data-theme="light"] .tab.active{background:#0a0b0d;color:#ffffff}
+[data-theme="light"] .search{background:#ffffff;border-color:rgba(0,0,0,.14);color:#0a0b0d}
+[data-theme="light"] .watch-link-row{background:#f9fafb;border-color:rgba(0,0,0,.1)}
+[data-theme="light"] .suggestion-item{background:#f9fafb;border-color:rgba(0,0,0,.1)}
+[data-theme="light"] .suggestion-text{color:#1f242e}
+[data-theme="light"] .notice{background:#f4f5f8;border-color:rgba(0,0,0,.1);color:#4b5260}
+[data-theme="light"] .theme-toggle{background:#eef1f6;border-color:rgba(0,0,0,.12);color:#0a0b0d}
+[data-theme="light"] .login-card{box-shadow:0 30px 80px rgba(0,0,0,.08)}
+[data-theme="light"] .stat{box-shadow:0 4px 14px rgba(0,0,0,.03)}
+[data-theme="light"] .panel{box-shadow:0 4px 18px rgba(0,0,0,.03)}
 </style>
 </head>
 <body>
+<div style="position:fixed;top:20px;right:24px;z-index:20;">
+  <button class="theme-toggle" id="loginThemeToggle" type="button" aria-label="Toggle theme" title="Toggle theme">
+    <svg class="theme-icon icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+    <svg class="theme-icon icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+  </button>
+</div>
 <section class="login-page" id="loginPage">
 <form class="login-card" id="loginForm">
 <div class="brand"><div class="brand-mark">CX</div>CRIC<span>FREEX</span></div>
@@ -39,6 +80,10 @@
 <header class="topbar">
 <div class="brand"><div class="brand-mark">CX</div>CRIC<span>FREEX</span></div>
 <div class="top-right">
+<button class="theme-toggle" id="adminThemeToggle" type="button" aria-label="Toggle theme" title="Toggle theme">
+  <svg class="theme-icon icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+  <svg class="theme-icon icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+</button>
 <button class="ghost" id="openSite">View Site</button>
 <button class="ghost" id="logout">Logout</button>
 </div>
@@ -61,11 +106,13 @@
 <div class="stat"><span>CONTENT</span><b id="statContent">0</b></div>
 <div class="stat"><span>SHOWS</span><b id="statShows">0</b></div>
 <div class="stat"><span>EPISODES</span><b id="statEpisodes">0</b></div>
+<div class="stat"><span>REQUESTS</span><b id="statRequests">0</b></div>
 </section>
 
 <div class="tabs">
 <button class="tab active" data-tab="content">Content</button>
 <button class="tab" data-tab="watchLinks">Cricket Watch Links</button>
+<button class="tab" data-tab="suggestions">Requests &amp; Suggestions</button>
 <button class="tab" data-tab="website">Website</button>
 <button class="tab" data-tab="sections">Sections</button>
 </div>
@@ -85,10 +132,18 @@
 <form id="watchLinksForm" class="editor">
 <label>Match Category<select id="watchMatchCategory"><option value="live">Live matches</option><option value="upcoming">Upcoming matches</option></select></label>
 <label>Match<select id="watchMatch" required><option value="">Load a match list first</option></select></label>
-<div id="watchLinkStatus" class="notice watch-match-status" role="status">Choose a live or upcoming match to manage its watch links.</div>
+<div id="watchLinkStatus" class="notice watch-match-status" role="status">Choose a live or upcoming match to manage its watch links. Upcoming match links are saved in advance and will automatically appear to viewers once the match goes live.</div>
 <div id="watchLinkRows" class="watch-link-list"></div>
 <div class="editor-actions"><button class="ghost" type="button" id="addWatchLink">+ Add another link</button><button class="primary" id="saveWatchLinks">Save Match Links</button></div>
 </form>
+</section>
+
+<section id="suggestionsPanel" class="panel hidden">
+<div class="panel-head">
+<div><h2>User Requests &amp; Suggestions</h2><p class="muted">Live match link requests and viewer messages.</p></div>
+<div class="actions"><button class="ghost" id="refreshSuggestions" type="button">Refresh</button></div>
+</div>
+<div class="list" id="suggestionsList"></div>
 </section>
 
 <section id="websitePanel" class="panel hidden">

@@ -6,6 +6,7 @@ const db=window.supabase.createClient(
   C.SUPABASE_URL,
   C.SUPABASE_ANON_KEY
 );
+window.cricfreexDb=db;
 
 const $=id=>document.getElementById(id);
 
@@ -36,6 +37,53 @@ const esc=v=>
 function isCricketWatchLink(item){
   return String(item?.category||"")
     .startsWith(CRICKET_WATCH_LINK_PREFIX);
+}
+
+function cricketWatchMatchId(item){
+  return String(item?.category||"")
+    .slice(CRICKET_WATCH_LINK_PREFIX.length);
+}
+
+async function cleanupFinishedWatchLinks(){
+  const watchItems=content.filter(isCricketWatchLink);
+  if(!watchItems.length)return;
+
+  try{
+    const response=await fetch(`${C.CRICKET_API_URL}/api/matches/recent`,{
+      headers:{Accept:"application/json"}
+    });
+    if(!response.ok)return;
+    const result=await response.json();
+    const recentMatches=Array.isArray(result.matches)?result.matches:[];
+    const finishedMatchIds=new Set(recentMatches.map(m=>String(m.id)));
+
+    const itemsToDelete=watchItems.filter(item=>
+      finishedMatchIds.has(cricketWatchMatchId(item))
+    );
+
+    if(!itemsToDelete.length)return;
+
+    const idsToDelete=itemsToDelete.map(item=>item.id);
+
+    content=content.filter(item=>!idsToDelete.includes(item.id));
+    window.CRICFREEX_CONTENT=content;
+    window.dispatchEvent(
+      new CustomEvent(
+        "cricfreex:content-updated",
+        {detail:content}
+      )
+    );
+
+    const {error}=await db.from("content")
+      .delete()
+      .in("id",idsToDelete);
+
+    if(error){
+      console.warn("Could not delete completed watch links:", error.message);
+    }
+  }catch(err){
+    console.warn("cleanupFinishedWatchLinks error:", err);
+  }
 }
 
 function brand(name){
@@ -171,6 +219,7 @@ async function load(){
     }
 
     renderAll();
+    cleanupFinishedWatchLinks();
 
   }catch(error){
     console.error(error);
@@ -1304,13 +1353,251 @@ db.channel("cricfreex-public")
   )
   .subscribe();
 
+/* =========================================================
+   THEME TOGGLE
+========================================================= */
+
+function setupThemeToggle(){
+  const toggleBtn=$("themeToggle");
+  if(!toggleBtn)return;
+
+  function updateTheme(theme){
+    if(theme==="light"){
+      document.documentElement.setAttribute("data-theme","light");
+      try{localStorage.setItem("cricfreex_theme","light");}catch(e){}
+    }else{
+      document.documentElement.removeAttribute("data-theme");
+      try{localStorage.setItem("cricfreex_theme","dark");}catch(e){}
+    }
+  }
+
+  toggleBtn.addEventListener("click",()=>{
+    const current=document.documentElement.getAttribute("data-theme")==="light"?"light":"dark";
+    updateTheme(current==="light"?"dark":"light");
+  });
+
+  window.addEventListener("storage",event=>{
+    if(event.key==="cricfreex_theme"){
+      updateTheme(event.newValue||"dark");
+    }
+  });
+}
+
+/* =========================================================
+   ACTIVE USERS TRACKING (SUPABASE REALTIME PRESENCE)
+========================================================= */
+
+function initActiveUsersTracking(){
+  const userCountEl=$("activeUserCount");
+  if(!userCountEl)return;
+
+  let clientId;
+  try{
+    clientId=sessionStorage.getItem("cricfreex_client_id");
+  }catch(e){}
+
+  if(!clientId){
+    clientId="cx_"+Math.random().toString(36).slice(2,11)+"_"+Date.now();
+    try{sessionStorage.setItem("cricfreex_client_id",clientId);}catch(e){}
+  }
+
+  function renderCount(num){
+    const safeCount=Math.max(1,Number(num)||1);
+    if(userCountEl){
+      userCountEl.textContent=safeCount;
+    }
+  }
+
+  renderCount(1);
+
+  try{
+    const presenceChannel=db.channel("cricfreex-presence",{
+      config:{presence:{key:clientId}}
+    });
+
+    const updateFromState=()=>{
+      try{
+        const state=presenceChannel.presenceState();
+        const keys=Object.keys(state||{});
+        let total=0;
+        keys.forEach(k=>{
+          total+=Array.isArray(state[k])?state[k].length:1;
+        });
+        renderCount(total);
+      }catch(err){
+        renderCount(1);
+      }
+    };
+
+    presenceChannel
+      .on("presence",{event:"sync"},updateFromState)
+      .on("presence",{event:"join"},updateFromState)
+      .on("presence",{event:"leave"},updateFromState)
+      .subscribe(async status=>{
+        if(status==="SUBSCRIBED"){
+          try{
+            await presenceChannel.track({
+              online_at:Date.now(),
+              client:clientId
+            });
+          }catch(e){}
+        }
+      });
+
+    // Heartbeat every 40s (keeps connection & active count refreshed)
+    window.setInterval(async()=>{
+      try{
+        if(presenceChannel&&presenceChannel.state==="joined"){
+          await presenceChannel.track({
+            online_at:Date.now(),
+            client:clientId
+          });
+        }
+      }catch(e){}
+    },40000);
+
+    // Keep active when entering/exiting fullscreen (e.g. iframe match viewing)
+    document.addEventListener("fullscreenchange",()=>{
+      try{
+        if(presenceChannel&&presenceChannel.state==="joined"){
+          presenceChannel.track({
+            online_at:Date.now(),
+            client:clientId,
+            fullscreen:Boolean(document.fullscreenElement)
+          });
+        }
+      }catch(e){}
+    });
+
+    window.addEventListener("beforeunload",()=>{
+      try{presenceChannel.untrack();}catch(e){}
+    });
+  }catch(err){
+    console.warn("Presence tracking fallback:",err);
+    renderCount(1);
+  }
+}
+
+/* =========================================================
+   SUGGESTION / REQUEST BOX
+========================================================= */
+
+function countWords(str){
+  return (str||"").trim().split(/\s+/).filter(Boolean).length;
+}
+
+function initSuggestionBox(){
+  const form=$("suggestionForm");
+  const input=$("suggestionInput");
+  const countEl=$("suggestionWordCount");
+  const alertEl=$("suggestionAlert");
+  const btn=$("suggestionSubmitBtn");
+
+  if(!form||!input||!countEl||!alertEl||!btn)return;
+
+  function updateCount(){
+    const words=countWords(input.value);
+    const isValid=words>=5&&words<=1000;
+    countEl.textContent=`${words} word${words===1?"":"s"} `;
+
+    const hint=document.createElement("span");
+    hint.className="suggestion-hint";
+    hint.textContent="(min 5, max 1000)";
+    countEl.appendChild(hint);
+
+    countEl.classList.toggle("is-valid",isValid);
+    countEl.classList.toggle("is-invalid",words>0&&!isValid);
+  }
+
+  input.addEventListener("input",()=>{
+    updateCount();
+    if(alertEl.classList.contains("show")){
+      alertEl.className="suggestion-alert";
+      alertEl.textContent="";
+    }
+  });
+
+  form.addEventListener("submit",async event=>{
+    event.preventDefault();
+    const text=input.value.trim();
+    const words=countWords(text);
+
+    if(words<5){
+      alertEl.className="suggestion-alert show is-error";
+      alertEl.textContent="Please enter at least 5 words to describe your request or suggestion.";
+      input.focus();
+      return;
+    }
+
+    if(words>1000){
+      alertEl.className="suggestion-alert show is-error";
+      alertEl.textContent="Word limit exceeded. Maximum 1000 words allowed.";
+      input.focus();
+      return;
+    }
+
+    btn.disabled=true;
+    const btnSpan=btn.querySelector("span");
+    if(btnSpan)btnSpan.textContent="Sending...";
+    alertEl.className="suggestion-alert";
+    alertEl.textContent="";
+
+    let saved=false;
+
+    // 1. Try Supabase insert
+    try{
+      const {error}=await db.from("suggestions").insert({
+        message:text,
+        word_count:words
+      });
+      if(!error)saved=true;
+    }catch(e){}
+
+    // 2. Dual-save to backend API (/api/suggestions)
+    try{
+      const apiBase=(location.hostname==="localhost"||location.hostname==="127.0.0.1")
+        ? ""
+        : String(CONFIG.CRICKET_API_URL||"").replace(/\/+$/,"");
+      const res=await fetch(`${apiBase}/api/suggestions`,{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({message:text})
+      });
+      if(res.ok)saved=true;
+    }catch(e){}
+
+    btn.disabled=false;
+    if(btnSpan)btnSpan.textContent="Send Request";
+
+    if(saved){
+      input.value="";
+      updateCount();
+      alertEl.className="suggestion-alert show is-success";
+      alertEl.textContent="✓ Thank you! Your request has been sent to the admin team.";
+      setTimeout(()=>{
+        alertEl.classList.remove("show");
+      },7000);
+    }else{
+      alertEl.className="suggestion-alert show is-error";
+      alertEl.textContent="Could not send your request right now. Please check your connection and try again.";
+    }
+  });
+
+  updateCount();
+}
+
 async function start(){
+  setupThemeToggle();
+  initActiveUsersTracking();
+  initSuggestionBox();
   await load();
 
   if(!restored){
     restored=true;
     restoreURL();
   }
+
+  setInterval(cleanupFinishedWatchLinks,30000);
 }
 
 start();

@@ -16,13 +16,14 @@ const db=window.supabase.createClient(
 const $=id=>document.getElementById(id);
 
 const CRICKET_WATCH_LINK_PREFIX="__cricket_watch__:";
-const CRICKET_API_BASE=String(
-  CONFIG.CRICKET_API_URL||""
-).replace(/\/+$/,"");
+const CRICKET_API_BASE=(location.hostname==="localhost"||location.hostname==="127.0.0.1")
+  ? ""
+  : String(CONFIG.CRICKET_API_URL||"").replace(/\/+$/,"");
 
 let sections=[];
 let content=[];
 let settings={};
+let suggestions=[];
 let loading=false;
 let watchMatches={live:[],upcoming:[]};
 let selectedMatchLinks=[];
@@ -197,6 +198,8 @@ async function loadAll(){
     renderSections();
     fillWebsite();
     fillSelectors();
+    cleanupFinishedWatchLinks();
+    loadSuggestions();
 
   }catch(error){
     console.error(error);
@@ -241,11 +244,20 @@ document.querySelectorAll(".tab").forEach(button=>{
       tab!=="watchLinks"
     );
 
+    if($("suggestionsPanel")){
+      $("suggestionsPanel").classList.toggle(
+        "hidden",
+        tab!=="suggestions"
+      );
+    }
+
     $("editorPanel").classList.add("hidden");
     if(tab==="watchLinks"){
       loadCricketMatches(
         $("watchMatchCategory").value
       );
+    }else if(tab==="suggestions"){
+      loadSuggestions();
     }
   };
 });
@@ -328,6 +340,7 @@ async function loadCricketMatches(category){
       ?result.matches
       :[];
     renderWatchMatchOptions(category);
+    cleanupFinishedWatchLinks();
     setWatchLinkStatus(
       watchMatches[category].length
         ?`${watchMatches[category].length} ${category} matches loaded.`
@@ -343,9 +356,63 @@ async function loadCricketMatches(category){
   }
 }
 
+async function cleanupFinishedWatchLinks(){
+  const watchItems=content.filter(isCricketWatchLink);
+  if(!watchItems.length)return;
+
+  try{
+    const response=await fetch(`${CRICKET_API_BASE}/api/matches/recent`,{
+      headers:{Accept:"application/json"}
+    });
+    if(!response.ok)return;
+    const result=await response.json();
+    const recentMatches=Array.isArray(result.matches)?result.matches:[];
+    const finishedMatchIds=new Set(recentMatches.map(m=>String(m.id)));
+
+    (watchMatches.live||[]).forEach(m=>{
+      const s=String(m.state||"").trim().toLowerCase();
+      if([
+        "complete","completed","abandon","abandoned",
+        "cancelled","canceled","no result","drawn","forfeit"
+      ].includes(s)){
+        finishedMatchIds.add(String(m.id));
+      }
+      const st=String(m.status||"").trim().toLowerCase();
+      if(st.includes("won by")||st.includes("match tied")||st.includes("no result")||st.includes("match drawn")||st.includes("match abandoned")||st.includes("match cancelled")){
+        finishedMatchIds.add(String(m.id));
+      }
+    });
+
+    const itemsToDelete=watchItems.filter(item=>
+      finishedMatchIds.has(cricketWatchMatchId(item))
+    );
+
+    if(!itemsToDelete.length)return;
+
+    const idsToDelete=itemsToDelete.map(item=>item.id);
+    const affectedMatchIds=[...new Set(itemsToDelete.map(cricketWatchMatchId))];
+
+    const {error}=await db.from("content")
+      .delete()
+      .in("id",idsToDelete);
+
+    if(!error){
+      content=content.filter(item=>!idsToDelete.includes(item.id));
+      renderContent();
+      const currentSelectedMatchId=$("watchMatch")?.value;
+      if(currentSelectedMatchId && affectedMatchIds.includes(currentSelectedMatchId)){
+        loadSelectedMatchLinks();
+        setWatchLinkStatus("Watch links for this match were deleted because the match has finished.");
+      }
+    }
+  }catch(err){
+    console.warn("cleanupFinishedWatchLinks admin error:", err);
+  }
+}
+
 function addWatchLinkRow(item={}){
-  if($("watchLinkRows").children.length>=3){
-    setWatchLinkStatus("A match can have up to three watch servers.");
+  if($("watchLinkRows").children.length>=6){
+    setWatchLinkStatus("A match can have up to six watch servers.");
     return;
   }
 
@@ -392,9 +459,9 @@ function addWatchLinkRow(item={}){
 
 function updateWatchLinkControls(){
   const count=$("watchLinkRows").children.length;
-  $("addWatchLink").disabled=count>=3;
-  $("addWatchLink").textContent=count>=3
-    ?"Maximum 3 servers"
+  $("addWatchLink").disabled=count>=6;
+  $("addWatchLink").textContent=count>=6
+    ?"Maximum 6 servers"
     :"+ Add another server";
 }
 
@@ -477,8 +544,8 @@ $("watchLinksForm").addEventListener("submit",async event=>{
     setWatchLinkStatus(error.message,true);
     return;
   }
-  if(records.length>3){
-    setWatchLinkStatus("A match can have up to three watch servers.",true);
+  if(records.length>6){
+    setWatchLinkStatus("A match can have up to six watch servers.",true);
     return;
   }
 
@@ -542,8 +609,11 @@ $("watchLinksForm").addEventListener("submit",async event=>{
       cricketWatchMatchId(item)!==matchId
     ).concat(savedLinks||[]);
     loadSelectedMatchLinks();
+    const isUpcoming = $("watchMatchCategory")?.value === "upcoming";
     setWatchLinkStatus(
-      `${records.length} watch link${records.length===1?"":"s"} saved. They are now available on this match card.`
+      isUpcoming
+        ? `${records.length} watch link${records.length===1?"":"s"} saved for this upcoming match. They will automatically appear to viewers once the match goes live.`
+        : `${records.length} watch link${records.length===1?"":"s"} saved. They are now live on this match card.`
     );
   }catch(error){
     console.error(error);
@@ -1675,16 +1745,228 @@ db.channel("cricfreex-admin-live")
   .subscribe();
 
 window.setInterval(()=>{
+  cleanupFinishedWatchLinks();
   if(
     document.visibilityState==="visible"&&
     document.querySelector('.tab[data-tab="watchLinks"]')?.classList.contains("active")
   ){
     loadCricketMatches($("watchMatchCategory").value);
   }
-},60000);
+},30000);
+
+/* =========================================================
+   SUGGESTIONS & REQUESTS
+========================================================= */
+
+async function loadSuggestions(){
+  const listEl=$("suggestionsList");
+  if(listEl&&!suggestions.length){
+    listEl.innerHTML='<div class="empty">Loading requests...</div>';
+  }
+
+  const fetched=[];
+  const seenIds=new Set();
+
+  // 1. Fetch from Supabase suggestions table
+  try{
+    const {data,error}=await db
+      .from("suggestions")
+      .select("*")
+      .order("created_at",{ascending:false});
+    if(!error&&Array.isArray(data)){
+      data.forEach(item=>{
+        if(item&&item.id){
+          seenIds.add(String(item.id));
+          fetched.push(item);
+        }
+      });
+    }
+  }catch(e){}
+
+  // 2. Fetch from Backend API (/api/suggestions)
+  try{
+    const res=await fetch(`${CRICKET_API_BASE}/api/suggestions`);
+    if(res.ok){
+      const json=await res.json();
+      const apiItems=json.suggestions||[];
+      apiItems.forEach(item=>{
+        if(item&&item.id&&!seenIds.has(String(item.id))){
+          seenIds.add(String(item.id));
+          fetched.push(item);
+        }
+      });
+    }
+  }catch(e){}
+
+  // Sort newest first
+  fetched.sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0));
+  suggestions=fetched;
+
+  if($("statRequests")){
+    $("statRequests").textContent=suggestions.length;
+  }
+
+  renderSuggestions();
+}
+
+function renderSuggestions(){
+  const container=$("suggestionsList");
+  if(!container)return;
+  container.replaceChildren();
+
+  if(!suggestions.length){
+    const empty=document.createElement("div");
+    empty.className="empty";
+    empty.textContent="No requests or suggestions yet.";
+    container.append(empty);
+    return;
+  }
+
+  suggestions.forEach(item=>{
+    const card=document.createElement("div");
+    card.className="suggestion-item";
+    card.id=`suggestion-${item.id}`;
+
+    const head=document.createElement("div");
+    head.className="suggestion-header";
+
+    const left=document.createElement("div");
+    left.style.display="flex";
+    left.style.alignItems="center";
+    left.style.gap="8px";
+
+    const badge=document.createElement("span");
+    badge.className="suggestion-badge";
+    badge.innerHTML="● REQUEST";
+
+    const words=document.createElement("small");
+    words.className="muted";
+    const wordCount=item.word_count||(item.message||"").trim().split(/\s+/).filter(Boolean).length;
+    words.textContent=`${wordCount} words`;
+
+    left.append(badge,words);
+
+    const time=document.createElement("span");
+    time.className="suggestion-time";
+    try{
+      time.textContent=item.created_at
+        ? new Date(item.created_at).toLocaleString()
+        : "";
+    }catch(e){
+      time.textContent="";
+    }
+
+    head.append(left,time);
+
+    const text=document.createElement("p");
+    text.className="suggestion-text";
+    text.textContent=item.message||"";
+
+    const actions=document.createElement("div");
+    actions.className="suggestion-actions";
+
+    const copyBtn=document.createElement("button");
+    copyBtn.type="button";
+    copyBtn.className="ghost";
+    copyBtn.textContent="Copy Message";
+    copyBtn.onclick=async()=>{
+      try{
+        await navigator.clipboard.writeText(item.message||"");
+        copyBtn.textContent="Copied! ✓";
+        setTimeout(()=>{copyBtn.textContent="Copy Message";},2000);
+      }catch(e){
+        alert("Copied: "+item.message);
+      }
+    };
+
+    const delBtn=document.createElement("button");
+    delBtn.type="button";
+    delBtn.className="danger";
+    delBtn.textContent="Delete";
+    let deleteConfirming=false;
+    delBtn.onclick=async()=>{
+      if(!deleteConfirming){
+        deleteConfirming=true;
+        delBtn.textContent="Confirm Delete?";
+        delBtn.style.background="#e50914";
+        delBtn.style.color="#fff";
+        setTimeout(()=>{
+          if(deleteConfirming){
+            deleteConfirming=false;
+            delBtn.textContent="Delete";
+            delBtn.style.background="";
+            delBtn.style.color="";
+          }
+        },4000);
+        return;
+      }
+      delBtn.disabled=true;
+      delBtn.textContent="Deleting...";
+
+      // Delete from Supabase
+      try{
+        await db.from("suggestions").delete().eq("id",item.id);
+      }catch(e){}
+
+      // Delete from Backend API
+      try{
+        await fetch(`${CRICKET_API_BASE}/api/suggestions/${item.id}`,{
+          method:"DELETE"
+        });
+      }catch(e){}
+
+      suggestions=suggestions.filter(s=>String(s.id)!==String(item.id));
+      if($("statRequests")){
+        $("statRequests").textContent=suggestions.length;
+      }
+      card.remove();
+      if(!suggestions.length){
+        renderSuggestions();
+      }
+    };
+
+    actions.append(copyBtn,delBtn);
+    card.append(head,text,actions);
+    container.append(card);
+  });
+}
+
+if($("refreshSuggestions")){
+  $("refreshSuggestions").onclick=()=>loadSuggestions();
+}
+
+/* =========================================================
+   THEME TOGGLE
+========================================================= */
+
+function setupAdminTheme(){
+  function updateTheme(theme){
+    if(theme==="light"){
+      document.documentElement.setAttribute("data-theme","light");
+      try{localStorage.setItem("cricfreex_theme","light");}catch(e){}
+    }else{
+      document.documentElement.removeAttribute("data-theme");
+      try{localStorage.setItem("cricfreex_theme","dark");}catch(e){}
+    }
+  }
+
+  document.querySelectorAll(".theme-toggle").forEach(btn=>{
+    btn.addEventListener("click",()=>{
+      const current=document.documentElement.getAttribute("data-theme")==="light"?"light":"dark";
+      updateTheme(current==="light"?"dark":"light");
+    });
+  });
+
+  window.addEventListener("storage",event=>{
+    if(event.key==="cricfreex_theme"){
+      updateTheme(event.newValue||"dark");
+    }
+  });
+}
 
 /* =========================================================
    START
 ========================================================= */
 
+setupAdminTheme();
 bootstrap();
