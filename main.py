@@ -5,6 +5,7 @@ import threading
 import uuid
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
+from typing import Optional
 from urllib.parse import urlparse
 
 import requests
@@ -14,6 +15,25 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+
+from scrapers.details import extract_news
+from scrapers.normalized import (
+    extract_scorecard as normalized_scorecard,
+    extract_commentary as normalized_commentary,
+    extract_match_info as normalized_info,
+    extract_news as normalized_news,
+)
+from scrapers.upgrade_v4 import (
+    commentary as v4_commentary,
+    match_news as v4_match_news,
+    match_info as v4_match_info,
+    over_by_over as v4_over_by_over,
+    points_table as v4_points_table,
+    rankings as v4_rankings,
+    records_catalog as v4_records_catalog,
+    stats_records as v4_stats_records,
+    news_article as v4_news,
+)
 
 app = FastAPI(title="CricFreeX Cricket Centre")
 app.add_middleware(
@@ -126,6 +146,17 @@ def format_ist_gmt_datetime(dt_or_ms, is_outside=False):
     if isinstance(dt_or_ms, (int, float)):
         ts = dt_or_ms / 1000.0 if dt_or_ms > 1e11 else dt_or_ms
         dt_utc = datetime.fromtimestamp(ts, tz=timezone.utc)
+    elif isinstance(dt_or_ms, str):
+        cleaned = dt_or_ms.strip()
+        if cleaned.isdigit():
+            val = int(cleaned)
+            ts = val / 1000.0 if val > 1e11 else val
+            dt_utc = datetime.fromtimestamp(ts, tz=timezone.utc)
+        else:
+            try:
+                dt_utc = datetime.fromisoformat(cleaned.replace("Z", "+00:00"))
+            except Exception:
+                return ""
     elif isinstance(dt_or_ms, datetime):
         dt_utc = dt_or_ms if dt_or_ms.tzinfo else dt_or_ms.replace(tzinfo=timezone.utc)
     else:
@@ -805,8 +836,6 @@ def match_tab(match_id: int, tab: str):
 
 # CRICKETZONE_DETAIL_ROUTES
 
-from scrapers.details import extract_news
-
 
 @app.get("/api/v2/match/{match_id}/{tab}")
 def detailed_match(match_id: int, tab: str):
@@ -878,13 +907,6 @@ def detailed_news(path: str):
 
 # CRICKETZONE_NORMALIZED_ROUTES
 
-from scrapers.normalized import (
-    extract_scorecard as normalized_scorecard,
-    extract_commentary as normalized_commentary,
-    extract_match_info as normalized_info,
-    extract_news as normalized_news
-)
-
 
 @app.get("/api/v3/match/{match_id}/{tab}")
 def normalized_match(match_id: int, tab: str):
@@ -944,18 +966,6 @@ def normalized_article(path: str):
 
 
 # CRICKETZONE_V4_ROUTES
-
-from scrapers.upgrade_v4 import (
-    commentary as v4_commentary,
-    match_news as v4_match_news,
-    match_info as v4_match_info,
-    over_by_over as v4_over_by_over,
-    points_table as v4_points_table,
-    rankings as v4_rankings,
-    records_catalog as v4_records_catalog,
-    stats_records as v4_stats_records,
-    news_article as v4_news,
-)
 
 
 def extract_team_players(html):
@@ -1372,9 +1382,14 @@ def save_suggestions(items):
 
 class SuggestionPayload(BaseModel):
     message: str
+    word_count: Optional[int] = None
+
+    class Config:
+        extra = "allow"
 
 
 @app.get("/api/suggestions")
+@app.get("/api/suggestions/")
 def get_suggestions():
     with suggestions_lock:
         items = load_suggestions()
@@ -1389,6 +1404,7 @@ def get_suggestions():
 
 
 @app.post("/api/suggestions")
+@app.post("/api/suggestions/")
 def create_suggestion(payload: SuggestionPayload):
     text = (payload.message or "").strip()
     words = [w for w in text.split() if w]
@@ -1415,6 +1431,7 @@ def create_suggestion(payload: SuggestionPayload):
 
 
 @app.delete("/api/suggestions/{item_id}")
+@app.delete("/api/suggestions/{item_id}/")
 def delete_suggestion(item_id: str):
     with suggestions_lock:
         items = load_suggestions()

@@ -1882,16 +1882,23 @@ async function loadSuggestions(){
 
   // 2. Fetch from Backend API (/api/suggestions)
   try{
-    const res=await fetch(`${CRICKET_API_BASE}/api/suggestions`);
-    if(res.ok){
-      const json=await res.json();
-      const apiItems=json.suggestions||[];
-      apiItems.forEach(item=>{
-        if(item&&item.id&&!seenIds.has(String(item.id))){
-          seenIds.add(String(item.id));
-          fetched.push(item);
+    const urls=[`${CRICKET_API_BASE}/api/suggestions`];
+    if(CRICKET_API_BASE && !urls.includes("/api/suggestions")) urls.push("/api/suggestions");
+    for(const u of urls){
+      try{
+        const res=await fetch(u);
+        if(res.ok){
+          const json=await res.json();
+          const apiItems=json.suggestions||[];
+          apiItems.forEach(item=>{
+            if(item&&item.id&&!seenIds.has(String(item.id))){
+              seenIds.add(String(item.id));
+              fetched.push(item);
+            }
+          });
+          break;
         }
-      });
+      }catch(err){}
     }
   }catch(e){}
 
@@ -2007,9 +2014,14 @@ function renderSuggestions(){
 
       // Delete from Backend API
       try{
-        await fetch(`${CRICKET_API_BASE}/api/suggestions/${item.id}`,{
+        let delRes=await fetch(`${CRICKET_API_BASE}/api/suggestions/${item.id}`,{
           method:"DELETE"
         });
+        if(!delRes.ok && CRICKET_API_BASE){
+          await fetch(`/api/suggestions/${item.id}`,{
+            method:"DELETE"
+          });
+        }
       }catch(e){}
 
       suggestions=suggestions.filter(s=>String(s.id)!==String(item.id));

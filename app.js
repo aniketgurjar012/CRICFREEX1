@@ -1,117 +1,117 @@
 "use strict";
 
-const C=window.CRICFREEX_CONFIG;
+const C = window.CRICFREEX_CONFIG;
 
-const db=window.supabase.createClient(
+const db = window.supabase.createClient(
   C.SUPABASE_URL,
   C.SUPABASE_ANON_KEY
 );
-window.cricfreexDb=db;
+window.cricfreexDb = db;
 
-const $=id=>document.getElementById(id);
+const $ = id => document.getElementById(id);
 
-let settings=null;
-let sections=[];
-let content=[];
+let settings = null;
+let sections = [];
+let content = [];
 
-const CRICKET_WATCH_LINK_PREFIX="__cricket_watch__:";
+const CRICKET_WATCH_LINK_PREFIX = "__cricket_watch__:";
 
-let section="sports";
-let filter="all";
-let activeSeries=null;
-let selected="";
-let restored=false;
+let section = "sports";
+let filter = "all";
+let activeSeries = null;
+let selected = "";
+let restored = false;
 
-const esc=v=>
-  String(v??"").replace(
+const esc = v =>
+  String(v ?? "").replace(
     /[&<>"']/g,
-    c=>({
-      "&":"&amp;",
-      "<":"&lt;",
-      ">":"&gt;",
-      '"':"&quot;",
-      "'":"&#039;"
+    c => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#039;"
     }[c])
   );
 
-function isCricketWatchLink(item){
-  return String(item?.category||"")
+function isCricketWatchLink(item) {
+  return String(item?.category || "")
     .startsWith(CRICKET_WATCH_LINK_PREFIX);
 }
 
-function cricketWatchMatchId(item){
-  return String(item?.category||"")
+function cricketWatchMatchId(item) {
+  return String(item?.category || "")
     .slice(CRICKET_WATCH_LINK_PREFIX.length);
 }
 
-async function cleanupFinishedWatchLinks(){
-  const watchItems=content.filter(isCricketWatchLink);
-  if(!watchItems.length)return;
+async function cleanupFinishedWatchLinks() {
+  const watchItems = content.filter(isCricketWatchLink);
+  if (!watchItems.length) return;
 
-  try{
-    const response=await fetch(`${C.CRICKET_API_URL}/api/matches/recent`,{
-      headers:{Accept:"application/json"}
+  try {
+    const response = await fetch(`${C.CRICKET_API_URL}/api/matches/recent`, {
+      headers: { Accept: "application/json" }
     });
-    if(!response.ok)return;
-    const result=await response.json();
-    const recentMatches=Array.isArray(result.matches)?result.matches:[];
-    const finishedMatchIds=new Set(recentMatches.map(m=>String(m.id)));
+    if (!response.ok) return;
+    const result = await response.json();
+    const recentMatches = Array.isArray(result.matches) ? result.matches : [];
+    const finishedMatchIds = new Set(recentMatches.map(m => String(m.id)));
 
-    const itemsToDelete=watchItems.filter(item=>
+    const itemsToDelete = watchItems.filter(item =>
       finishedMatchIds.has(cricketWatchMatchId(item))
     );
 
-    if(!itemsToDelete.length)return;
+    if (!itemsToDelete.length) return;
 
-    const idsToDelete=itemsToDelete.map(item=>item.id);
+    const idsToDelete = itemsToDelete.map(item => item.id);
 
-    content=content.filter(item=>!idsToDelete.includes(item.id));
-    window.CRICFREEX_CONTENT=content;
+    content = content.filter(item => !idsToDelete.includes(item.id));
+    window.CRICFREEX_CONTENT = content;
     window.dispatchEvent(
       new CustomEvent(
         "cricfreex:content-updated",
-        {detail:content}
+        { detail: content }
       )
     );
 
-    const {error}=await db.from("content")
+    const { error } = await db.from("content")
       .delete()
-      .in("id",idsToDelete);
+      .in("id", idsToDelete);
 
-    if(error){
+    if (error) {
       console.warn("Could not delete completed watch links:", error.message);
     }
-  }catch(err){
+  } catch (err) {
     console.warn("cleanupFinishedWatchLinks error:", err);
   }
 }
 
-function brand(name){
-  if(/^cricfreex$/i.test(name||"")){
+function brand(name) {
+  if (/^cricfreex$/i.test(name || "")) {
     return `CRIC<span class="brand-red">FREEX</span>`;
   }
 
-  return esc(name||"CricFreeX");
+  return esc(name || "CricFreeX");
 }
 
-function liveChannelSections(){
-  return sections.filter(s=>
-    s.slug==="sports" ||
-    /^live channels?$/i.test(s.name||"")
+function liveChannelSections() {
+  return sections.filter(s =>
+    s.slug === "sports" ||
+    /^live channels?$/i.test(s.name || "")
   );
 }
 
-function sectionName(item){
-  return item?.slug==="sports"
-    ?"Live Channels"
-    :item?.name||"Live Channels";
+function sectionName(item) {
+  return item?.slug === "sports"
+    ? "Live Channels"
+    : item?.name || "Live Channels";
 }
 
-function safeURL(value){
-  if(!value)return null;
+function safeURL(value) {
+  if (!value) return null;
 
-  try{
-    const u=new URL(
+  try {
+    const u = new URL(
       value,
       location.href
     );
@@ -120,54 +120,54 @@ function safeURL(value){
       "https:",
       "http:"
     ].includes(u.protocol)
-      ?u.href
-      :null;
+      ? u.href
+      : null;
 
-  }catch{
+  } catch {
     return null;
   }
 }
 
-function embedURL(value){
-  const safe=safeURL(value);
-  if(!safe)return null;
+function embedURL(value) {
+  const safe = safeURL(value);
+  if (!safe) return null;
 
-  const url=new URL(safe);
-  const host=url.hostname.toLowerCase().replace(/^www\./,"");
-  let videoId="";
+  const url = new URL(safe);
+  const host = url.hostname.toLowerCase().replace(/^www\./, "");
+  let videoId = "";
 
-  if(host==="youtu.be"){
-    videoId=url.pathname.split("/").filter(Boolean)[0]||"";
-  }else if(
-    host==="youtube.com"||
-    host==="m.youtube.com"||
-    host==="youtube-nocookie.com"
-  ){
-    videoId=url.searchParams.get("v")||"";
-    if(!videoId){
-      const parts=url.pathname.split("/").filter(Boolean);
-      if(["embed","live","shorts"].includes(parts[0])){
-        videoId=parts[1]||"";
+  if (host === "youtu.be") {
+    videoId = url.pathname.split("/").filter(Boolean)[0] || "";
+  } else if (
+    host === "youtube.com" ||
+    host === "m.youtube.com" ||
+    host === "youtube-nocookie.com"
+  ) {
+    videoId = url.searchParams.get("v") || "";
+    if (!videoId) {
+      const parts = url.pathname.split("/").filter(Boolean);
+      if (["embed", "live", "shorts"].includes(parts[0])) {
+        videoId = parts[1] || "";
       }
     }
   }
 
-  if(videoId&&/^[\w-]{6,}$/.test(videoId)){
-    const embed=new URL(
+  if (videoId && /^[\w-]{6,}$/.test(videoId)) {
+    const embed = new URL(
       `https://www.youtube-nocookie.com/embed/${videoId}`
     );
-    const start=url.searchParams.get("start")||
+    const start = url.searchParams.get("start") ||
       url.searchParams.get("t");
-    if(start){
-      const seconds=String(start).match(/^\d+/)?.[0];
-      if(seconds)embed.searchParams.set("start",seconds);
+    if (start) {
+      const seconds = String(start).match(/^\d+/)?.[0];
+      if (seconds) embed.searchParams.set("start", seconds);
     }
     return embed.href;
   }
 
-  if(host==="vimeo.com"||host==="player.vimeo.com"){
-    const videoId=url.pathname.split("/").filter(Boolean).pop()||"";
-    if(/^\d+$/.test(videoId)){
+  if (host === "vimeo.com" || host === "player.vimeo.com") {
+    const videoId = url.pathname.split("/").filter(Boolean).pop() || "";
+    if (/^\d+$/.test(videoId)) {
       return `https://player.vimeo.com/video/${videoId}`;
     }
   }
@@ -175,85 +175,84 @@ function embedURL(value){
   return url.href;
 }
 
-async function load(){
-  try{
-    const [a,b,c]=await Promise.all([
+async function load() {
+  try {
+    const [a, b, c] = await Promise.all([
       db.from("site_settings")
         .select("*")
-        .eq("id",1)
+        .eq("id", 1)
         .maybeSingle(),
 
       db.from("sections")
         .select("*")
-        .eq("published",true)
+        .eq("published", true)
         .order("sort_order"),
 
       db.from("content")
         .select("*")
-        .eq("published",true)
+        .eq("published", true)
         .order("sort_order")
     ]);
 
-    if(a.error)throw a.error;
-    if(b.error)throw b.error;
-    if(c.error)throw c.error;
+    if (a.error) throw a.error;
+    if (b.error) throw b.error;
+    if (c.error) throw c.error;
 
-    settings=a.data||null;
-    sections=b.data||[];
-    content=c.data||[];
-    window.CRICFREEX_CONTENT=content;
+    settings = a.data || null;
+    sections = b.data || [];
+    content = c.data || [];
+    window.CRICFREEX_CONTENT = content;
     window.dispatchEvent(
       new CustomEvent(
         "cricfreex:content-updated",
-        {detail:content}
+        { detail: content }
       )
     );
 
-    if(
+    if (
       !sections.some(
-        x=>x.slug===section
+        x => x.slug === section
       ) &&
       sections.length
-    ){
-      section=sections[0].slug;
+    ) {
+      section = sections[0].slug;
     }
 
     renderAll();
     cleanupFinishedWatchLinks();
 
-  }catch(error){
+  } catch (error) {
     console.error(error);
   }
 }
 
-function renderAll(){
-  const name=
-    settings?.site_name||
+function renderAll() {
+  const name =
+    settings?.site_name ||
     "CricFreeX";
 
-  $("brandWord").innerHTML=
+  $("brandWord").innerHTML =
     brand(name);
 
-  $("footerLogo").innerHTML=
+  $("footerLogo").innerHTML =
     brand(name);
 
-  const parts=(
-    settings?.hero_title||
+  const parts = (
+    settings?.hero_title ||
     "YOUR GAME.|YOUR SCREEN."
   ).split("|");
 
-  $("heroKicker").textContent=
-    settings?.hero_kicker||
+  $("heroKicker").textContent =
+    settings?.hero_kicker ||
     "CRICFREEX LIVE";
 
-  $("heroTitle").innerHTML=
-    `${esc(parts[0])}${
-      parts[1]
-        ?`<span>${esc(parts[1])}</span>`
-        :""
+  $("heroTitle").innerHTML =
+    `${esc(parts[0])}${parts[1]
+      ? `<span>${esc(parts[1])}</span>`
+      : ""
     }`;
 
-  $("heroText").textContent=
+  $("heroText").textContent =
     "Live scores, match details, series, rankings and cricket coverage—together in one place.";
 
   renderTabs();
@@ -261,72 +260,72 @@ function renderAll(){
   render();
 }
 
-function renderTabs(){
+function renderTabs() {
   $("mainTabs").replaceChildren();
 
-  const cricket=document.createElement("button");
-  cricket.type="button";
-  const cricketActive=
+  const cricket = document.createElement("button");
+  cricket.type = "button";
+  const cricketActive =
     $("cricketCenter") &&
     !$("cricketCenter").hidden;
-  cricket.className=
-    "main-tab cricket-main-tab"+
-    (cricketActive?" active":"");
-  cricket.textContent="🏏 Cricket Centre";
-  cricket.setAttribute("aria-label","Open Cricket Centre");
+  cricket.className =
+    "main-tab cricket-main-tab" +
+    (cricketActive ? " active" : "");
+  cricket.textContent = "🏏 Cricket Centre";
+  cricket.setAttribute("aria-label", "Open Cricket Centre");
   cricket.setAttribute(
     "aria-pressed",
     String(Boolean(cricketActive))
   );
-  cricket.onclick=()=>{
+  cricket.onclick = () => {
     window.CricfreexCricket?.open();
   };
   $("mainTabs").append(cricket);
 }
 
-function renderFilters(){
+function renderFilters() {
   $("filters").replaceChildren();
 
-  if(activeSeries){
-    $("filters").style.display="none";
+  if (activeSeries) {
+    $("filters").style.display = "none";
     return;
   }
 
-  $("filters").style.display="flex";
+  $("filters").style.display = "flex";
 
-  const categories=[
+  const categories = [
     "all",
     ...new Set(
       content
         .filter(
-          x=>
+          x =>
             !isCricketWatchLink(x) &&
-            x.section_slug===section &&
+            x.section_slug === section &&
             !x.parent_id
         )
-        .map(x=>x.category)
+        .map(x => x.category)
         .filter(Boolean)
     )
   ];
 
-  categories.forEach(cat=>{
-    const b=document.createElement("button");
+  categories.forEach(cat => {
+    const b = document.createElement("button");
 
-    b.className=
-      "filter"+
+    b.className =
+      "filter" +
       (
-        filter===cat
-          ?" active"
-          :""
+        filter === cat
+          ? " active"
+          : ""
       );
 
-    b.textContent=
-      cat==="all"
-        ?"All"
-        :cat;
+    b.textContent =
+      cat === "all"
+        ? "All"
+        : cat;
 
-    b.onclick=()=>{
-      filter=cat;
+    b.onclick = () => {
+      filter = cat;
       renderFilters();
       render();
     };
@@ -335,89 +334,89 @@ function renderFilters(){
   });
 }
 
-function makeCard(item,label,meta){
-  const b=document.createElement("button");
+function makeCard(item, label, meta) {
+  const b = document.createElement("button");
 
-  b.className=
-    "channel-card"+
+  b.className =
+    "channel-card" +
     (
-      selected===item.id
-        ?" selected"
-        :""
+      selected === item.id
+        ? " selected"
+        : ""
     );
 
-  if(item.image_url){
-    const img=document.createElement("img");
-    img.className="channel-thumb";
-    img.src=item.image_url;
-    img.alt="";
-    img.loading="lazy";
+  if (item.image_url) {
+    const img = document.createElement("img");
+    img.className = "channel-thumb";
+    img.src = item.image_url;
+    img.alt = "";
+    img.loading = "lazy";
     b.append(img);
   }
 
-  const top=document.createElement("div");
-  top.className="channel-top";
+  const top = document.createElement("div");
+  top.className = "channel-top";
 
-  const live=document.createElement("div");
-  live.className="channel-live";
+  const live = document.createElement("div");
+  live.className = "channel-live";
 
-  const dot=document.createElement("i");
+  const dot = document.createElement("i");
 
   live.append(
     dot,
     document.createTextNode(label)
   );
 
-  const category=document.createElement("div");
-  category.className="channel-category";
-  category.textContent=
-    item.category||
-    item.kind||
+  const category = document.createElement("div");
+  category.className = "channel-category";
+  category.textContent =
+    item.category ||
+    item.kind ||
     "";
 
-  top.append(live,category);
+  top.append(live, category);
 
-  const name=document.createElement("div");
-  name.className="channel-name";
-  name.textContent=item.title;
+  const name = document.createElement("div");
+  name.className = "channel-name";
+  name.textContent = item.title;
 
-  const id=document.createElement("div");
-  id.className="channel-id";
-  id.textContent=
-    meta||
-    item.public_id||
+  const id = document.createElement("div");
+  id.className = "channel-id";
+  id.textContent =
+    meta ||
+    item.public_id ||
     "";
 
-  b.append(top,name,id);
+  b.append(top, name, id);
 
   return b;
 }
 
-function empty(text){
-  const e=document.createElement("div");
-  e.className="empty";
-  e.textContent=text;
+function empty(text) {
+  const e = document.createElement("div");
+  e.className = "empty";
+  e.textContent = text;
   $("channelGrid").append(e);
 }
 
-function render(){
-  const q=
+function render() {
+  const q =
     $("search").value
       .trim()
       .toLowerCase();
 
   $("channelGrid").replaceChildren();
 
-  if(activeSeries){
+  if (activeSeries) {
     $("seriesBack").classList.add("show");
 
-    $("kicker").textContent="EPISODES";
-    $("sectionTitle").textContent=
+    $("kicker").textContent = "EPISODES";
+    $("sectionTitle").textContent =
       activeSeries.title;
 
-    const episodes=content.filter(x=>
-      x.kind==="episode" &&
-      x.parent_id===activeSeries.id &&
+    const episodes = content.filter(x =>
+      x.kind === "episode" &&
+      x.parent_id === activeSeries.id &&
       (
         !q ||
         x.title
@@ -430,28 +429,26 @@ function render(){
       )
     );
 
-    $("channelCount").textContent=
-      `${episodes.length} episode${
-        episodes.length===1
-          ?""
-          :"s"
+    $("channelCount").textContent =
+      `${episodes.length} episode${episodes.length === 1
+        ? ""
+        : "s"
       }`;
 
-    if(!episodes.length){
+    if (!episodes.length) {
       empty("No episodes found.");
       return;
     }
 
-    episodes.forEach(ep=>{
-      const b=makeCard(
+    episodes.forEach(ep => {
+      const b = makeCard(
         ep,
         "WATCH",
-        `EPISODE ${
-          ep.episode_number||""
+        `EPISODE ${ep.episode_number || ""
         }`
       );
 
-      b.onclick=()=>play(ep);
+      b.onclick = () => play(ep);
 
       $("channelGrid").append(b);
     });
@@ -461,24 +458,24 @@ function render(){
 
   $("seriesBack").classList.remove("show");
 
-  const s=sections.find(
-    x=>x.slug===section
+  const s = sections.find(
+    x => x.slug === section
   );
 
-  $("kicker").textContent=
+  $("kicker").textContent =
     sectionName(s).toUpperCase();
 
-  $("sectionTitle").textContent=
+  $("sectionTitle").textContent =
     sectionName(s);
 
-  const list=content.filter(x=>
+  const list = content.filter(x =>
     !isCricketWatchLink(x) &&
-    x.section_slug===section &&
+    x.section_slug === section &&
     !x.parent_id &&
-    x.kind!=="episode" &&
+    x.kind !== "episode" &&
     (
-      filter==="all" ||
-      x.category===filter
+      filter === "all" ||
+      x.category === filter
     ) &&
     (
       !q ||
@@ -492,55 +489,54 @@ function render(){
     )
   );
 
-  $("channelCount").textContent=
-    `${list.length} item${
-      list.length===1?"":"s"
+  $("channelCount").textContent =
+    `${list.length} item${list.length === 1 ? "" : "s"
     }`;
 
-  if(!list.length){
+  if (!list.length) {
     empty("No content found.");
     return;
   }
 
-  list.forEach(item=>{
-    const series=
-      item.kind==="series";
+  list.forEach(item => {
+    const series =
+      item.kind === "series";
 
-    const count=series
-      ?content.filter(
-          x=>
-            x.kind==="episode" &&
-            x.parent_id===item.id
-        ).length
-      :0;
+    const count = series
+      ? content.filter(
+        x =>
+          x.kind === "episode" &&
+          x.parent_id === item.id
+      ).length
+      : 0;
 
-    const b=makeCard(
+    const b = makeCard(
       item,
-      series?"SERIES":"LIVE",
+      series ? "SERIES" : "LIVE",
       series
-        ?`${count} EPISODES`
-        :item.public_id
+        ? `${count} EPISODES`
+        : item.public_id
     );
 
-    b.onclick=()=>
+    b.onclick = () =>
       series
-        ?openSeries(item)
-        :play(item);
+        ? openSeries(item)
+        : play(item);
 
     $("channelGrid").append(b);
   });
 }
 
-function clearURL(){
-  const u=new URL(location.href);
-  if(u.hash==="#cricketCenter")u.hash="";
+function clearURL() {
+  const u = new URL(location.href);
+  if (u.hash === "#cricketCenter") u.hash = "";
 
   [
     "channel",
     "show",
     "episode"
   ].forEach(
-    key=>u.searchParams.delete(key)
+    key => u.searchParams.delete(key)
   );
 
   history.replaceState(
@@ -550,46 +546,46 @@ function clearURL(){
   );
 }
 
-function updateURL(item){
-  const u=new URL(location.href);
-  u.hash="";
+function updateURL(item) {
+  const u = new URL(location.href);
+  u.hash = "";
 
   [
     "channel",
     "show",
     "episode"
   ].forEach(
-    key=>u.searchParams.delete(key)
+    key => u.searchParams.delete(key)
   );
 
-  if(item.kind==="episode"){
-    const parent=content.find(
-      x=>x.id===item.parent_id
+  if (item.kind === "episode") {
+    const parent = content.find(
+      x => x.id === item.parent_id
     );
 
-    if(parent?.public_id){
+    if (parent?.public_id) {
       u.searchParams.set(
         "show",
         parent.public_id
       );
     }
 
-    if(item.public_id){
+    if (item.public_id) {
       u.searchParams.set(
         "episode",
         item.public_id
       );
     }
 
-  }else if(item.kind==="series"){
-    if(item.public_id){
+  } else if (item.kind === "series") {
+    if (item.public_id) {
       u.searchParams.set(
         "show",
         item.public_id
       );
     }
 
-  }else if(item.public_id){
+  } else if (item.public_id) {
     u.searchParams.set(
       "channel",
       item.public_id
@@ -603,14 +599,14 @@ function updateURL(item){
   );
 }
 
-function openSeries(item,update=true){
-  activeSeries=item;
-  section=item.section_slug;
-  filter="all";
-  selected="";
-  $("search").value="";
+function openSeries(item, update = true) {
+  activeSeries = item;
+  section = item.section_slug;
+  filter = "all";
+  selected = "";
+  $("search").value = "";
 
-  if(update){
+  if (update) {
     updateURL(item);
   }
 
@@ -619,71 +615,71 @@ function openSeries(item,update=true){
   render();
 
   $("channels").scrollIntoView({
-    behavior:"smooth"
+    behavior: "smooth"
   });
 }
 
-function play(item,update=true){
+function play(item, update = true) {
 
   /* =========================================================
      BASIC PLAYER STATE
   ========================================================= */
 
-  selected=item.id;
+  selected = item.id;
 
   /*
     Episode hai to uska parent show restore karo.
   */
 
-  if(item.kind==="episode"){
+  if (item.kind === "episode") {
 
-    const parent=content.find(
-      x=>
-        x.id===item.parent_id &&
-        x.kind==="series"
+    const parent = content.find(
+      x =>
+        x.id === item.parent_id &&
+        x.kind === "series"
     );
 
-    if(parent){
+    if (parent) {
 
-      activeSeries=parent;
+      activeSeries = parent;
 
-      section=
-        parent.section_slug||
-        item.section_slug||
+      section =
+        parent.section_slug ||
+        item.section_slug ||
         section;
 
-    }else{
+    } else {
 
-      section=
-        item.section_slug||
+      section =
+        item.section_slug ||
         section;
 
     }
 
-  }else{
+  } else {
 
-    section=
-      item.section_slug||
+    section =
+      item.section_slug ||
       section;
 
-    activeSeries=null;
+    activeSeries = null;
   }
 
   /*
     Shareable URL update.
   */
 
-  if(update){
+  if (update) {
     updateURL(item);
   }
 
-  $("cricketCenter").hidden=true;
-  $("channels").hidden=false;
-  $("mainTabs").hidden=false;
+  $("cricketCenter").hidden = true;
+  $("channels").hidden = false;
+  $("mainTabs").hidden = false;
   document.body.classList.remove("cricket-active");
-  if(location.hash==="#cricketCenter"){
-    const url=new URL(location.href);
-    url.hash="";
+  if (location.hash === "#cricketCenter") {
+    const url = new URL(location.href);
+    url.hash = "";
     history.replaceState({}, "", url);
   }
 
@@ -691,17 +687,17 @@ function play(item,update=true){
     Player information.
   */
 
-  $("playingTitle").textContent=
+  $("playingTitle").textContent =
     item.title;
 
-  $("playingCategory").textContent=
+  $("playingCategory").textContent =
     (
-      item.category||
-      item.kind||
+      item.category ||
+      item.kind ||
       "CRICFREEX"
     ).toUpperCase();
 
-  $("playingStatus").textContent=
+  $("playingStatus").textContent =
     "LOADING";
 
   /*
@@ -716,7 +712,7 @@ function play(item,update=true){
     Validate media URL.
   */
 
-  const url=
+  const url =
     safeURL(
       item.media_url
     );
@@ -727,14 +723,14 @@ function play(item,update=true){
 
   $("playerWrap")
     .replaceChildren();
-  $("watch").hidden=false;
+  $("watch").hidden = false;
 
-  if(!url){
+  if (!url) {
 
-    $("playingStatus").textContent=
+    $("playingStatus").textContent =
       "UNAVAILABLE";
 
-    $("playerWrap").innerHTML=
+    $("playerWrap").innerHTML =
       `
       <div class="player-empty">
         <div>
@@ -747,8 +743,8 @@ function play(item,update=true){
       `;
 
     $("watch").scrollIntoView({
-      behavior:"smooth",
-      block:"start"
+      behavior: "smooth",
+      block: "start"
     });
 
     return;
@@ -758,80 +754,80 @@ function play(item,update=true){
      EXTERNAL STREAM / DOWNLOAD LINK
   ========================================================= */
 
-  if(item.media_type==="link"){
+  if (item.media_type === "link") {
 
-    $("playingStatus").textContent=
+    $("playingStatus").textContent =
       "LINK READY";
 
-    const wrapper=
+    const wrapper =
       document.createElement(
         "div"
       );
 
-    wrapper.className=
+    wrapper.className =
       "link-player";
 
-    const inner=
+    const inner =
       document.createElement(
         "div"
       );
 
-    inner.className=
+    inner.className =
       "link-player-inner";
 
-    const icon=
+    const icon =
       document.createElement(
         "div"
       );
 
-    icon.className=
+    icon.className =
       "link-player-icon";
 
-    icon.textContent="↗";
+    icon.textContent = "↗";
 
-    const heading=
+    const heading =
       document.createElement(
         "h2"
       );
 
-    heading.textContent=
+    heading.textContent =
       "Stream / Download Available";
 
-    const message=
+    const message =
       document.createElement(
         "p"
       );
 
-    message.textContent=
+    message.textContent =
       "This content is available through an external link. Continue using the button below.";
 
-    const openButton=
+    const openButton =
       document.createElement(
         "a"
       );
 
-    openButton.className=
+    openButton.className =
       "link-open-button";
 
-    openButton.href=url;
+    openButton.href = url;
 
-    openButton.target=
+    openButton.target =
       "_blank";
 
-    openButton.rel=
+    openButton.rel =
       "noopener noreferrer";
 
-   openButton.textContent=url;
+    openButton.textContent = url;
 
-    const note=
+    const note =
       document.createElement(
         "small"
       );
 
-    note.className=
+    note.className =
       "link-note";
 
-    note.textContent=
+    note.textContent =
       "The link will open in a new tab.";
 
     inner.append(
@@ -851,8 +847,8 @@ function play(item,update=true){
     );
 
     $("watch").scrollIntoView({
-      behavior:"smooth",
-      block:"start"
+      behavior: "smooth",
+      block: "start"
     });
 
     return;
@@ -862,26 +858,26 @@ function play(item,update=true){
      HLS / M3U8
   ========================================================= */
 
-  if(
-    item.media_type==="hls" ||
+  if (
+    item.media_type === "hls" ||
     /\.m3u8($|\?)/i.test(url)
-  ){
+  ) {
 
-    const video=
+    const video =
       document.createElement(
         "video"
       );
 
-    video.className=
+    video.className =
       "stream-video";
 
-    video.controls=true;
+    video.controls = true;
 
-    video.playsInline=true;
+    video.playsInline = true;
 
-    video.autoplay=true;
+    video.autoplay = true;
 
-    video.preload="metadata";
+    video.preload = "metadata";
 
     video.setAttribute(
       "controlsList",
@@ -901,31 +897,31 @@ function play(item,update=true){
       have native HLS playback.
     */
 
-    if(
+    if (
       video.canPlayType(
         "application/vnd.apple.mpegurl"
       )
-    ){
+    ) {
 
-      video.src=url;
+      video.src = url;
 
       video.addEventListener(
         "loadedmetadata",
-        ()=>{
+        () => {
 
-          $("playingStatus").textContent=
+          $("playingStatus").textContent =
             "NOW PLAYING";
 
           video.play()
-            .catch(()=>{});
+            .catch(() => { });
         }
       );
 
       video.addEventListener(
         "error",
-        ()=>{
+        () => {
 
-          $("playingStatus").textContent=
+          $("playingStatus").textContent =
             "ERROR";
         }
       );
@@ -936,19 +932,19 @@ function play(item,update=true){
       Chrome / Edge / Android etc.
     */
 
-    else if(
+    else if (
       window.Hls &&
       Hls.isSupported()
-    ){
+    ) {
 
-      const hls=
+      const hls =
         new Hls({
 
-          enableWorker:true,
+          enableWorker: true,
 
-          lowLatencyMode:false,
+          lowLatencyMode: false,
 
-          backBufferLength:30
+          backBufferLength: 30
 
         });
 
@@ -956,7 +952,7 @@ function play(item,update=true){
         Keep reference on video.
       */
 
-      video._hls=
+      video._hls =
         hls;
 
       hls.loadSource(
@@ -969,13 +965,13 @@ function play(item,update=true){
 
       hls.on(
         Hls.Events.MANIFEST_PARSED,
-        ()=>{
+        () => {
 
-          $("playingStatus").textContent=
+          $("playingStatus").textContent =
             "NOW PLAYING";
 
           video.play()
-            .catch(()=>{});
+            .catch(() => { });
         }
       );
 
@@ -984,7 +980,7 @@ function play(item,update=true){
         (
           event,
           data
-        )=>{
+        ) => {
 
           console.error(
             "HLS playback error:",
@@ -995,7 +991,7 @@ function play(item,update=true){
             Ignore recoverable errors.
           */
 
-          if(!data.fatal){
+          if (!data.fatal) {
             return;
           }
 
@@ -1004,12 +1000,12 @@ function play(item,update=true){
             attempt reconnect.
           */
 
-          if(
-            data.type===
+          if (
+            data.type ===
             Hls.ErrorTypes.NETWORK_ERROR
-          ){
+          ) {
 
-            $("playingStatus").textContent=
+            $("playingStatus").textContent =
               "RECONNECTING";
 
             hls.startLoad();
@@ -1022,12 +1018,12 @@ function play(item,update=true){
             attempt recovery.
           */
 
-          if(
-            data.type===
+          if (
+            data.type ===
             Hls.ErrorTypes.MEDIA_ERROR
-          ){
+          ) {
 
-            $("playingStatus").textContent=
+            $("playingStatus").textContent =
               "RECOVERING";
 
             hls.recoverMediaError();
@@ -1039,19 +1035,19 @@ function play(item,update=true){
             Non-recoverable.
           */
 
-          $("playingStatus").textContent=
+          $("playingStatus").textContent =
             "ERROR";
 
           hls.destroy();
         }
       );
 
-    }else{
+    } else {
 
-      $("playingStatus").textContent=
+      $("playingStatus").textContent =
         "UNSUPPORTED";
 
-      $("playerWrap").innerHTML=
+      $("playerWrap").innerHTML =
         `
         <div class="player-empty">
           <div>
@@ -1066,8 +1062,8 @@ function play(item,update=true){
     }
 
     $("watch").scrollIntoView({
-      behavior:"smooth",
-      block:"start"
+      behavior: "smooth",
+      block: "start"
     });
 
     return;
@@ -1077,23 +1073,23 @@ function play(item,update=true){
      DIRECT MP4 / WEBM VIDEO
   ========================================================= */
 
-  if(item.media_type==="video"){
+  if (item.media_type === "video") {
 
-    const video=
+    const video =
       document.createElement(
         "video"
       );
 
-    video.className=
+    video.className =
       "stream-video";
 
-    video.controls=true;
+    video.controls = true;
 
-    video.playsInline=true;
+    video.playsInline = true;
 
-    video.autoplay=true;
+    video.autoplay = true;
 
-    video.preload="metadata";
+    video.preload = "metadata";
 
     video.setAttribute(
       "controlsList",
@@ -1102,41 +1098,41 @@ function play(item,update=true){
 
     video.addEventListener(
       "loadeddata",
-      ()=>{
+      () => {
 
-        $("playingStatus").textContent=
+        $("playingStatus").textContent =
           "NOW PLAYING";
       }
     );
 
     video.addEventListener(
       "playing",
-      ()=>{
+      () => {
 
-        $("playingStatus").textContent=
+        $("playingStatus").textContent =
           "NOW PLAYING";
       }
     );
 
     video.addEventListener(
       "waiting",
-      ()=>{
+      () => {
 
-        $("playingStatus").textContent=
+        $("playingStatus").textContent =
           "BUFFERING";
       }
     );
 
     video.addEventListener(
       "error",
-      ()=>{
+      () => {
 
-        $("playingStatus").textContent=
+        $("playingStatus").textContent =
           "ERROR";
       }
     );
 
-    video.src=url;
+    video.src = url;
 
     $("playerWrap").append(
       video
@@ -1148,11 +1144,11 @@ function play(item,update=true){
     */
 
     video.play()
-      .catch(()=>{});
+      .catch(() => { });
 
     $("watch").scrollIntoView({
-      behavior:"smooth",
-      block:"start"
+      behavior: "smooth",
+      block: "start"
     });
 
     return;
@@ -1162,162 +1158,162 @@ function play(item,update=true){
      IFRAME / EMBED
   ========================================================= */
 
-  const iframe=
+  const iframe =
     document.createElement(
       "iframe"
     );
 
-  iframe.className=
+  iframe.className =
     "stream-frame";
 
-  iframe.title=
-    item.title||
+  iframe.title =
+    item.title ||
     "CricFreeX Player";
 
-  iframe.allow=
+  iframe.allow =
     "autoplay; encrypted-media; fullscreen; picture-in-picture";
 
-  iframe.referrerPolicy=
+  iframe.referrerPolicy =
     "strict-origin-when-cross-origin";
 
-  $("playingStatus").textContent="EMBED PLAYER";
+  $("playingStatus").textContent = "EMBED PLAYER";
 
   iframe.addEventListener(
     "error",
-    ()=>{
+    () => {
 
-      $("playingStatus").textContent=
+      $("playingStatus").textContent =
         "ERROR";
     }
   );
 
-  iframe.src=embedURL(url)||url;
+  iframe.src = embedURL(url) || url;
 
   $("playerWrap").append(iframe);
 
-  const embedNote=document.createElement("p");
-  embedNote.className="link-note";
-  const sourceURL=new URL(url);
-  const localSource=[
+  const embedNote = document.createElement("p");
+  embedNote.className = "link-note";
+  const sourceURL = new URL(url);
+  const localSource = [
     "localhost",
     "127.0.0.1",
     "::1"
   ].includes(sourceURL.hostname);
-  embedNote.textContent=localSource
-    ?`This link points to ${sourceURL.host}. It only works when that service is running on the viewer's device. Use a reachable stream URL for other viewers.`
-    :"The source may block playback when embedded.";
-  if(localSource){
-    $("playingStatus").textContent="LOCAL SOURCE";
+  embedNote.textContent = localSource
+    ? `This link points to ${sourceURL.host}. It only works when that service is running on the viewer's device. Use a reachable stream URL for other viewers.`
+    : "The source may block playback when embedded.";
+  if (localSource) {
+    $("playingStatus").textContent = "LOCAL SOURCE";
   }
   $("playerWrap").append(embedNote);
 
   $("watch").scrollIntoView({
-    behavior:"smooth",
-    block:"start"
+    behavior: "smooth",
+    block: "start"
   });
 }
 
 
 
 
-function restoreURL(){
-  const p=
+function restoreURL() {
+  const p =
     new URLSearchParams(
       location.search
     );
 
-  const episodeId=p.get("episode");
-  const channelId=p.get("channel");
-  const showId=p.get("show");
+  const episodeId = p.get("episode");
+  const channelId = p.get("channel");
+  const showId = p.get("show");
 
-  if(episodeId){
-    const episode=content.find(
-      x=>
-        x.kind==="episode" &&
-        x.public_id===episodeId
+  if (episodeId) {
+    const episode = content.find(
+      x =>
+        x.kind === "episode" &&
+        x.public_id === episodeId
     );
 
-    if(episode){
-      play(episode,false);
+    if (episode) {
+      play(episode, false);
       return;
     }
   }
 
-  if(channelId){
-    const channel=content.find(
-      x=>
-        x.public_id===channelId &&
-        x.kind!=="episode" &&
-        x.kind!=="series"
+  if (channelId) {
+    const channel = content.find(
+      x =>
+        x.public_id === channelId &&
+        x.kind !== "episode" &&
+        x.kind !== "series"
     );
 
-    if(channel){
-      play(channel,false);
+    if (channel) {
+      play(channel, false);
       return;
     }
   }
 
-  if(showId){
-    const show=content.find(
-      x=>
-        x.kind==="series" &&
-        x.public_id===showId
+  if (showId) {
+    const show = content.find(
+      x =>
+        x.kind === "series" &&
+        x.public_id === showId
     );
 
-    if(show){
-      openSeries(show,false);
+    if (show) {
+      openSeries(show, false);
     }
   }
 }
 
-$("seriesBack").onclick=()=>{
-  activeSeries=null;
-  selected="";
-  filter="all";
-  $("search").value="";
+$("seriesBack").onclick = () => {
+  activeSeries = null;
+  selected = "";
+  filter = "all";
+  $("search").value = "";
   clearURL();
   renderFilters();
   render();
 };
 
-$("search").oninput=render;
+$("search").oninput = render;
 
-$("brand").onclick=()=>
+$("brand").onclick = () =>
   scrollTo({
-    top:0,
-    behavior:"smooth"
+    top: 0,
+    behavior: "smooth"
   });
 
-$("exploreButton").onclick=()=>
+$("exploreButton").onclick = () =>
   window.CricfreexCricket?.selectPage("live");
 
-$("watchButton").onclick=()=>{
-  const channelSections=liveChannelSections();
-  section=channelSections[0]?.slug||sections[0]?.slug||"sports";
-  filter="all";
-  activeSeries=null;
-  selected="";
-  $("search").value="";
+$("watchButton").onclick = () => {
+  const channelSections = liveChannelSections();
+  section = channelSections[0]?.slug || sections[0]?.slug || "sports";
+  filter = "all";
+  activeSeries = null;
+  selected = "";
+  $("search").value = "";
   clearURL();
-  $("cricketCenter").hidden=true;
-  $("channels").hidden=false;
-  $("mainTabs").hidden=false;
+  $("cricketCenter").hidden = true;
+  $("channels").hidden = false;
+  $("mainTabs").hidden = false;
   document.body.classList.remove("cricket-active");
   renderTabs();
   renderFilters();
   render();
-  $("channels").scrollIntoView({behavior:"smooth",block:"start"});
+  $("channels").scrollIntoView({ behavior: "smooth", block: "start" });
 };
 
-$("adminEntry").onclick=()=>
-  location.href="./admin.html";
+$("adminEntry").onclick = () =>
+  location.href = "./admin.html";
 
-let timer=null;
+let timer = null;
 
-function refresh(){
+function refresh() {
   clearTimeout(timer);
 
-  timer=setTimeout(
+  timer = setTimeout(
     load,
     250
   );
@@ -1327,27 +1323,27 @@ db.channel("cricfreex-public")
   .on(
     "postgres_changes",
     {
-      event:"*",
-      schema:"public",
-      table:"site_settings"
+      event: "*",
+      schema: "public",
+      table: "site_settings"
     },
     refresh
   )
   .on(
     "postgres_changes",
     {
-      event:"*",
-      schema:"public",
-      table:"sections"
+      event: "*",
+      schema: "public",
+      table: "sections"
     },
     refresh
   )
   .on(
     "postgres_changes",
     {
-      event:"*",
-      schema:"public",
-      table:"content"
+      event: "*",
+      schema: "public",
+      table: "content"
     },
     refresh
   )
@@ -1357,28 +1353,28 @@ db.channel("cricfreex-public")
    THEME TOGGLE
 ========================================================= */
 
-function setupThemeToggle(){
-  const toggleBtn=$("themeToggle");
-  if(!toggleBtn)return;
+function setupThemeToggle() {
+  const toggleBtn = $("themeToggle");
+  if (!toggleBtn) return;
 
-  function updateTheme(theme){
-    if(theme==="light"){
-      document.documentElement.setAttribute("data-theme","light");
-      try{localStorage.setItem("cricfreex_theme","light");}catch(e){}
-    }else{
+  function updateTheme(theme) {
+    if (theme === "light") {
+      document.documentElement.setAttribute("data-theme", "light");
+      try { localStorage.setItem("cricfreex_theme", "light"); } catch (e) { }
+    } else {
       document.documentElement.removeAttribute("data-theme");
-      try{localStorage.setItem("cricfreex_theme","dark");}catch(e){}
+      try { localStorage.setItem("cricfreex_theme", "dark"); } catch (e) { }
     }
   }
 
-  toggleBtn.addEventListener("click",()=>{
-    const current=document.documentElement.getAttribute("data-theme")==="light"?"light":"dark";
-    updateTheme(current==="light"?"dark":"light");
+  toggleBtn.addEventListener("click", () => {
+    const current = document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
+    updateTheme(current === "light" ? "dark" : "light");
   });
 
-  window.addEventListener("storage",event=>{
-    if(event.key==="cricfreex_theme"){
-      updateTheme(event.newValue||"dark");
+  window.addEventListener("storage", event => {
+    if (event.key === "cricfreex_theme") {
+      updateTheme(event.newValue || "dark");
     }
   });
 }
@@ -1387,93 +1383,93 @@ function setupThemeToggle(){
    ACTIVE USERS TRACKING (SUPABASE REALTIME PRESENCE)
 ========================================================= */
 
-function initActiveUsersTracking(){
-  const userCountEl=$("activeUserCount");
-  if(!userCountEl)return;
+function initActiveUsersTracking() {
+  const userCountEl = $("activeUserCount");
+  if (!userCountEl) return;
 
   let clientId;
-  try{
-    clientId=sessionStorage.getItem("cricfreex_client_id");
-  }catch(e){}
+  try {
+    clientId = sessionStorage.getItem("cricfreex_client_id");
+  } catch (e) { }
 
-  if(!clientId){
-    clientId="cx_"+Math.random().toString(36).slice(2,11)+"_"+Date.now();
-    try{sessionStorage.setItem("cricfreex_client_id",clientId);}catch(e){}
+  if (!clientId) {
+    clientId = "cx_" + Math.random().toString(36).slice(2, 11) + "_" + Date.now();
+    try { sessionStorage.setItem("cricfreex_client_id", clientId); } catch (e) { }
   }
 
-  function renderCount(num){
-    const safeCount=Math.max(1,Number(num)||1);
-    if(userCountEl){
-      userCountEl.textContent=safeCount;
+  function renderCount(num) {
+    const safeCount = Math.max(1, Number(num) || 1);
+    if (userCountEl) {
+      userCountEl.textContent = safeCount;
     }
   }
 
   renderCount(1);
 
-  try{
-    const presenceChannel=db.channel("cricfreex-presence",{
-      config:{presence:{key:clientId}}
+  try {
+    const presenceChannel = db.channel("cricfreex-presence", {
+      config: { presence: { key: clientId } }
     });
 
-    const updateFromState=()=>{
-      try{
-        const state=presenceChannel.presenceState();
-        const keys=Object.keys(state||{});
-        let total=0;
-        keys.forEach(k=>{
-          total+=Array.isArray(state[k])?state[k].length:1;
+    const updateFromState = () => {
+      try {
+        const state = presenceChannel.presenceState();
+        const keys = Object.keys(state || {});
+        let total = 0;
+        keys.forEach(k => {
+          total += Array.isArray(state[k]) ? state[k].length : 1;
         });
         renderCount(total);
-      }catch(err){
+      } catch (err) {
         renderCount(1);
       }
     };
 
     presenceChannel
-      .on("presence",{event:"sync"},updateFromState)
-      .on("presence",{event:"join"},updateFromState)
-      .on("presence",{event:"leave"},updateFromState)
-      .subscribe(async status=>{
-        if(status==="SUBSCRIBED"){
-          try{
+      .on("presence", { event: "sync" }, updateFromState)
+      .on("presence", { event: "join" }, updateFromState)
+      .on("presence", { event: "leave" }, updateFromState)
+      .subscribe(async status => {
+        if (status === "SUBSCRIBED") {
+          try {
             await presenceChannel.track({
-              online_at:Date.now(),
-              client:clientId
+              online_at: Date.now(),
+              client: clientId
             });
-          }catch(e){}
+          } catch (e) { }
         }
       });
 
     // Heartbeat every 40s (keeps connection & active count refreshed)
-    window.setInterval(async()=>{
-      try{
-        if(presenceChannel&&presenceChannel.state==="joined"){
+    window.setInterval(async () => {
+      try {
+        if (presenceChannel && presenceChannel.state === "joined") {
           await presenceChannel.track({
-            online_at:Date.now(),
-            client:clientId
+            online_at: Date.now(),
+            client: clientId
           });
         }
-      }catch(e){}
-    },40000);
+      } catch (e) { }
+    }, 40000);
 
     // Keep active when entering/exiting fullscreen (e.g. iframe match viewing)
-    document.addEventListener("fullscreenchange",()=>{
-      try{
-        if(presenceChannel&&presenceChannel.state==="joined"){
+    document.addEventListener("fullscreenchange", () => {
+      try {
+        if (presenceChannel && presenceChannel.state === "joined") {
           presenceChannel.track({
-            online_at:Date.now(),
-            client:clientId,
-            fullscreen:Boolean(document.fullscreenElement)
+            online_at: Date.now(),
+            client: clientId,
+            fullscreen: Boolean(document.fullscreenElement)
           });
         }
-      }catch(e){}
+      } catch (e) { }
     });
 
-    window.addEventListener("beforeunload",()=>{
-      try{presenceChannel.untrack();}catch(e){}
+    window.addEventListener("beforeunload", () => {
+      try { presenceChannel.untrack(); } catch (e) { }
     });
-  }catch(err){
-    console.warn("Presence tracking fallback:",err);
+  } catch (err) {
+    console.warn("Presence tracking fallback:", err);
     renderCount(1);
   }
 }
@@ -1482,122 +1478,139 @@ function initActiveUsersTracking(){
    SUGGESTION / REQUEST BOX
 ========================================================= */
 
-function countWords(str){
-  return (str||"").trim().split(/\s+/).filter(Boolean).length;
+function countWords(str) {
+  return (str || "").trim().split(/\s+/).filter(Boolean).length;
 }
 
-function initSuggestionBox(){
-  const form=$("suggestionForm");
-  const input=$("suggestionInput");
-  const countEl=$("suggestionWordCount");
-  const alertEl=$("suggestionAlert");
-  const btn=$("suggestionSubmitBtn");
+function initSuggestionBox() {
+  const form = $("suggestionForm");
+  const input = $("suggestionInput");
+  const countEl = $("suggestionWordCount");
+  const alertEl = $("suggestionAlert");
+  const btn = $("suggestionSubmitBtn");
 
-  if(!form||!input||!countEl||!alertEl||!btn)return;
+  if (!form || !input || !countEl || !alertEl || !btn) return;
 
-  function updateCount(){
-    const words=countWords(input.value);
-    const isValid=words>=5&&words<=1000;
-    countEl.textContent=`${words} word${words===1?"":"s"} `;
+  function updateCount() {
+    const words = countWords(input.value);
+    const isValid = words >= 5 && words <= 100;
+    countEl.textContent = `${words} word${words === 1 ? "" : "s"} `;
 
-    const hint=document.createElement("span");
-    hint.className="suggestion-hint";
-    hint.textContent="(min 5, max 1000)";
+    const hint = document.createElement("span");
+    hint.className = "suggestion-hint";
+    hint.textContent = "(min 5, max 100)";
     countEl.appendChild(hint);
 
-    countEl.classList.toggle("is-valid",isValid);
-    countEl.classList.toggle("is-invalid",words>0&&!isValid);
+    countEl.classList.toggle("is-valid", isValid);
+    countEl.classList.toggle("is-invalid", words > 0 && !isValid);
   }
 
-  input.addEventListener("input",()=>{
+  input.addEventListener("input", () => {
     updateCount();
-    if(alertEl.classList.contains("show")){
-      alertEl.className="suggestion-alert";
-      alertEl.textContent="";
+    if (alertEl.classList.contains("show")) {
+      alertEl.className = "suggestion-alert";
+      alertEl.textContent = "";
     }
   });
 
-  form.addEventListener("submit",async event=>{
+  form.addEventListener("submit", async event => {
     event.preventDefault();
-    const text=input.value.trim();
-    const words=countWords(text);
+    const text = input.value.trim();
+    const words = countWords(text);
 
-    if(words<5){
-      alertEl.className="suggestion-alert show is-error";
-      alertEl.textContent="Please enter at least 5 words to describe your request or suggestion.";
+    if (words < 5) {
+      alertEl.className = "suggestion-alert show is-error";
+      alertEl.textContent = "Please enter at least 5 words to describe your request or suggestion.";
       input.focus();
       return;
     }
 
-    if(words>1000){
-      alertEl.className="suggestion-alert show is-error";
-      alertEl.textContent="Word limit exceeded. Maximum 1000 words allowed.";
+    if (words > 1000) {
+      alertEl.className = "suggestion-alert show is-error";
+      alertEl.textContent = "Word limit exceeded. Maximum 1000 words allowed.";
       input.focus();
       return;
     }
 
-    btn.disabled=true;
-    const btnSpan=btn.querySelector("span");
-    if(btnSpan)btnSpan.textContent="Sending...";
-    alertEl.className="suggestion-alert";
-    alertEl.textContent="";
+    btn.disabled = true;
+    const btnSpan = btn.querySelector("span");
+    if (btnSpan) btnSpan.textContent = "Sending...";
+    alertEl.className = "suggestion-alert";
+    alertEl.textContent = "";
 
-    let saved=false;
+    let saved = false;
 
-    // 1. Try Supabase insert
-    try{
-      const {error}=await db.from("suggestions").insert({
-        message:text,
-        word_count:words
-      });
-      if(!error)saved=true;
-    }catch(e){}
+    // 1. Try Supabase insert if table exists
+    try {
+      if (db) {
+        const { error } = await db.from("suggestions").insert({
+          message: text,
+          word_count: words
+        });
+        if (!error) saved = true;
+      }
+    } catch (e) {
+      console.warn("Supabase suggestion insert error:", e);
+    }
 
     // 2. Dual-save to backend API (/api/suggestions)
-    try{
-      const apiBase=(location.hostname==="localhost"||location.hostname==="127.0.0.1")
-        ? ""
-        : String(CONFIG.CRICKET_API_URL||"").replace(/\/+$/,"");
-      const res=await fetch(`${apiBase}/api/suggestions`,{
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({message:text})
-      });
-      if(res.ok)saved=true;
-    }catch(e){}
+    const endpoints = [];
+    if (location.origin && location.origin.startsWith("http")) {
+      endpoints.push(`${location.origin}/api/suggestions`);
+    }
+    endpoints.push("/api/suggestions");
+    const configuredApi = String(C?.CRICKET_API_URL || window.CRICFREEX_CONFIG?.CRICKET_API_URL || "").replace(/\/+$/, "");
+    if (configuredApi && !endpoints.includes(`${configuredApi}/api/suggestions`)) {
+      endpoints.push(`${configuredApi}/api/suggestions`);
+    }
 
-    btn.disabled=false;
-    if(btnSpan)btnSpan.textContent="Send Request";
+    for (const url of endpoints) {
+      if (saved) break;
+      try {
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: text, word_count: words })
+        });
+        if (res.ok) {
+          saved = true;
+          break;
+        }
+      } catch (e) { }
+    }
 
-    if(saved){
-      input.value="";
+    btn.disabled = false;
+    if (btnSpan) btnSpan.textContent = "Send Request";
+
+    if (saved) {
+      input.value = "";
       updateCount();
-      alertEl.className="suggestion-alert show is-success";
-      alertEl.textContent="✓ Thank you! Your request has been sent to the admin team.";
-      setTimeout(()=>{
+      alertEl.className = "suggestion-alert show is-success";
+      alertEl.textContent = "✓ Thank you! Your request has been sent to the admin team.";
+      setTimeout(() => {
         alertEl.classList.remove("show");
-      },7000);
-    }else{
-      alertEl.className="suggestion-alert show is-error";
-      alertEl.textContent="Could not send your request right now. Please check your connection and try again.";
+      }, 7000);
+    } else {
+      alertEl.className = "suggestion-alert show is-error";
+      alertEl.textContent = "Could not send your request right now. Please check your connection and try again.";
     }
   });
 
   updateCount();
 }
 
-async function start(){
+async function start() {
   setupThemeToggle();
   initActiveUsersTracking();
   initSuggestionBox();
   await load();
 
-  if(!restored){
-    restored=true;
+  if (!restored) {
+    restored = true;
     restoreURL();
   }
 
-  setInterval(cleanupFinishedWatchLinks,30000);
+  setInterval(cleanupFinishedWatchLinks, 30000);
 }
 
 start();

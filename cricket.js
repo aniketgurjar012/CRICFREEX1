@@ -487,6 +487,7 @@
     if (!active) return;
 
     const head = element("div", "cricket-watch-player-head");
+    const title = element("div", "cricket-watch-player-copy");
     const isOutside = isMatchOutsideIndia(active.match);
     const matchTimeStr = formatCricketDateTime(active.match.startDate, isOutside);
     title.append(
