@@ -39,6 +39,100 @@ function cricketWatchMatchId(item){
     .slice(CRICKET_WATCH_LINK_PREFIX.length);
 }
 
+const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function isMatchOutsideIndia(match) {
+  if (!match) return false;
+  const tz = match.venue?.timezone;
+  if (tz) {
+    const cleanTz = String(tz).trim();
+    if (cleanTz === "+05:30" || cleanTz === "+5:30") return false;
+    return true;
+  }
+  const city = String(match.venue?.city || "").toLowerCase();
+  const ground = String(match.venue?.ground || "").toLowerCase();
+  const series = String(match.series || "").toLowerCase();
+  const desc = String(match.description || "").toLowerCase();
+  const text = `${city} ${ground} ${series} ${desc}`;
+  const indiaKeywords = [
+    "india", "ahmedabad", "bengaluru", "bangalore", "chennai", "delhi", "kolkata",
+    "mumbai", "hyderabad", "vadodara", "pune", "mohali", "dharamsala", "jaipur",
+    "kanpur", "lucknow", "nagpur", "rajkot", "ranchi", "indore", "cuttack", "guwahati",
+    "thiruvananthapuram", "visakhapatnam", "dehradun", "surat", "gwalior", "bhopal",
+    "ranji", "ipl", "syed mushtaq", "vijay hazare", "dulip", "irani"
+  ];
+  return !indiaKeywords.some(k => text.includes(k));
+}
+
+function format12HourTime(hours, minutes) {
+  const ampm = hours >= 12 ? "PM" : "AM";
+  const h = hours % 12 || 12;
+  const m = String(minutes).padStart(2, "0");
+  return `${String(h).padStart(2, "0")}:${m} ${ampm}`;
+}
+
+function formatCricketDateTime(dateOrTimestamp, isOutside = false) {
+  if (!dateOrTimestamp) return "";
+  let d;
+  if (typeof dateOrTimestamp === "number") {
+    d = new Date(dateOrTimestamp > 1e11 ? dateOrTimestamp : dateOrTimestamp * 1000);
+  } else if (typeof dateOrTimestamp === "string") {
+    if (/^\d+$/.test(dateOrTimestamp)) {
+      const num = Number(dateOrTimestamp);
+      d = new Date(num > 1e11 ? num : num * 1000);
+    } else {
+      d = new Date(dateOrTimestamp);
+    }
+  } else if (dateOrTimestamp instanceof Date) {
+    d = dateOrTimestamp;
+  }
+  if (!d || isNaN(d.getTime())) return "";
+
+  const istOffsetMs = (5 * 60 + 30) * 60 * 1000;
+  const istDate = new Date(d.getTime() + istOffsetMs);
+
+  const day = String(istDate.getUTCDate()).padStart(2, "0");
+  const month = MONTH_NAMES[istDate.getUTCMonth()];
+  const year = istDate.getUTCFullYear();
+  const dateFormatted = `${day} ${month} ${year}`;
+
+  const timeIST = format12HourTime(istDate.getUTCHours(), istDate.getUTCMinutes());
+
+  if (isOutside) {
+    const timeGMT = format12HourTime(d.getUTCHours(), d.getUTCMinutes());
+    return `${dateFormatted}, ${timeIST} IST (${timeGMT} GMT)`;
+  }
+  return `${dateFormatted}, ${timeIST} IST`;
+}
+
+function normalizeMatchStatus(status, match) {
+  if (!status || typeof status !== "string") return status || "";
+  const isOutside = isMatchOutsideIndia(match);
+
+  if (match?.startDate && /starts\s+at/i.test(status)) {
+    const dt = formatCricketDateTime(match.startDate, isOutside);
+    if (dt) return `Match starts at ${dt}`;
+  }
+
+  const regex = /(match\s+starts\s+at|starts\s+at)\s+([A-Za-z]+)\s+(\d{1,2}),?\s*(\d{1,2}):(\d{2})\s*(?:GMT|UTC)?/i;
+  const matchReg = status.match(regex);
+  if (matchReg) {
+    const prefix = matchReg[1];
+    const monthStr = matchReg[2].slice(0, 3).toLowerCase();
+    const day = Number(matchReg[3]);
+    const hour = Number(matchReg[4]);
+    const min = Number(matchReg[5]);
+    const monthIdx = MONTH_NAMES.findIndex(m => m.toLowerCase() === monthStr);
+    if (monthIdx >= 0) {
+      const year = match?.startDate ? new Date(match.startDate).getUTCFullYear() : new Date().getUTCFullYear();
+      const utcMs = Date.UTC(year, monthIdx, day, hour, min);
+      const dt = formatCricketDateTime(utcMs, isOutside);
+      return `${prefix} ${dt}`;
+    }
+  }
+  return status;
+}
+
 /* =========================================================
    AUTH
 ========================================================= */
@@ -273,11 +367,14 @@ function matchOptionLabel(match){
     match.team1?.teamSName||match.team1?.teamName,
     match.team2?.teamSName||match.team2?.teamName
   ].filter(Boolean).join(" vs ");
+  const isOutside = isMatchOutsideIndia(match);
+  const dt = formatCricketDateTime(match.startDate, isOutside);
+  const normStatus = normalizeMatchStatus(match.status || match.state, match);
   return [
     teams||"Match",
+    dt,
     match.description,
-    match.series,
-    match.state
+    normStatus
   ].filter(Boolean).join(" · ");
 }
 
@@ -1850,7 +1947,7 @@ function renderSuggestions(){
     time.className="suggestion-time";
     try{
       time.textContent=item.created_at
-        ? new Date(item.created_at).toLocaleString()
+        ? formatCricketDateTime(item.created_at, false)
         : "";
     }catch(e){
       time.textContent="";

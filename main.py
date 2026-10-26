@@ -3,7 +3,7 @@ import re
 import time
 import threading
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -116,6 +116,82 @@ def decode_next(html):
     return results
 
 
+IST = timezone(timedelta(hours=5, minutes=30))
+MONTH_ABBRS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+
+def format_ist_gmt_datetime(dt_or_ms, is_outside=False):
+    if not dt_or_ms:
+        return ""
+    if isinstance(dt_or_ms, (int, float)):
+        ts = dt_or_ms / 1000.0 if dt_or_ms > 1e11 else dt_or_ms
+        dt_utc = datetime.fromtimestamp(ts, tz=timezone.utc)
+    elif isinstance(dt_or_ms, datetime):
+        dt_utc = dt_or_ms if dt_or_ms.tzinfo else dt_or_ms.replace(tzinfo=timezone.utc)
+    else:
+        return ""
+
+    dt_ist = dt_utc.astimezone(IST)
+    date_str = f"{dt_ist.day:02d} {MONTH_ABBRS[dt_ist.month - 1]} {dt_ist.year}"
+    time_ist = dt_ist.strftime("%I:%M %p")
+    if is_outside:
+        time_gmt = dt_utc.strftime("%I:%M %p")
+        return f"{date_str}, {time_ist} IST ({time_gmt} GMT)"
+    return f"{date_str}, {time_ist} IST"
+
+
+def is_venue_outside_india(venue, match_text=""):
+    if not venue:
+        venue = {}
+    tz = str(venue.get("timezone", "")).strip()
+    if tz:
+        return tz not in ("+05:30", "+5:30")
+    city = str(venue.get("city", "")).lower()
+    ground = str(venue.get("ground", "")).lower()
+    text = f"{city} {ground} {match_text}".lower()
+    india_keywords = [
+        "india", "ahmedabad", "bengaluru", "bangalore", "chennai", "delhi", "kolkata",
+        "mumbai", "hyderabad", "vadodara", "pune", "mohali", "dharamsala", "jaipur",
+        "kanpur", "lucknow", "nagpur", "rajkot", "ranchi", "indore", "cuttack", "guwahati",
+        "thiruvananthapuram", "visakhapatnam", "dehradun", "surat", "gwalior", "bhopal",
+        "ranji", "ipl", "syed mushtaq", "vijay hazare", "dulip", "irani"
+    ]
+    return not any(k in text for k in india_keywords)
+
+
+def normalize_status_string(status, start_date=None, venue=None, match_text=""):
+    if not status or not isinstance(status, str):
+        return status or ""
+    is_outside = is_venue_outside_india(venue, match_text)
+
+    if start_date and re.search(r"starts\s+at", status, re.I):
+        dt_formatted = format_ist_gmt_datetime(start_date, is_outside)
+        if dt_formatted:
+            return f"Match starts at {dt_formatted}"
+
+    m = re.search(
+        r"(match\s+starts\s+at|starts\s+at)\s+([A-Za-z]+)\s+(\d{1,2}),?\s*(\d{1,2}):(\d{2})\s*(?:GMT|UTC)?",
+        status,
+        re.I
+    )
+    if m:
+        prefix, month_name, day, hour, minute = m.groups()
+        months = {
+            "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
+            "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12
+        }
+        month_num = months.get(month_name[:3].lower(), 1)
+        cur_year = datetime.now(timezone.utc).year
+        dt_utc = datetime(
+            cur_year, month_num, int(day), int(hour), int(minute),
+            tzinfo=timezone.utc
+        )
+        dt_formatted = format_ist_gmt_datetime(dt_utc, is_outside)
+        return f"{prefix} {dt_formatted}"
+
+    return status
+
+
 def extract_matches(html):
 
     payloads = decode_next(html)
@@ -148,6 +224,14 @@ def extract_matches(html):
 
                 if mid:
 
+                    raw_status = info.get("status", "")
+                    clean_status = normalize_status_string(
+                        raw_status,
+                        info.get("startDate"),
+                        info.get("venueInfo"),
+                        f"{info.get('seriesName', '')} {info.get('matchDesc', '')}"
+                    )
+
                     item = {
                         "id": mid,
                         "series": info.get("seriesName", ""),
@@ -155,7 +239,7 @@ def extract_matches(html):
                         "description": info.get("matchDesc", ""),
                         "format": info.get("matchFormat", ""),
                         "state": info.get("state", ""),
-                        "status": info.get("status", ""),
+                        "status": clean_status,
                         "startDate": info.get("startDate"),
                         "team1": info.get("team1", {}),
                         "team2": info.get("team2", {}),

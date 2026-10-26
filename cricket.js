@@ -17,6 +17,101 @@
     ["stats", "Stats & Rankings"],
     ["records", "Records"]
   ];
+
+  const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+  function isMatchOutsideIndia(match) {
+    if (!match) return false;
+    const tz = match.venue?.timezone;
+    if (tz) {
+      const cleanTz = String(tz).trim();
+      if (cleanTz === "+05:30" || cleanTz === "+5:30") return false;
+      return true;
+    }
+    const city = String(match.venue?.city || "").toLowerCase();
+    const ground = String(match.venue?.ground || "").toLowerCase();
+    const series = String(match.series || "").toLowerCase();
+    const desc = String(match.description || "").toLowerCase();
+    const text = `${city} ${ground} ${series} ${desc}`;
+    const indiaKeywords = [
+      "india", "ahmedabad", "bengaluru", "bangalore", "chennai", "delhi", "kolkata",
+      "mumbai", "hyderabad", "vadodara", "pune", "mohali", "dharamsala", "jaipur",
+      "kanpur", "lucknow", "nagpur", "rajkot", "ranchi", "indore", "cuttack", "guwahati",
+      "thiruvananthapuram", "visakhapatnam", "dehradun", "surat", "gwalior", "bhopal",
+      "ranji", "ipl", "syed mushtaq", "vijay hazare", "dulip", "irani"
+    ];
+    return !indiaKeywords.some(k => text.includes(k));
+  }
+
+  function format12HourTime(hours, minutes) {
+    const ampm = hours >= 12 ? "PM" : "AM";
+    const h = hours % 12 || 12;
+    const m = String(minutes).padStart(2, "0");
+    return `${String(h).padStart(2, "0")}:${m} ${ampm}`;
+  }
+
+  function formatCricketDateTime(dateOrTimestamp, isOutside = false) {
+    if (!dateOrTimestamp) return "";
+    let d;
+    if (typeof dateOrTimestamp === "number") {
+      d = new Date(dateOrTimestamp > 1e11 ? dateOrTimestamp : dateOrTimestamp * 1000);
+    } else if (typeof dateOrTimestamp === "string") {
+      if (/^\d+$/.test(dateOrTimestamp)) {
+        const num = Number(dateOrTimestamp);
+        d = new Date(num > 1e11 ? num : num * 1000);
+      } else {
+        d = new Date(dateOrTimestamp);
+      }
+    } else if (dateOrTimestamp instanceof Date) {
+      d = dateOrTimestamp;
+    }
+    if (!d || isNaN(d.getTime())) return "";
+
+    const istOffsetMs = (5 * 60 + 30) * 60 * 1000;
+    const istDate = new Date(d.getTime() + istOffsetMs);
+
+    const day = String(istDate.getUTCDate()).padStart(2, "0");
+    const month = MONTH_NAMES[istDate.getUTCMonth()];
+    const year = istDate.getUTCFullYear();
+    const dateFormatted = `${day} ${month} ${year}`;
+
+    const timeIST = format12HourTime(istDate.getUTCHours(), istDate.getUTCMinutes());
+
+    if (isOutside) {
+      const timeGMT = format12HourTime(d.getUTCHours(), d.getUTCMinutes());
+      return `${dateFormatted}, ${timeIST} IST (${timeGMT} GMT)`;
+    }
+    return `${dateFormatted}, ${timeIST} IST`;
+  }
+
+  function normalizeMatchStatus(status, match) {
+    if (!status || typeof status !== "string") return status || "";
+    const isOutside = isMatchOutsideIndia(match);
+
+    if (match?.startDate && /starts\s+at/i.test(status)) {
+      const dt = formatCricketDateTime(match.startDate, isOutside);
+      if (dt) return `Match starts at ${dt}`;
+    }
+
+    const regex = /(match\s+starts\s+at|starts\s+at)\s+([A-Za-z]+)\s+(\d{1,2}),?\s*(\d{1,2}):(\d{2})\s*(?:GMT|UTC)?/i;
+    const matchReg = status.match(regex);
+    if (matchReg) {
+      const prefix = matchReg[1];
+      const monthStr = matchReg[2].slice(0, 3).toLowerCase();
+      const day = Number(matchReg[3]);
+      const hour = Number(matchReg[4]);
+      const min = Number(matchReg[5]);
+      const monthIdx = MONTH_NAMES.findIndex(m => m.toLowerCase() === monthStr);
+      if (monthIdx >= 0) {
+        const year = match?.startDate ? new Date(match.startDate).getUTCFullYear() : new Date().getUTCFullYear();
+        const utcMs = Date.UTC(year, monthIdx, day, hour, min);
+        const dt = formatCricketDateTime(utcMs, isOutside);
+        return `${prefix} ${dt}`;
+      }
+    }
+    return status;
+  }
+
   const state = {
     page: "live",
     query: "",
@@ -302,13 +397,20 @@
       teams.appendChild(row);
     });
 
+    const isOutside = isMatchOutsideIndia(match);
+    const normalizedStatus = normalizeMatchStatus(
+      match.status || match.state || "Match details",
+      match
+    );
     const status = element(
       "p",
       "cricket-match-status",
-      match.status || match.state || "Match details"
+      normalizedStatus
     );
+    const matchTimeStr = formatCricketDateTime(match.startDate, isOutside);
     const venue = [
       match.format,
+      matchTimeStr,
       match.venue?.ground,
       match.venue?.city
     ].filter(Boolean).join(" · ");
@@ -385,7 +487,8 @@
     if (!active) return;
 
     const head = element("div", "cricket-watch-player-head");
-    const title = element("div", "cricket-watch-player-copy");
+    const isOutside = isMatchOutsideIndia(active.match);
+    const matchTimeStr = formatCricketDateTime(active.match.startDate, isOutside);
     title.append(
       element("span", "cricket-kicker", "CRICFREEX · LIVE PLAYER"),
       element(
@@ -403,6 +506,7 @@
         [
           active.match.series,
           active.match.description,
+          matchTimeStr,
           active.match.venue?.ground,
           active.match.venue?.city
         ].filter(Boolean).join(" · ")
@@ -1320,19 +1424,31 @@
     }
 
     if (tab === "info") {
+      const isOutside = isMatchOutsideIndia(match);
       const details = (data.details || [])
         .filter(item => item.label)
-        .map(item => [item.label, item.value]);
+        .map(item => {
+          if (item.label.toLowerCase() === "status") {
+            return [item.label, normalizeMatchStatus(item.value, match)];
+          }
+          if (item.label.toLowerCase().includes("date") || item.label.toLowerCase().includes("time")) {
+            const formatted = formatCricketDateTime(item.value, isOutside);
+            return [item.label, formatted || item.value];
+          }
+          return [item.label, item.value];
+        });
       const known = new Set(details.map(row => row[0]));
+      const formattedStart = formatCricketDateTime(match.startDate, isOutside);
       [
         ["Series", match.series],
         ["Match", match.description],
         ["Format", match.format],
-        ["Status", match.status || match.state],
+        ["Date & Time", formattedStart],
+        ["Status", normalizeMatchStatus(match.status || match.state, match)],
         ["Venue", match.venue?.ground],
         ["City", match.venue?.city]
       ].forEach(([label, value]) => {
-        if (!known.has(label)) details.push([label, value || "Not available"]);
+        if (!known.has(label) && value) details.push([label, value || "Not available"]);
       });
       appendMatchTable(target, ["Information", "Details"], details);
       return;
