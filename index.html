@@ -10,8 +10,8 @@
     <meta name="referrer" content="strict-origin-when-cross-origin">
     <title>CricFreeX — Cricket Centre</title>
     <script>
-        if(localStorage.getItem("cricfreex_theme")==="light"){
-            document.documentElement.setAttribute("data-theme","light");
+        if (localStorage.getItem("cricfreex_theme") === "light") {
+            document.documentElement.setAttribute("data-theme", "light");
         }
     </script>
     <link rel="stylesheet" href="./cricket.css?v=9">
@@ -981,11 +981,59 @@
         }
 
         .link-note {
-            display: block;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
             margin-top: 14px;
-            color: #595963;
-            font-size: 9px;
-            letter-spacing: .5px
+            padding: 6px 14px;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: #cbd5e1;
+            font-size: 12px;
+            font-weight: 600;
+            line-height: 1.4;
+        }
+
+        [data-theme="light"] .link-note {
+            background: rgba(0, 0, 0, 0.04);
+            border-color: rgba(0, 0, 0, 0.1);
+            color: #334155;
+        }
+
+        .channel-close-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px 14px;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 8px;
+            background: #181920;
+            color: #f1f5f9;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: .5px;
+            cursor: pointer;
+            transition: all .15s ease;
+        }
+
+        .channel-close-btn:hover {
+            border-color: #ff3440;
+            background: #242532;
+            color: #fff;
+            box-shadow: 0 0 12px rgba(255, 52, 64, 0.25);
+        }
+
+        [data-theme="light"] .channel-close-btn {
+            background: #f1f5f9;
+            border-color: #cbd5e1;
+            color: #0f172a;
+        }
+
+        [data-theme="light"] .channel-close-btn:hover {
+            background: #e2e8f0;
+            border-color: #ff3440;
+            color: #0f172a;
         }
 
         @media(max-width:620px) {
@@ -1346,12 +1394,29 @@
             <div class="brand-mark">CX</div><span class="brand-word" id="brandWord">CRIC<span
                     class="brand-red">FREEX</span></span>
         </div>
-        <nav class="nav-links"><a href="#cricketCenter">Cricket Centre</a><a href="#home">Home</a></nav>
+        <nav class="nav-links"><a href="/" id="navCricket">Live Scores</a><a href="?view=channels" id="navChannels">Live
+                Channels</a></nav>
         <div class="nav-right">
-            <div class="live-chip" id="userCountChip"><span class="pulse"></span><span id="activeUserCount">1</span></div>
-            <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle dark/light theme" title="Toggle theme">
-                <svg class="theme-icon icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
-                <svg class="theme-icon icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+            <div class="live-chip" id="userCountChip"><span class="pulse"></span><span id="activeUserCount">1</span>
+            </div>
+            <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle dark/light theme"
+                title="Toggle theme">
+                <svg class="theme-icon icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                </svg>
+                <svg class="theme-icon icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="5"></circle>
+                    <line x1="12" y1="1" x2="12" y2="3"></line>
+                    <line x1="12" y1="21" x2="12" y2="23"></line>
+                    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                    <line x1="1" y1="12" x2="3" y2="12"></line>
+                    <line x1="21" y1="12" x2="23" y2="12"></line>
+                    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                </svg>
             </button>
         </div>
     </header>
@@ -1362,7 +1427,7 @@
             <h1 id="heroTitle">YOUR GAME.<span>YOUR SCREEN.</span></h1>
             <p id="heroText">Live scores, match details, series, rankings and cricket coverage—together in one place.
             </p>
-            <div class="hero-actions"><button class="btn btn-red" id="exploreButton">▶ Live Scores</button><button
+            <div class="hero-actions"><button class="btn btn-red" id="exploreButton">Live Matches</button><button
                     class="btn btn-dark" id="watchButton">Live Channels</button></div>
         </div>
     </section>
@@ -1391,17 +1456,25 @@
                 <div class="suggestion-head">
                     <div class="suggestion-kicker"><span class="pulse"></span>REQUEST / SUGGESTION</div>
                     <h3 class="suggestion-title">Need a Match Link or Have a Suggestion?</h3>
-                    <p class="suggestion-desc">Request any cricket match live stream link, report an issue, or suggest anything directly to the admin.</p>
+                    <p class="suggestion-desc">Request any cricket match live stream link, report an issue, or suggest
+                        anything directly to the admin.</p>
                 </div>
                 <form id="suggestionForm" class="suggestion-form">
                     <div class="suggestion-input-wrap">
-                        <textarea id="suggestionInput" class="suggestion-textarea" placeholder="Type your message or request here (min 5 words, max 1000 words)..." rows="3" required></textarea>
+                        <textarea id="suggestionInput" class="suggestion-textarea"
+                            placeholder="Type your message or request here (min 5 words, max 1000 words)..." rows="3"
+                            required></textarea>
                     </div>
                     <div class="suggestion-footer">
-                        <div class="suggestion-count" id="suggestionWordCount">0 words <span class="suggestion-hint">(min 5, max 1000)</span></div>
+                        <div class="suggestion-count" id="suggestionWordCount">0 words <span
+                                class="suggestion-hint">(min 5, max 1000)</span></div>
                         <button type="submit" class="btn btn-red suggestion-btn" id="suggestionSubmitBtn">
                             <span>Send Request</span>
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="22" y1="2" x2="11" y2="13"></line>
+                                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                            </svg>
                         </button>
                     </div>
                     <div class="suggestion-alert" id="suggestionAlert" role="alert"></div>
@@ -1423,11 +1496,13 @@
                 <div class="watch-badges">
                     <div class="badge">LIVE</div>
                     <div class="badge">HD</div>
+                    <button type="button" class="channel-close-btn" id="channelCloseBtn" title="Close channel">Close
+                        channel</button>
                 </div>
             </div>
             <div class="player-wrap" id="playerWrap">
                 <div class="player-empty">
-                    <div><strong>Choose your content</strong>Select an available channel or episode above.</div>
+                    <div><strong>Choose your content</strong>Select an available channel or server above.</div>
                 </div>
             </div>
         </section>

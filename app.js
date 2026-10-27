@@ -529,21 +529,29 @@ function render() {
 
 function clearURL() {
   const u = new URL(location.href);
-  if (u.hash === "#cricketCenter") u.hash = "";
+  u.hash = "";
 
   [
     "channel",
     "show",
-    "episode"
+    "episode",
+    "view",
+    "cricket",
+    "match",
+    "tab",
+    "server",
+    "news",
+    "series",
+    "seriesTab",
+    "team",
+    "teamTab",
+    "archive"
   ].forEach(
     key => u.searchParams.delete(key)
   );
 
-  history.replaceState(
-    {},
-    "",
-    u
-  );
+  const clean = u.searchParams.toString() ? `${u.pathname}?${u.searchParams.toString()}` : u.pathname;
+  history.replaceState({}, "", clean);
 }
 
 function updateURL(item) {
@@ -553,7 +561,18 @@ function updateURL(item) {
   [
     "channel",
     "show",
-    "episode"
+    "episode",
+    "view",
+    "cricket",
+    "match",
+    "tab",
+    "server",
+    "news",
+    "series",
+    "seriesTab",
+    "team",
+    "teamTab",
+    "archive"
   ].forEach(
     key => u.searchParams.delete(key)
   );
@@ -592,10 +611,10 @@ function updateURL(item) {
     );
   }
 
-  history.replaceState(
+  history.pushState(
     {},
     "",
-    u
+    `${u.pathname}?${u.searchParams.toString()}`
   );
 }
 
@@ -673,14 +692,19 @@ function play(item, update = true) {
     updateURL(item);
   }
 
+  // Single Active Stream: Stop cricket match stream if running
+  if (window.CricfreexCricket?.closeWatchPlayer) {
+    window.CricfreexCricket.closeWatchPlayer();
+  }
+
   $("cricketCenter").hidden = true;
   $("channels").hidden = false;
   $("mainTabs").hidden = false;
   document.body.classList.remove("cricket-active");
-  if (location.hash === "#cricketCenter") {
+  if (location.hash) {
     const url = new URL(location.href);
     url.hash = "";
-    history.replaceState({}, "", url);
+    history.replaceState({}, "", url.pathname + (url.search || ""));
   }
 
   /*
@@ -1201,7 +1225,7 @@ function play(item, update = true) {
   ].includes(sourceURL.hostname);
   embedNote.textContent = localSource
     ? `This link points to ${sourceURL.host}. It only works when that service is running on the viewer's device. Use a reachable stream URL for other viewers.`
-    : "The source may block playback when embedded.";
+    : "⚡ If this channel is not loading or playing smoothly, please switch to another channel from the list.";
   if (localSource) {
     $("playingStatus").textContent = "LOCAL SOURCE";
   }
@@ -1216,11 +1240,48 @@ function play(item, update = true) {
 
 
 
+function openChannelsView(update = true) {
+  const channelSections = liveChannelSections();
+  section = channelSections[0]?.slug || sections[0]?.slug || "sports";
+  filter = "all";
+  activeSeries = null;
+  $("search").value = "";
+  $("cricketCenter").hidden = true;
+  $("channels").hidden = false;
+  $("mainTabs").hidden = false;
+  document.body.classList.remove("cricket-active");
+  renderTabs();
+  renderFilters();
+  render();
+  if (update) {
+    const u = new URL(location.href);
+    [
+      "channel", "show", "episode", "cricket", "match", "tab",
+      "server", "news", "series", "seriesTab", "team", "teamTab", "archive"
+    ].forEach(k => u.searchParams.delete(k));
+    u.searchParams.set("view", "channels");
+    u.hash = "";
+    history.pushState({}, "", `${u.pathname}?${u.searchParams.toString()}`);
+  }
+  $("channels").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 function restoreURL() {
-  const p =
-    new URLSearchParams(
-      location.search
-    );
+  const p = new URLSearchParams(location.search);
+  const view = p.get("view");
+  const tab = p.get("tab");
+
+  if (location.hash === "#suggestion" || view === "suggestion" || tab === "request") {
+    setTimeout(() => {
+      $("suggestionSection")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      $("suggestionInput")?.focus();
+    }, 400);
+  }
+
+  if (view === "channels") {
+    openChannelsView(false);
+    return;
+  }
 
   const episodeId = p.get("episode");
   const channelId = p.get("channel");
@@ -1266,6 +1327,10 @@ function restoreURL() {
   }
 }
 
+window.addEventListener("popstate", () => {
+  restoreURL();
+});
+
 $("seriesBack").onclick = () => {
   activeSeries = null;
   selected = "";
@@ -1278,32 +1343,37 @@ $("seriesBack").onclick = () => {
 
 $("search").oninput = render;
 
-$("brand").onclick = () =>
-  scrollTo({
-    top: 0,
-    behavior: "smooth"
-  });
+$("brand").onclick = () => {
+  window.CricfreexCricket?.selectPage("live", true);
+  window.scrollTo({ top: 0, behavior: "smooth" });
+};
 
-$("exploreButton").onclick = () =>
-  window.CricfreexCricket?.selectPage("live");
+$("exploreButton").onclick = () => {
+  window.CricfreexCricket?.selectPage("live", true);
+  window.scrollTo({ top: 0, behavior: "smooth" });
+};
+
+$("navCricket")?.addEventListener("click", event => {
+  event.preventDefault();
+  window.CricfreexCricket?.selectPage("live", true);
+  window.scrollTo({ top: 0, behavior: "smooth" });
+});
+
+$("navChannels")?.addEventListener("click", event => {
+  event.preventDefault();
+  openChannelsView(true);
+});
 
 $("watchButton").onclick = () => {
-  const channelSections = liveChannelSections();
-  section = channelSections[0]?.slug || sections[0]?.slug || "sports";
-  filter = "all";
-  activeSeries = null;
-  selected = "";
-  $("search").value = "";
-  clearURL();
-  $("cricketCenter").hidden = true;
-  $("channels").hidden = false;
-  $("mainTabs").hidden = false;
-  document.body.classList.remove("cricket-active");
-  renderTabs();
-  renderFilters();
-  render();
-  $("channels").scrollIntoView({ behavior: "smooth", block: "start" });
+  openChannelsView(true);
 };
+
+if ($("footerLogo")) {
+  $("footerLogo").onclick = () => {
+    window.CricfreexCricket?.selectPage("live", true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+}
 
 $("adminEntry").onclick = () =>
   location.href = "./admin.html";
@@ -1488,17 +1558,40 @@ function initSuggestionBox() {
   const countEl = $("suggestionWordCount");
   const alertEl = $("suggestionAlert");
   const btn = $("suggestionSubmitBtn");
+  const section = $("suggestionSection");
 
   if (!form || !input || !countEl || !alertEl || !btn) return;
 
+  function updateSuggestionURL() {
+    const p = new URLSearchParams(location.search);
+    if (p.get("view") !== "suggestion") {
+      const u = new URL(location.href);
+      [
+        "channel", "show", "episode", "match", "tab",
+        "server", "news", "series", "seriesTab", "team", "teamTab", "archive"
+      ].forEach(k => u.searchParams.delete(k));
+      u.searchParams.set("view", "suggestion");
+      u.hash = "";
+      history.pushState({}, "", `${u.pathname}?${u.searchParams.toString()}`);
+    }
+  }
+
+  section?.addEventListener("click", () => {
+    updateSuggestionURL();
+  });
+
+  input.addEventListener("focus", () => {
+    updateSuggestionURL();
+  });
+
   function updateCount() {
     const words = countWords(input.value);
-    const isValid = words >= 5 && words <= 100;
+    const isValid = words >= 5 && words <= 1000;
     countEl.textContent = `${words} word${words === 1 ? "" : "s"} `;
 
     const hint = document.createElement("span");
     hint.className = "suggestion-hint";
-    hint.textContent = "(min 5, max 100)";
+    hint.textContent = "(min 5, max 1000)";
     countEl.appendChild(hint);
 
     countEl.classList.toggle("is-valid", isValid);
@@ -1599,10 +1692,62 @@ function initSuggestionBox() {
   updateCount();
 }
 
+function closeChannelPlayer(update = true) {
+  const wrap = $("playerWrap");
+  if (wrap) {
+    const media = wrap.querySelectorAll("iframe, video");
+    media.forEach(el => {
+      try {
+        if (el.tagName === "VIDEO") {
+          el.pause();
+          el.removeAttribute("src");
+          el.load();
+        } else {
+          el.src = "about:blank";
+        }
+      } catch (e) {}
+    });
+    wrap.replaceChildren();
+    wrap.innerHTML = `
+      <div class="player-empty">
+        <div><strong>Choose your content</strong>Select an available channel or episode above.</div>
+      </div>
+    `;
+  }
+  $("watch").hidden = true;
+  $("playingTitle").textContent = "Select something to watch";
+  $("playingStatus").textContent = "READY";
+  selected = "";
+  render();
+
+  if (update) {
+    const u = new URL(location.href);
+    ["channel", "show", "episode"].forEach(k => u.searchParams.delete(k));
+    u.searchParams.set("view", "channels");
+    history.pushState({}, "", `${u.pathname}?${u.searchParams.toString()}`);
+  }
+}
+
+function initChannelClose() {
+  const btn = $("channelCloseBtn");
+  if (btn) {
+    btn.onclick = () => {
+      closeChannelPlayer(true);
+    };
+  }
+
+  window.addEventListener("cricfreex:stop-channel-stream", () => {
+    closeChannelPlayer(true);
+  });
+
+  window.CricfreexApp = { closeChannelPlayer, openChannelsView };
+}
+
 async function start() {
   setupThemeToggle();
   initActiveUsersTracking();
   initSuggestionBox();
+  initChannelClose();
   await load();
 
   if (!restored) {

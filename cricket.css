@@ -30,7 +30,6 @@
   display: none !important;
 }
 
-body.cricket-active #watch,
 body.cricket-active .features {
   display: none !important;
 }
@@ -381,9 +380,24 @@ body.cricket-active .cricket-center {
 }
 
 .cricket-watch-note {
-  margin: 7px 0 0;
-  color: var(--cricket-subtle);
-  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #cbd5e1;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+[data-theme="light"] .cricket-watch-note {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.1);
+  color: #334155;
 }
 
 @media(max-width:620px) {
