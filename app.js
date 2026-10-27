@@ -1208,6 +1208,9 @@ function play(item, update = true) {
   iframe.referrerPolicy =
     "strict-origin-when-cross-origin";
 
+  // Anti-Redirect Sandbox: blocks ads/iframes from redirecting your website
+  iframe.setAttribute("sandbox", "allow-scripts allow-same-origin allow-forms allow-presentation");
+
   $("playingStatus").textContent = "EMBED PLAYER";
 
   iframe.addEventListener(

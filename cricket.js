@@ -631,6 +631,8 @@
     frame.title = `${active.serverLabel} · ${active.match.team1?.teamName || "Team 1"} vs ${active.match.team2?.teamName || "Team 2"}`;
     frame.allow = "autoplay; encrypted-media; picture-in-picture; fullscreen";
     frame.referrerPolicy = "strict-origin-when-cross-origin";
+    // Anti-Redirect Sandbox: blocks ads/iframes from redirecting your website
+    frame.setAttribute("sandbox", "allow-scripts allow-same-origin allow-forms allow-presentation");
     watchPlayer.append(
       head,
       server,
