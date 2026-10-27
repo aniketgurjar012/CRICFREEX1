@@ -182,18 +182,15 @@
             background: #ffffff0b;
             color: #fff;
             cursor: pointer;
-            transition: transform .25s cubic-bezier(.34, 1.56, .64, 1), background .2s ease, border-color .2s ease, color .2s ease, box-shadow .2s ease;
+            transition: background .15s ease, border-color .15s ease, color .15s ease;
         }
 
         .theme-toggle:hover {
             background: #ffffff18;
             border-color: rgba(255, 255, 255, .25);
-            transform: rotate(20deg) scale(1.08);
-            box-shadow: 0 0 14px rgba(255, 255, 255, .08);
         }
 
         .theme-toggle:active {
-            transform: scale(.92);
         }
 
         .theme-icon {
@@ -457,10 +454,23 @@
         }
 
         .hero-actions {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            margin-top: 28px
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 28px;
+            padding: 5px;
+            background: rgba(14, 14, 20, 0.85);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+        }
+
+        [data-theme="light"] .hero-actions {
+            background: rgba(255, 255, 255, 0.92);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+            border-color: rgba(0, 0, 0, 0.1);
         }
 
         .btn {
@@ -473,6 +483,61 @@
 
         .btn:hover {
             transform: translateY(-2px)
+        }
+
+        .mode-tab {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            border: 1px solid transparent;
+            border-radius: 10px;
+            padding: 11px 22px;
+            font-size: 13px;
+            font-weight: 800;
+            letter-spacing: 0.3px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            color: #8f94a6;
+            background: transparent;
+            text-decoration: none;
+            user-select: none;
+        }
+
+        .mode-tab .mode-icon {
+            font-size: 15px;
+            display: inline-block;
+        }
+
+        .mode-tab:hover {
+            color: #fff;
+            background: rgba(255, 255, 255, 0.06);
+            transform: translateY(-1px);
+        }
+
+        [data-theme="light"] .mode-tab:hover {
+            color: #000;
+            background: rgba(0, 0, 0, 0.05);
+        }
+
+        .mode-tab.btn-red,
+        .mode-tab.active {
+            color: #fff !important;
+            background: linear-gradient(135deg, var(--red2, #ff3440), #bd0009) !important;
+            box-shadow: 0 6px 20px rgba(229, 9, 20, 0.45) !important;
+            border-color: rgba(255, 255, 255, 0.22) !important;
+            transform: translateY(0);
+        }
+
+        .mode-tab.btn-dark {
+            color: #8f94a6 !important;
+            background: transparent !important;
+            box-shadow: none !important;
+            border-color: transparent !important;
+        }
+
+        [data-theme="light"] .mode-tab.btn-dark {
+            color: #636b7b !important;
+            background: transparent !important;
         }
 
         .btn-red {
@@ -492,22 +557,25 @@
             margin: auto
         }
 
-        .main-tabs {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 34px;
-            padding: 7px;
-            border: 1px solid var(--border);
-            background: #0a0a0e;
-            border-radius: 14px;
-            width: max-content;
-            max-width: 100%;
-            overflow: auto;
-            scrollbar-width: none
+        /* Seamless visual connection between active mode tab and content section */
+        #channels,
+        #cricketCenter {
+            position: relative;
+            scroll-margin-top: 85px;
+            border-top: 2px solid rgba(255, 52, 64, 0.35);
+            padding-top: 26px;
+            border-radius: 20px 20px 0 0;
+            background: radial-gradient(circle at 50% 0%, rgba(229, 9, 20, 0.05), transparent 70%);
         }
 
-        .main-tabs::-webkit-scrollbar {
-            display: none
+        [data-theme="light"] #channels,
+        [data-theme="light"] #cricketCenter {
+            border-top-color: rgba(229, 9, 20, 0.35);
+            background: radial-gradient(circle at 50% 0%, rgba(229, 9, 20, 0.03), transparent 70%);
+        }
+
+        .main-tabs {
+            display: none !important;
         }
 
         .main-tab {
@@ -538,11 +606,41 @@
         }
 
         .section-kicker {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
             color: var(--red2);
-            font-size: 10px;
+            font-size: 11px;
             font-weight: 850;
             letter-spacing: 1.8px;
-            margin-bottom: 6px
+            padding: 4px 11px;
+            background: rgba(229, 9, 20, 0.1);
+            border: 1px solid rgba(229, 9, 20, 0.25);
+            border-radius: 20px;
+            margin-bottom: 8px;
+        }
+
+        .nav-links a {
+            position: relative;
+            padding-bottom: 4px;
+            transition: color .2s ease;
+        }
+
+        .nav-links a.active {
+            color: var(--red2) !important;
+            font-weight: 800;
+        }
+
+        .nav-links a.active::after {
+            content: "";
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: -6px;
+            height: 2px;
+            background: var(--red2);
+            border-radius: 2px;
+            box-shadow: 0 0 8px var(--red2);
         }
 
         .section-title {
@@ -1394,8 +1492,7 @@
             <div class="brand-mark">CX</div><span class="brand-word" id="brandWord">CRIC<span
                     class="brand-red">FREEX</span></span>
         </div>
-        <nav class="nav-links"><a href="/" id="navCricket">Live Scores</a><a href="?view=channels" id="navChannels">Live
-                Channels</a></nav>
+        <nav class="nav-links"><a href="/" id="navCricket" class="active">Live Matches</a><a href="?view=channels" id="navChannels">Live Channels</a></nav>
         <div class="nav-right">
             <div class="live-chip" id="userCountChip"><span class="pulse"></span><span id="activeUserCount">1</span>
             </div>
@@ -1427,8 +1524,10 @@
             <h1 id="heroTitle">YOUR GAME.<span>YOUR SCREEN.</span></h1>
             <p id="heroText">Live scores, match details, series, rankings and cricket coverage—together in one place.
             </p>
-            <div class="hero-actions"><button class="btn btn-red" id="exploreButton">Live Matches</button><button
-                    class="btn btn-dark" id="watchButton">Live Channels</button></div>
+            <div class="hero-actions" id="heroSwitcher" role="tablist" aria-label="Viewing mode">
+                <button class="btn btn-red mode-tab active" id="exploreButton" type="button" role="tab" aria-selected="true"><span class="mode-icon">🏏</span> Live Matches</button>
+                <button class="btn btn-dark mode-tab" id="watchButton" type="button" role="tab" aria-selected="false"><span class="mode-icon">📺</span> Live Channels</button>
+            </div>
         </div>
     </section>
 
@@ -1520,8 +1619,8 @@
     </footer>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./config.js?v=2"></script>
-    <script src="./app.js?v=17"></script>
-    <script src="./cricket.js?v=17"></script>
+    <script src="./app.js?v=18"></script>
+    <script src="./cricket.js?v=18"></script>
 </body>
 
 </html>

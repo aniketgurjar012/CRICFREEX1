@@ -2109,6 +2109,7 @@
     root.hidden = false;
     channelSection.hidden = true;
     document.body.classList.add("cricket-active");
+    window.setSiteMode?.("matches");
     if (updateUrl) {
       updateCricketURL({ tab: null });
     } else {
@@ -2131,6 +2132,7 @@
     root.hidden = false;
     channelSection.hidden = true;
     document.body.classList.add("cricket-active");
+    window.setSiteMode?.("matches");
     if (updateUrl) {
       updateCricketURL({
         tab: page === "live" ? null : page,
@@ -2176,6 +2178,7 @@
     const episode = params.get("episode");
 
     if (view === "channels" || channel || show || episode) {
+      window.setSiteMode?.("channels");
       return;
     }
 
@@ -2184,6 +2187,7 @@
       root.hidden = false;
       channelSection.hidden = true;
       document.body.classList.add("cricket-active");
+      window.setSiteMode?.("matches");
       renderCenter();
       renderPageContentSafe();
       setTimeout(() => {
@@ -2204,6 +2208,7 @@
     root.hidden = false;
     channelSection.hidden = true;
     document.body.classList.add("cricket-active");
+    window.setSiteMode?.("matches");
 
     if (matchId) {
       const serverNum = server ? parseInt(server, 10) : null;

@@ -10,6 +10,55 @@ window.cricfreexDb = db;
 
 const $ = id => document.getElementById(id);
 
+function setSiteMode(mode) {
+  const exploreBtn = $("exploreButton");
+  const watchBtn = $("watchButton");
+  const navCricket = $("navCricket");
+  const navChannels = $("navChannels");
+  const channelsSec = $("channels");
+  const cricketSec = $("cricketCenter");
+  const mainTabs = $("mainTabs");
+
+  if (mainTabs) mainTabs.hidden = true;
+
+  if (mode === "channels") {
+    document.body.classList.remove("cricket-active");
+    document.body.classList.add("channels-active");
+
+    if (exploreBtn) {
+      exploreBtn.className = "btn btn-dark mode-tab";
+      exploreBtn.setAttribute("aria-selected", "false");
+    }
+    if (watchBtn) {
+      watchBtn.className = "btn btn-red mode-tab active";
+      watchBtn.setAttribute("aria-selected", "true");
+    }
+    if (navCricket) navCricket.classList.remove("active");
+    if (navChannels) navChannels.classList.add("active");
+
+    if (cricketSec) cricketSec.hidden = true;
+    if (channelsSec) channelsSec.hidden = false;
+  } else {
+    document.body.classList.add("cricket-active");
+    document.body.classList.remove("channels-active");
+
+    if (exploreBtn) {
+      exploreBtn.className = "btn btn-red mode-tab active";
+      exploreBtn.setAttribute("aria-selected", "true");
+    }
+    if (watchBtn) {
+      watchBtn.className = "btn btn-dark mode-tab";
+      watchBtn.setAttribute("aria-selected", "false");
+    }
+    if (navCricket) navCricket.classList.add("active");
+    if (navChannels) navChannels.classList.remove("active");
+
+    if (channelsSec) channelsSec.hidden = true;
+    if (cricketSec) cricketSec.hidden = false;
+  }
+}
+window.setSiteMode = setSiteMode;
+
 let settings = null;
 let sections = [];
 let content = [];
@@ -261,26 +310,10 @@ function renderAll() {
 }
 
 function renderTabs() {
-  $("mainTabs").replaceChildren();
-
-  const cricket = document.createElement("button");
-  cricket.type = "button";
-  const cricketActive =
-    $("cricketCenter") &&
-    !$("cricketCenter").hidden;
-  cricket.className =
-    "main-tab cricket-main-tab" +
-    (cricketActive ? " active" : "");
-  cricket.textContent = "🏏 Cricket Centre";
-  cricket.setAttribute("aria-label", "Open Cricket Centre");
-  cricket.setAttribute(
-    "aria-pressed",
-    String(Boolean(cricketActive))
-  );
-  cricket.onclick = () => {
-    window.CricfreexCricket?.open();
-  };
-  $("mainTabs").append(cricket);
+  if ($("mainTabs")) {
+    $("mainTabs").replaceChildren();
+    $("mainTabs").hidden = true;
+  }
 }
 
 function renderFilters() {
@@ -293,8 +326,7 @@ function renderFilters() {
 
   $("filters").style.display = "flex";
 
-  const categories = [
-    "all",
+  const rawCats = [
     ...new Set(
       content
         .filter(
@@ -306,6 +338,23 @@ function renderFilters() {
         .map(x => x.category)
         .filter(Boolean)
     )
+  ];
+
+  // Separate non-"other" categories and "other" so "other" is always last
+  const nonOther = [];
+  let otherCat = null;
+  for (const cat of rawCats) {
+    if (String(cat).trim().toLowerCase() === "other") {
+      otherCat = cat;
+    } else {
+      nonOther.push(cat);
+    }
+  }
+
+  const categories = [
+    "all",
+    ...nonOther,
+    ...(otherCat ? [otherCat] : [])
   ];
 
   categories.forEach(cat => {
@@ -710,10 +759,7 @@ function play(item, update = true) {
     updateURL(item);
   }
 
-  $("cricketCenter").hidden = true;
-  $("channels").hidden = false;
-  $("mainTabs").hidden = false;
-  document.body.classList.remove("cricket-active");
+  setSiteMode("channels");
 
   /*
     Player information.
@@ -1257,10 +1303,7 @@ function openChannelsView(update = true) {
   filter = "all";
   activeSeries = null;
   $("search").value = "";
-  $("cricketCenter").hidden = true;
-  $("channels").hidden = false;
-  $("mainTabs").hidden = false;
-  document.body.classList.remove("cricket-active");
+  setSiteMode("channels");
   renderTabs();
   renderFilters();
   render();
@@ -1347,6 +1390,10 @@ function restoreURL() {
       openSeries(show, false);
     }
   }
+
+  if (!view && !channelId && !episodeId && !showId) {
+    setSiteMode("matches");
+  }
 }
 
 window.addEventListener("popstate", () => {
@@ -1371,14 +1418,16 @@ $("brand").onclick = () => {
 };
 
 $("exploreButton").onclick = () => {
+  setSiteMode("matches");
   window.CricfreexCricket?.selectPage("live", true);
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  $("cricketCenter")?.scrollIntoView({ behavior: "smooth", block: "start" });
 };
 
 $("navCricket")?.addEventListener("click", event => {
   event.preventDefault();
+  setSiteMode("matches");
   window.CricfreexCricket?.selectPage("live", true);
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  $("cricketCenter")?.scrollIntoView({ behavior: "smooth", block: "start" });
 });
 
 $("navChannels")?.addEventListener("click", event => {
