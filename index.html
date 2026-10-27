@@ -501,11 +501,13 @@
             background: transparent;
             text-decoration: none;
             user-select: none;
+            white-space: nowrap;
         }
 
         .mode-tab .mode-icon {
             font-size: 15px;
             display: inline-block;
+            flex-shrink: 0;
         }
 
         .mode-tab:hover {
@@ -1251,8 +1253,50 @@
                 letter-spacing: -3px
             }
 
+            .hero-actions {
+                display: flex;
+                flex-wrap: nowrap;
+                width: 100%;
+                max-width: 380px;
+                gap: 5px;
+                padding: 4px;
+            }
+
+            .mode-tab {
+                flex: 1 1 0;
+                min-width: 0;
+                justify-content: center;
+                padding: 10px 12px;
+                font-size: 12.5px;
+                gap: 6px;
+                white-space: nowrap;
+            }
+
+            .mode-tab .mode-icon {
+                font-size: 14px;
+            }
+
             .page {
                 width: calc(100% - 24px)
+            }
+        }
+
+        @media(max-width:380px) {
+            .hero-actions {
+                max-width: 100%;
+                gap: 3px;
+                padding: 3px;
+            }
+
+            .mode-tab {
+                padding: 9px 8px;
+                font-size: 11px;
+                gap: 4px;
+                letter-spacing: -0.2px;
+            }
+
+            .mode-tab .mode-icon {
+                font-size: 13px;
             }
 
             .channel-grid {
@@ -1619,8 +1663,8 @@
     </footer>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./config.js?v=2"></script>
-    <script src="./app.js?v=18"></script>
-    <script src="./cricket.js?v=18"></script>
+    <script src="./app.js?v=19"></script>
+    <script src="./cricket.js?v=19"></script>
 </body>
 
 </html>
