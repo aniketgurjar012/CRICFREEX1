@@ -14,7 +14,7 @@
             document.documentElement.setAttribute("data-theme", "light");
         }
     </script>
-    <link rel="stylesheet" href="./cricket.css?v=13">
+    <link rel="stylesheet" href="./cricket.css?v=14">
     <style>
         :root {
             --bg: #050507;
@@ -851,8 +851,10 @@
         }
 
         .watch {
-            margin: 15px 0 70px;
-            scroll-margin-top: 85px
+            margin: 28px 0;
+            scroll-margin-top: 85px;
+            width: 100%;
+            box-sizing: border-box;
         }
 
         .watch-head {
@@ -2388,25 +2390,6 @@
             </div>
         </section>
 
-        <!-- Telegram Banner Section -->
-        <section class="telegram-banner-section" aria-label="Join our Telegram Channel">
-            <div class="telegram-banner">
-                <div class="telegram-banner-left">
-                    <div class="telegram-banner-icon" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" width="28" height="28" fill="#ffffff"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.75-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/></svg>
-                    </div>
-                    <div class="telegram-banner-text">
-                        <h3>Join CricFreeX on Telegram</h3>
-                        <p>Get match links, free edits and live updates delivered straight to your phone.</p>
-                    </div>
-                </div>
-                <a href="https://t.me/cricfreex" target="_blank" rel="noopener noreferrer" class="telegram-banner-btn">
-                    <span>Join Channel</span>
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
-                </a>
-            </div>
-        </section>
-
         <section class="watch" id="watch" hidden>
             <div class="watch-head">
                 <div class="watch-left">
@@ -2430,6 +2413,25 @@
         </section>
 
         <section id="cricketWatchPlayer" class="cricket-watch-player-dock" aria-label="Cricket match player" hidden>
+        </section>
+
+        <!-- Telegram Banner Section (Right above footer) -->
+        <section class="telegram-banner-section" aria-label="Join our Telegram Channel">
+            <div class="telegram-banner">
+                <div class="telegram-banner-left">
+                    <div class="telegram-banner-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="28" height="28" fill="#ffffff"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.75-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/></svg>
+                    </div>
+                    <div class="telegram-banner-text">
+                        <h3>Join CricFreeX on Telegram</h3>
+                        <p>Get match links, free edits and live updates delivered straight to your phone.</p>
+                    </div>
+                </div>
+                <a href="https://t.me/cricfreex" target="_blank" rel="noopener noreferrer" class="telegram-banner-btn">
+                    <span>Join Channel</span>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
+                </a>
+            </div>
         </section>
     </main>
     <footer>

@@ -330,8 +330,9 @@ body.cricket-active .cricket-center {
 }
 
 .cricket-watch-player-dock {
-  width: min(1200px, 94%);
-  margin: 0 auto 36px;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 28px 0;
   padding: clamp(16px, 3vw, 28px);
   border: 1px solid var(--cricket-line);
   border-radius: 16px;
