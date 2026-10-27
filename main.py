@@ -1442,6 +1442,69 @@ def delete_suggestion(item_id: str):
     return {"success": True, "deleted": initial_len > len(items)}
 
 
+ACCESS_CONTROL_FILE = PROJECT_DIR / "access_control.json"
+access_lock = threading.Lock()
+
+
+def load_access_control():
+    if not ACCESS_CONTROL_FILE.exists():
+        return {
+            "enabled": True,
+            "password": "CRIC",
+            "telegram_url": "https://t.me/+FIO2pSdFBRBkNDZl",
+            "delay_seconds": 3,
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }
+    try:
+        with open(ACCESS_CONTROL_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            if not isinstance(data, dict):
+                raise ValueError("Invalid format")
+            return data
+    except Exception:
+        return {
+            "enabled": True,
+            "password": "CRIC",
+            "telegram_url": "https://t.me/+FIO2pSdFBRBkNDZl",
+            "delay_seconds": 3,
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }
+
+
+def save_access_control(data):
+    with open(ACCESS_CONTROL_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+
+@app.get("/api/access-control")
+@app.get("/api/access-control/")
+def get_access_control():
+    with access_lock:
+        return load_access_control()
+
+
+class AccessControlPayload(BaseModel):
+    enabled: bool = True
+    password: str
+    telegram_url: str = "https://t.me/+FIO2pSdFBRBkNDZl"
+    delay_seconds: int = 3
+
+
+@app.post("/api/access-control")
+@app.post("/api/access-control/")
+def update_access_control(payload: AccessControlPayload):
+    with access_lock:
+        data = {
+            "enabled": payload.enabled,
+            "password": payload.password.strip(),
+            "telegram_url": payload.telegram_url.strip(),
+            "delay_seconds": max(1, min(60, int(payload.delay_seconds or 3))),
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }
+        save_access_control(data)
+        return {"success": True, "data": data}
+
+
 @app.get("/")
 def home():
     return FileResponse(PROJECT_DIR / "index.html")

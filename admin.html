@@ -113,6 +113,7 @@ if(localStorage.getItem("cricfreex_theme")==="light"){
 <button class="tab active" data-tab="content">Content</button>
 <button class="tab" data-tab="watchLinks">Cricket Watch Links</button>
 <button class="tab" data-tab="suggestions">Requests &amp; Suggestions</button>
+<button class="tab" data-tab="password">Password</button>
 <button class="tab" data-tab="website">Website</button>
 <button class="tab" data-tab="sections">Sections</button>
 </div>
@@ -144,6 +145,34 @@ if(localStorage.getItem("cricfreex_theme")==="light"){
 <div class="actions"><button class="ghost" id="refreshSuggestions" type="button">Refresh</button></div>
 </div>
 <div class="list" id="suggestionsList"></div>
+</section>
+
+<section id="passwordPanel" class="panel hidden">
+<div class="panel-head">
+<div><h2>Password &amp; Telegram Channel</h2><p class="muted">Set daily access password and Telegram channel required for viewers to unlock the website.</p></div>
+<div class="actions"><button class="ghost" id="refreshPasswordGate" type="button">Refresh</button></div>
+</div>
+<form id="passwordGateForm" class="editor">
+<label>Gate Status
+<select id="accessGateEnabled">
+<option value="true">Active (Password Required for All Viewers)</option>
+<option value="false">Disabled (Free Access / No Password)</option>
+</select>
+</label>
+<label>Daily Access Password / Code
+<input type="text" id="accessGatePassword" required placeholder="e.g. CRIC2026" maxlength="50" autocomplete="off">
+</label>
+<label class="wide">Telegram Channel Link (Where viewers get the password)
+<input type="url" id="accessGateTelegramUrl" required placeholder="https://t.me/+FIO2pSdFBRBkNDZl">
+</label>
+<label>Popup Trigger Delay (Seconds)
+<input type="number" id="accessGateDelay" value="3" min="1" max="60">
+</label>
+<div id="passwordGateStatus" class="notice watch-match-status hidden" role="status"></div>
+<div class="editor-actions">
+<button class="primary" id="savePasswordGateBtn" type="submit">Save Password &amp; Link</button>
+</div>
+</form>
 </section>
 
 <section id="websitePanel" class="panel hidden">
@@ -193,6 +222,6 @@ if(localStorage.getItem("cricfreex_theme")==="light"){
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="./config.js?v=2"></script>
-<script src="./admin.js?v=9"></script>
+<script src="./admin.js?v=10"></script>
 </body>
 </html>

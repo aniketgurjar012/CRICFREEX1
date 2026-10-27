@@ -16,6 +16,7 @@ const db=window.supabase.createClient(
 const $=id=>document.getElementById(id);
 
 const CRICKET_WATCH_LINK_PREFIX="__cricket_watch__:";
+const SITE_ACCESS_PREFIX="__site_access__";
 const CRICKET_API_BASE=(location.hostname==="localhost"||location.hostname==="127.0.0.1")
   ? ""
   : String(CONFIG.CRICKET_API_URL||"").replace(/\/+$/,"");
@@ -32,6 +33,11 @@ let matchRequest=0;
 function isCricketWatchLink(item){
   return String(item?.category||"")
     .startsWith(CRICKET_WATCH_LINK_PREFIX);
+}
+
+function isSiteAccessItem(item){
+  return String(item?.public_id||"")===SITE_ACCESS_PREFIX||
+         String(item?.category||"")===SITE_ACCESS_PREFIX;
 }
 
 function cricketWatchMatchId(item){
@@ -278,14 +284,14 @@ async function loadAll(){
 
     $("statSections").textContent=sections.length;
     $("statContent").textContent=
-      content.filter(x=>!isCricketWatchLink(x)).length;
+      content.filter(x=>!isCricketWatchLink(x)&&!isSiteAccessItem(x)).length;
     $("statShows").textContent=
       content.filter(
-        x=>!isCricketWatchLink(x)&&x.kind==="series"
+        x=>!isCricketWatchLink(x)&&!isSiteAccessItem(x)&&x.kind==="series"
       ).length;
     $("statEpisodes").textContent=
       content.filter(
-        x=>!isCricketWatchLink(x)&&x.kind==="episode"
+        x=>!isCricketWatchLink(x)&&!isSiteAccessItem(x)&&x.kind==="episode"
       ).length;
 
     renderContent();
@@ -294,6 +300,7 @@ async function loadAll(){
     fillSelectors();
     cleanupFinishedWatchLinks();
     loadSuggestions();
+    loadPasswordGate();
 
   }catch(error){
     console.error(error);
@@ -345,6 +352,13 @@ document.querySelectorAll(".tab").forEach(button=>{
       );
     }
 
+    if($("passwordPanel")){
+      $("passwordPanel").classList.toggle(
+        "hidden",
+        tab!=="password"
+      );
+    }
+
     $("editorPanel").classList.add("hidden");
     if(tab==="watchLinks"){
       loadCricketMatches(
@@ -352,6 +366,8 @@ document.querySelectorAll(".tab").forEach(button=>{
       );
     }else if(tab==="suggestions"){
       loadSuggestions();
+    }else if(tab==="password"){
+      loadPasswordGate();
     }
   };
 });
@@ -742,7 +758,7 @@ function renderContent(){
   $("contentList").replaceChildren();
 
   const list=content.filter(item=>{
-    if(isCricketWatchLink(item))return false;
+    if(isCricketWatchLink(item)||isSiteAccessItem(item))return false;
     if(!query)return true;
 
     return [
@@ -2047,6 +2063,181 @@ if($("refreshSuggestions")){
 /* =========================================================
    THEME TOGGLE
 ========================================================= */
+
+/* =========================================================
+   PASSWORD & TELEGRAM GATE
+========================================================= */
+
+function getSiteAccessItem(){
+  return content.find(isSiteAccessItem)||null;
+}
+
+async function loadPasswordGate(){
+  const statusEl=$("passwordGateStatus");
+  if(statusEl){
+    statusEl.classList.add("hidden");
+    statusEl.textContent="";
+  }
+
+  let item=getSiteAccessItem();
+
+  if(!item){
+    try{
+      const {data}=await db
+        .from("content")
+        .select("*")
+        .eq("public_id",SITE_ACCESS_PREFIX)
+        .maybeSingle();
+      if(data){
+        item=data;
+        const idx=content.findIndex(x=>x.id===data.id);
+        if(idx>=0)content[idx]=data;
+        else content.push(data);
+      }
+    }catch(e){
+      console.warn("Supabase access fetch error:",e);
+    }
+  }
+
+  if(!item){
+    try{
+      const res=await fetch(`${CRICKET_API_BASE}/api/access-control`);
+      if(res.ok){
+        const json=await res.json();
+        if(json){
+          item={
+            title:json.password||"CRIC",
+            media_url:json.telegram_url||"https://t.me/+FIO2pSdFBRBkNDZl",
+            published:json.enabled!==false,
+            sort_order:json.delay_seconds||3
+          };
+        }
+      }
+    }catch(e){}
+  }
+
+  const enabled=item?(item.published!==false):true;
+  const password=item?(item.title||""):"CRIC";
+  const telegramUrl=item?(item.media_url||""):"https://t.me/+FIO2pSdFBRBkNDZl";
+  const delay=item?(item.sort_order||3):3;
+
+  if($("accessGateEnabled"))$("accessGateEnabled").value=enabled?"true":"false";
+  if($("accessGatePassword"))$("accessGatePassword").value=password;
+  if($("accessGateTelegramUrl"))$("accessGateTelegramUrl").value=telegramUrl;
+  if($("accessGateDelay"))$("accessGateDelay").value=delay;
+}
+
+async function savePasswordGate(event){
+  if(event)event.preventDefault();
+
+  const enabled=$("accessGateEnabled").value==="true";
+  const password=$("accessGatePassword").value.trim();
+  const telegramUrl=$("accessGateTelegramUrl").value.trim();
+  const delay=Math.max(1,Math.min(60,parseInt($("accessGateDelay").value||"3",10)));
+  const statusEl=$("passwordGateStatus");
+  const saveBtn=$("savePasswordGateBtn");
+
+  if(!password){
+    alert("Password cannot be empty.");
+    return;
+  }
+  if(!telegramUrl){
+    alert("Telegram channel link is required.");
+    return;
+  }
+
+  saveBtn.disabled=true;
+  saveBtn.textContent="Saving...";
+
+  let savedOk=false;
+  let errorMsg="";
+
+  // 1. Supabase content table
+  try{
+    const existing=getSiteAccessItem();
+    const payload={
+      public_id:SITE_ACCESS_PREFIX,
+      title:password,
+      media_url:telegramUrl,
+      category:SITE_ACCESS_PREFIX,
+      section_slug:"sports",
+      kind:"system",
+      published:enabled,
+      sort_order:delay,
+      updated_at:new Date().toISOString()
+    };
+    if(existing?.id){
+      payload.id=existing.id;
+    }
+
+    const {data,error}=await db
+      .from("content")
+      .upsert(payload)
+      .select()
+      .maybeSingle();
+
+    if(error)throw error;
+    if(data){
+      const idx=content.findIndex(isSiteAccessItem);
+      if(idx>=0)content[idx]=data;
+      else content.push(data);
+    }
+    savedOk=true;
+  }catch(err){
+    console.warn("Supabase access save error:",err);
+    errorMsg=err.message||"Failed to save to database";
+  }
+
+  // 2. Dual-save to backend API
+  try{
+    const apiPayload={
+      enabled,
+      password,
+      telegram_url:telegramUrl,
+      delay_seconds:delay
+    };
+    const endpoints=[];
+    if(CRICKET_API_BASE)endpoints.push(`${CRICKET_API_BASE}/api/access-control`);
+    endpoints.push("/api/access-control");
+
+    for(const ep of endpoints){
+      try{
+        await fetch(ep,{
+          method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify(apiPayload)
+        });
+        savedOk=true;
+      }catch(e){}
+    }
+  }catch(err){
+    console.warn("API access save error:",err);
+  }
+
+  saveBtn.disabled=false;
+  saveBtn.textContent="Save Password & Link";
+
+  if(statusEl){
+    statusEl.classList.remove("hidden");
+    if(savedOk){
+      statusEl.style.color="var(--green)";
+      statusEl.textContent=`✅ Access password saved! Active password is now "${password}".`;
+      setTimeout(()=>{
+        statusEl.classList.add("hidden");
+      },5000);
+    }else{
+      statusEl.style.color="#ff858c";
+      statusEl.textContent=`Error saving password: ${errorMsg}`;
+    }
+  }
+}
+
+if($("passwordGateForm")){
+  $("passwordGateForm").onsubmit=savePasswordGate;
+}
+if($("refreshPasswordGate")){
+  $("refreshPasswordGate").onclick=()=>loadPasswordGate();
+}
 
 function setupAdminTheme(){
   function updateTheme(theme){

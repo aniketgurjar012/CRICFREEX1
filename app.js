@@ -95,9 +95,16 @@ const esc = v =>
     }[c])
   );
 
+const SITE_ACCESS_PREFIX = "__site_access__";
+
 function isCricketWatchLink(item) {
   return String(item?.category || "")
     .startsWith(CRICKET_WATCH_LINK_PREFIX);
+}
+
+function isSiteAccessItem(item) {
+  return String(item?.public_id || "") === SITE_ACCESS_PREFIX ||
+         String(item?.category || "") === SITE_ACCESS_PREFIX;
 }
 
 function cricketWatchMatchId(item) {
@@ -344,6 +351,7 @@ function renderFilters() {
         .filter(
           x =>
             !isCricketWatchLink(x) &&
+            !isSiteAccessItem(x) &&
             x.section_slug === section &&
             !x.parent_id
         )
@@ -533,6 +541,7 @@ function render() {
 
   const list = content.filter(x =>
     !isCricketWatchLink(x) &&
+    !isSiteAccessItem(x) &&
     x.section_slug === section &&
     !x.parent_id &&
     x.kind !== "episode" &&
@@ -1833,44 +1842,239 @@ function initChannelClose() {
   window.CricfreexApp = { closeChannelPlayer, openChannelsView };
 }
 
-function initTelegramModal() {
-  const modal = document.getElementById("telegramModal");
+/* =========================================================
+   SITE ACCESS / PASSWORD GATEKEEPER
+========================================================= */
+
+let siteAccessConfig = {
+  enabled: true,
+  password: "CRIC",
+  telegram_url: "https://t.me/+FIO2pSdFBRBkNDZl",
+  delay_seconds: 3
+};
+
+let siteAccessUnlocked = false;
+let gateTimer = null;
+
+function isSiteUnlocked() {
+  if (!siteAccessConfig.enabled || !siteAccessConfig.password) return true;
+  return siteAccessUnlocked;
+}
+window.isSiteUnlocked = isSiteUnlocked;
+
+async function fetchSiteAccessConfig() {
+  const item = (content || []).find(isSiteAccessItem);
+  if (item) {
+    siteAccessConfig = {
+      enabled: item.published !== false,
+      password: String(item.title || "").trim(),
+      telegram_url: String(item.media_url || "https://t.me/+FIO2pSdFBRBkNDZl").trim(),
+      delay_seconds: Math.max(1, Math.min(60, parseInt(item.sort_order || 3, 10)))
+    };
+    return siteAccessConfig;
+  }
+
+  try {
+    const endpoints = [];
+    if (C.CRICKET_API_URL) endpoints.push(`${C.CRICKET_API_URL}/api/access-control`);
+    endpoints.push("/api/access-control");
+
+    for (const ep of endpoints) {
+      try {
+        const res = await fetch(ep, { headers: { Accept: "application/json" } });
+        if (res.ok) {
+          const json = await res.json();
+          if (json && json.password) {
+            siteAccessConfig = {
+              enabled: json.enabled !== false,
+              password: String(json.password || "").trim(),
+              telegram_url: String(json.telegram_url || "https://t.me/+FIO2pSdFBRBkNDZl").trim(),
+              delay_seconds: Math.max(1, Math.min(60, parseInt(json.delay_seconds || 3, 10)))
+            };
+            return siteAccessConfig;
+          }
+        }
+      } catch (e) {}
+    }
+  } catch (e) {}
+
+  return siteAccessConfig;
+}
+
+function initSiteAccessGate() {
+  const modal = document.getElementById("siteAccessModal");
   if (!modal) return;
 
-  const backdrop = document.getElementById("tgModalBackdrop");
-  const closeBtn = document.getElementById("tgModalClose");
-  const dismissBtn = document.getElementById("tgModalDismiss");
-  const joinBtn = document.getElementById("tgModalJoin");
+  const form = document.getElementById("siteAccessForm");
+  const input = document.getElementById("gatePasswordInput");
+  const submitBtn = document.getElementById("gateSubmitBtn");
+  const tgBtn = document.getElementById("gateTelegramBtn");
+  const errorMsg = document.getElementById("gateErrorMsg");
+  const card = document.getElementById("siteAccessCard");
 
-  let repeatTimer = null;
-
-  function showModal() {
+  function showGate() {
+    if (isSiteUnlocked()) return;
     modal.hidden = false;
     modal.removeAttribute("hidden");
-    document.body.classList.add("tg-modal-open");
+    document.body.classList.add("site-access-locked");
+
+    try {
+      const channelIframe = document.querySelector("#channelPlayer iframe");
+      if (channelIframe && !channelIframe.dataset.paused) {
+        channelIframe.dataset.paused = "true";
+      }
+      const cricketIframe = document.querySelector("#cricketWatchPlayer iframe");
+      if (cricketIframe && !cricketIframe.dataset.paused) {
+        cricketIframe.dataset.paused = "true";
+      }
+    } catch (e) {}
+
+    setTimeout(() => {
+      input?.focus();
+    }, 150);
   }
 
-  function hideModal() {
+  function hideGate() {
     modal.hidden = true;
     modal.setAttribute("hidden", "");
-    document.body.classList.remove("tg-modal-open");
-    scheduleNext();
+    document.body.classList.remove("site-access-locked");
   }
 
-  function scheduleNext() {
-    if (repeatTimer) clearTimeout(repeatTimer);
-    repeatTimer = setTimeout(showModal, 5 * 60 * 1000);
+  function checkStoredAuth() {
+    if (!siteAccessConfig.enabled || !siteAccessConfig.password) {
+      siteAccessUnlocked = true;
+      hideGate();
+      return true;
+    }
+
+    const stored = (localStorage.getItem("cricfreex_auth_pass") || sessionStorage.getItem("cricfreex_auth_pass") || "").trim();
+    if (stored && stored.toLowerCase() === siteAccessConfig.password.toLowerCase()) {
+      siteAccessUnlocked = true;
+      hideGate();
+      return true;
+    }
+
+    siteAccessUnlocked = false;
+    return false;
   }
 
-  closeBtn?.addEventListener("click", hideModal);
-  dismissBtn?.addEventListener("click", hideModal);
-  backdrop?.addEventListener("click", hideModal);
+  async function syncAndSchedule() {
+    await fetchSiteAccessConfig();
 
-  joinBtn?.addEventListener("click", () => {
-    setTimeout(hideModal, 400);
+    if (tgBtn && siteAccessConfig.telegram_url) {
+      tgBtn.href = siteAccessConfig.telegram_url;
+    }
+    document.querySelectorAll(".telegram-banner-btn").forEach(btn => {
+      if (siteAccessConfig.telegram_url) btn.href = siteAccessConfig.telegram_url;
+    });
+
+    const alreadyAuth = checkStoredAuth();
+    if (alreadyAuth) return;
+
+    if (gateTimer) clearTimeout(gateTimer);
+    const delayMs = (siteAccessConfig.delay_seconds || 3) * 1000;
+    gateTimer = setTimeout(showGate, delayMs);
+  }
+
+  function clearError() {
+    if (!errorMsg) return;
+    errorMsg.textContent = "";
+    errorMsg.className = "site-access-error hidden";
+    errorMsg.style.display = "none";
+  }
+
+  function showError(msg) {
+    if (!errorMsg) return;
+    errorMsg.textContent = msg;
+    errorMsg.className = "site-access-error visible";
+    errorMsg.style.display = "block";
+  }
+
+  function verifyPassword() {
+    const val = (input?.value || "").trim();
+    if (!val) {
+      showError("Please enter an access code.");
+      input?.focus();
+      return;
+    }
+
+    const expected = (siteAccessConfig.password || "").trim();
+    if (val.toLowerCase() === expected.toLowerCase()) {
+      siteAccessUnlocked = true;
+      try {
+        localStorage.setItem("cricfreex_auth_pass", expected);
+        sessionStorage.setItem("cricfreex_auth_pass", expected);
+      } catch (e) {}
+
+      if (errorMsg) {
+        errorMsg.textContent = "✅ Access code verified! Unlocking stream...";
+        errorMsg.className = "site-access-error visible success";
+        errorMsg.style.display = "block";
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<span>Access Granted!</span>';
+
+      setTimeout(() => {
+        hideGate();
+        clearError();
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg><span>Unlock Live Stream</span>';
+      }, 650);
+    } else {
+      showError("Invalid access code. Please check today's code on our Telegram channel and try again.");
+      if (card) {
+        card.classList.remove("gate-shake");
+        void card.offsetWidth;
+        card.classList.add("gate-shake");
+      }
+      input?.focus();
+      input?.select();
+    }
+  }
+
+  input?.addEventListener("input", () => {
+    clearError();
   });
 
-  setTimeout(showModal, 10000);
+  form?.addEventListener("submit", (e) => {
+    e.preventDefault();
+    verifyPassword();
+  });
+
+  submitBtn?.addEventListener("click", (e) => {
+    e.preventDefault();
+    verifyPassword();
+  });
+
+  window.addEventListener("keydown", (e) => {
+    if (!isSiteUnlocked() && !modal.hidden) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }
+  }, true);
+
+  if (window.MutationObserver) {
+    const observer = new MutationObserver(() => {
+      if (!isSiteUnlocked()) {
+        if (modal.hidden || modal.hasAttribute("hidden") || modal.style.display === "none") {
+          modal.hidden = false;
+          modal.removeAttribute("hidden");
+          modal.style.removeProperty("display");
+          document.body.classList.add("site-access-locked");
+        }
+      }
+    });
+    observer.observe(modal, { attributes: true, attributeFilter: ["hidden", "style", "class"] });
+  }
+
+  // Pre-schedule 3 seconds default
+  gateTimer = setTimeout(showGate, 3000);
+
+  // Sync configuration from db/api
+  syncAndSchedule();
 }
 
 async function start() {
@@ -1878,8 +2082,13 @@ async function start() {
   initActiveUsersTracking();
   initSuggestionBox();
   initChannelClose();
-  initTelegramModal();
+  initSiteAccessGate();
   await load();
+
+  // Re-sync with loaded content
+  if (typeof fetchSiteAccessConfig === "function") {
+    fetchSiteAccessConfig();
+  }
 
   if (!restored) {
     restored = true;

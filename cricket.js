@@ -921,6 +921,11 @@
 
   function renderWatchPlayer() {
     if (!watchPlayer) return;
+    if (typeof window.isSiteUnlocked === "function" && !window.isSiteUnlocked()) {
+      watchPlayer.replaceChildren();
+      watchPlayer.hidden = true;
+      return;
+    }
     watchPlayer.replaceChildren();
     const active = state.activeWatch;
     watchPlayer.hidden = !active;
