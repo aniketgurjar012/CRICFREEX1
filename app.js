@@ -1945,7 +1945,8 @@ function initSiteAccessGate() {
   const card = document.getElementById("siteAccessCard");
 
   function showGate() {
-    if (isSiteUnlocked()) return;
+    if (siteAccessUnlocked || isSiteUnlocked()) return;
+    if (!siteAccessConfig.enabled || !siteAccessConfig.password) return;
     modal.hidden = false;
     modal.removeAttribute("hidden");
     document.body.classList.add("site-access-locked");
@@ -1979,13 +1980,15 @@ function initSiteAccessGate() {
       return true;
     }
 
-    // Require password on every page reload and every time site opens
-    try { 
-      localStorage.removeItem("cricfreex_auth_pass"); 
-      sessionStorage.removeItem("cricfreex_auth_pass"); 
-    } catch (e) {}
+    if (siteAccessUnlocked) return true;
 
-    siteAccessUnlocked = false;
+    const stored = (sessionStorage.getItem("cricfreex_auth_pass") || "").trim();
+    if (stored && stored.toLowerCase() === siteAccessConfig.password.toLowerCase()) {
+      siteAccessUnlocked = true;
+      hideGate();
+      return true;
+    }
+
     return false;
   }
 
@@ -1999,8 +2002,15 @@ function initSiteAccessGate() {
       if (siteAccessConfig.telegram_url) btn.href = siteAccessConfig.telegram_url;
     });
 
-    const alreadyAuth = checkStoredAuth();
-    if (alreadyAuth) return;
+    // If user already unlocked on this page, NEVER lock them again!
+    if (siteAccessUnlocked || checkStoredAuth()) {
+      if (gateTimer) {
+        clearTimeout(gateTimer);
+        gateTimer = null;
+      }
+      hideGate();
+      return;
+    }
 
     if (gateTimer) clearTimeout(gateTimer);
     const delayMs = (siteAccessConfig.delay_seconds || 3) * 1000;
@@ -2032,6 +2042,10 @@ function initSiteAccessGate() {
     const expected = (siteAccessConfig.password || "").trim();
     if (val.toLowerCase() === expected.toLowerCase()) {
       siteAccessUnlocked = true;
+      if (gateTimer) {
+        clearTimeout(gateTimer);
+        gateTimer = null;
+      }
       try {
         sessionStorage.setItem("cricfreex_auth_pass", expected);
         localStorage.removeItem("cricfreex_auth_pass");
@@ -2101,17 +2115,8 @@ function initSiteAccessGate() {
     observer.observe(modal, { attributes: true, attributeFilter: ["hidden", "style", "class"] });
   }
 
-  // Pre-schedule 3 seconds default
-  gateTimer = setTimeout(showGate, 3000);
-
-  // Sync configuration from db/api and listen for updates
+  // Initial trigger: runs once on page load
   syncAndSchedule();
-  window.addEventListener("cricfreex:content-updated", () => {
-    syncAndSchedule();
-  });
-  setInterval(() => {
-    syncAndSchedule();
-  }, 20000);
 }
 
 async function start() {
