@@ -174,6 +174,332 @@
 
   const apiURL = path => `${apiBase}${path}`;
 
+  const COUNTRY_FLAGS = {
+    "india": "in", "ind": "in", "bharat": "in",
+    "australia": "au", "aus": "au",
+    "england": "gb-eng", "eng": "gb-eng", "great britain": "gb",
+    "pakistan": "pk", "pak": "pk",
+    "south africa": "za", "sa": "za", "rsa": "za",
+    "new zealand": "nz", "nz": "nz",
+    "west indies": "wi", "wi": "wi", "windies": "wi",
+    "sri lanka": "lk", "sl": "lk",
+    "bangladesh": "bd", "ban": "bd", "bangla": "bd", "bcb": "bd", "bangladesh cricket board": "bd",
+    "afghanistan": "af", "afg": "af",
+    "nepal": "np", "nep": "np",
+    "united states": "us", "usa": "us", "united states of america": "us",
+    "zimbabwe": "zw", "zim": "zw",
+    "ireland": "ie", "ire": "ie",
+    "netherlands": "nl", "ned": "nl", "dutch": "nl",
+    "scotland": "gb-sct", "sco": "gb-sct",
+    "united arab emirates": "ae", "uae": "ae",
+    "oman": "om", "omn": "om",
+    "namibia": "na", "nam": "na",
+    "canada": "ca", "can": "ca",
+    "uganda": "ug", "uga": "ug",
+    "papua new guinea": "pg", "png": "pg",
+    "kuwait": "kw", "kuw": "kw",
+    "gambia": "gm", "gam": "gm",
+    "lesotho": "ls", "les": "ls",
+    "zambia": "zm", "zam": "zm",
+    "mozambique": "mz", "moz": "mz",
+    "eswatini": "sz", "swaziland": "sz",
+    "cameroon": "cm", "cmr": "cm",
+    "mali": "ml",
+    "seychelles": "sc", "sey": "sc",
+    "qatar": "qa", "qat": "qa",
+    "jersey": "je", "jer": "je",
+    "guernsey": "gg", "gue": "gg",
+    "hong kong": "hk", "hkg": "hk",
+    "singapore": "sg", "sgp": "sg", "sin": "sg",
+    "malaysia": "my", "mas": "my", "mly": "my",
+    "italy": "it", "ita": "it",
+    "germany": "de", "ger": "de",
+    "spain": "es", "esp": "es",
+    "kenya": "ke", "ken": "ke",
+    "bermuda": "bm", "ber": "bm",
+    "bahrain": "bh", "bhr": "bh",
+    "saudi arabia": "sa", "ksa": "sa", "sau": "sa",
+    "thailand": "th", "tha": "th",
+    "japan": "jp", "jpn": "jp",
+    "vanuatu": "vu", "van": "vu",
+    "nigeria": "ng", "nga": "ng", "nig": "ng",
+    "tanzania": "tz", "tan": "tz",
+    "rwanda": "rw", "rwa": "rw",
+    "malawi": "mw", "maw": "mw",
+    "botswana": "bw", "bot": "bw",
+    "ghana": "gh", "gha": "gh",
+    "sierra leone": "sl", "sle": "sl",
+    "indonesia": "id", "ina": "id",
+    "bhutan": "bt", "bhu": "bt",
+    "maldives": "mv", "mdv": "mv",
+    "cayman islands": "ky", "cay": "ky",
+    "argentina": "ar", "arg": "ar",
+    "brazil": "br", "bra": "br",
+    "denmark": "dk", "den": "dk",
+    "norway": "no", "nor": "no",
+    "sweden": "se", "swe": "se",
+    "finland": "fi", "fin": "fi",
+    "france": "fr", "fra": "fr",
+    "belgium": "be", "bel": "be",
+    "austria": "at", "aut": "at",
+    "switzerland": "ch", "sui": "ch",
+    "portugal": "pt", "por": "pt",
+    "isle of man": "im", "iom": "im",
+    "gibraltar": "gi", "gib": "gi",
+    "czech republic": "cz", "czechia": "cz", "cze": "cz",
+    "romania": "ro", "rou": "ro",
+    "hungary": "hu", "hun": "hu",
+    "bulgaria": "bg", "bul": "bg",
+    "croatia": "hr", "cro": "hr",
+    "serbia": "rs", "srb": "rs",
+    "cyprus": "cy", "cyp": "cy",
+    "malta": "mt", "mlt": "mt",
+    "luxembourg": "lu", "lux": "lu",
+    "greece": "gr", "gre": "gr",
+    "turkey": "tr", "turkiye": "tr", "tur": "tr"
+  };
+
+  const INDIAN_TEAMS = new Set([
+    "csk", "chennai super kings", "mi", "mumbai indians", "rcb", "royal challengers bangalore", "royal challengers bengaluru",
+    "kkr", "kolkata knight riders", "dc", "delhi capitals", "srh", "sunrisers hyderabad", "rr", "rajasthan royals",
+    "pbks", "punjab kings", "kings xi punjab", "kxip", "gt", "gujarat titans", "lsg", "lucknow super giants",
+    "up warriorz", "gujarat giants", "mumbai indians women", "delhi capitals women", "royal challengers bangalore women",
+    "mumbai", "baroda", "delhi", "karnataka", "bengal", "saurashtra", "tamil nadu", "maharashtra", "uttar pradesh",
+    "madhya pradesh", "gujarat", "punjab", "rajasthan", "haryana", "vidarbha", "andhra", "hyderabad", "kerala",
+    "railways", "services", "jammu & kashmir", "jammu and kashmir", "j&k", "j & k", "himachal pradesh", "jharkhand",
+    "assam", "goa", "tripura", "odisha", "orissa", "chhattisgarh", "chandigarh", "uttarakhand", "pondicherry",
+    "puducherry", "bihar", "manipur", "meghalaya", "mizoram", "nagaland", "sikkim", "arunachal pradesh",
+    "rest of india", "india a", "india b", "india c", "india d", "india blue", "india red", "india green"
+  ]);
+
+  const SA_TEAMS = new Set([
+    "mi cape town", "paarl royals", "pretoria capitals", "sunrisers eastern cape", "joburg super kings", "durban's super giants", "durbans super giants",
+    "titans", "dolphins", "lions", "western province", "warriors", "knights", "boland", "north west", "south africa a"
+  ]);
+
+  const NEPAL_TEAMS = new Set([
+    "biratnagar kings", "janakpur bolts", "kathmandu gurkhas", "pokhara avengers", "chitwan rhinos", "sudurpaschim royals",
+    "karnali yaks", "lumbini lions", "armed police force", "apf club", "nepal police club", "tribhuwan army club",
+    "tribhuvan army club", "bagmati province", "gandaki province", "koshi province", "lumbini province",
+    "karnali province", "sudurpaschim province", "madhesh province"
+  ]);
+
+  const USA_TEAMS = new Set([
+    "texas super kings", "mi new york", "los angeles knight riders", "san francisco unicorns", "seattle orcas", "washington freedom",
+    "atlanta fire", "silicon valley strikers", "dallas mustangs", "east bay blazers", "houston hurricanes", "morrisville raptors"
+  ]);
+
+  const AUS_TEAMS = new Set([
+    "adelaide strikers", "brisbane heat", "hobart hurricanes", "melbourne renegades", "melbourne stars", "perth scorchers", "sydney sixers", "sydney thunder",
+    "new south wales", "victoria", "queensland", "western australia", "south australia", "tasmania", "australia a"
+  ]);
+
+  const ENG_TEAMS = new Set([
+    "birmingham phoenix", "london spirit", "manchester originals", "northern superchargers", "oval invincibles", "southern brave", "trent rockets", "welsh fire",
+    "yorkshire", "surrey", "lancashire", "warwickshire", "somerset", "hampshire", "essex", "nottinghamshire", "middlesex", "kent", "sussex",
+    "gloucestershire", "glamorgan", "durham", "northamptonshire", "leicestershire", "derbyshire", "worcestershire", "england lions"
+  ]);
+
+  const PAK_TEAMS = new Set([
+    "islamabad united", "karachi kings", "lahore qalandars", "multan sultans", "peshawar zalmi", "quetta gladiators",
+    "sindh", "balochistan", "khyber pakhtunkhwa", "central punjab", "southern punjab", "northern", "rawalpindi", "peshawar", "lahore", "karachi", "sialkot", "abbottabad", "faisalabad", "wapda", "sngpl", "pakistan shaheens", "pakistan a"
+  ]);
+
+  const WI_TEAMS = new Set([
+    "barbados royals", "guyana amazon warriors", "jamaica tallawahs", "st kitts & nevis patriots", "st kitts and nevis patriots", "saint lucia kings", "trinbago knight riders", "antigua & barbuda falcons", "antigua and barbuda falcons",
+    "barbados", "guyana", "jamaica", "trinidad & tobago", "trinidad and tobago", "leeward islands", "windward islands", "combined campuses and colleges", "west indies academy", "west indies a"
+  ]);
+
+  const NZ_TEAMS = new Set([
+    "auckland", "canterbury", "central districts", "northern districts", "otago", "wellington",
+    "auckland aces", "canterbury kings", "central stags", "northern brave", "otago volts", "wellington firebirds", "new zealand a", "new zealand xi"
+  ]);
+
+  const BD_TEAMS = new Set([
+    "comilla victorians", "fortune barishal", "rangpur riders", "sylhet strikers", "chattogram challengers", "dhaka dominators", "khulna tigers", "durdanto dhaka",
+    "bcb xi", "bangladesh a", "dhaka division", "rajshahi", "rangpur", "sylhet", "khulna", "barisal", "chittagong", "abahani limited", "mohammedan sporting"
+  ]);
+
+  const LK_TEAMS = new Set([
+    "colombo strikers", "dambulla sixers", "galle marvels", "jaffna kings", "kandy falcons", "b-love kandy", "jaffna stallions",
+    "slc reds", "slc blues", "ssc", "ncc", "colts", "sri lanka a"
+  ]);
+
+  function getTeamFlagCode(rawName, seriesContext = "") {
+    if (!rawName || typeof rawName !== "string") return null;
+    const name = rawName.trim().toLowerCase()
+      .replace(/-w$/i, "")
+      .replace(/-m$/i, "")
+      .replace(/-u19$/i, "")
+      .replace(/\s+(women|men|u19|under-19|u-19|xi|a|b|c|d|academy|lions|shaheens)$/i, "")
+      .trim();
+    const rawLower = rawName.trim().toLowerCase();
+    const series = String(seriesContext || "").toLowerCase();
+
+    if (COUNTRY_FLAGS[name]) return COUNTRY_FLAGS[name];
+    if (COUNTRY_FLAGS[rawLower]) return COUNTRY_FLAGS[rawLower];
+
+    if (INDIAN_TEAMS.has(name) || INDIAN_TEAMS.has(rawLower)) return "in";
+    if (SA_TEAMS.has(name) || SA_TEAMS.has(rawLower)) return "za";
+    if (NEPAL_TEAMS.has(name) || NEPAL_TEAMS.has(rawLower)) return "np";
+    if (USA_TEAMS.has(name) || USA_TEAMS.has(rawLower)) return "us";
+    if (AUS_TEAMS.has(name) || AUS_TEAMS.has(rawLower)) return "au";
+    if (ENG_TEAMS.has(name) || ENG_TEAMS.has(rawLower)) return "gb-eng";
+    if (PAK_TEAMS.has(name) || PAK_TEAMS.has(rawLower)) return "pk";
+    if (WI_TEAMS.has(name) || WI_TEAMS.has(rawLower)) return "wi";
+    if (NZ_TEAMS.has(name) || NZ_TEAMS.has(rawLower)) return "nz";
+    if (BD_TEAMS.has(name) || BD_TEAMS.has(rawLower)) return "bd";
+    if (LK_TEAMS.has(name) || LK_TEAMS.has(rawLower)) return "lk";
+
+    for (const [key, code] of Object.entries(COUNTRY_FLAGS)) {
+      if (key.length >= 4 && (name.includes(key) || rawLower.includes(key))) {
+        return code;
+      }
+    }
+
+    if (/ranji|smat|mushtaq|ipl|wpl|vijay hazare|duleep|irani|deodhar|ck nayudu|cooch behar|tnpl|up t20|maharaja|mpl/i.test(series)) return "in";
+    if (/sa20|csa/i.test(series)) return "za";
+    if (/nepal|npl|pm cup/i.test(series)) return "np";
+    if (/mlc|major league cricket|minor league/i.test(series)) return "us";
+    if (/bbl|big bash|wbbl|sheffield shield|marsh cup/i.test(series)) return "au";
+    if (/the hundred|vitality blast|t20 blast|county champ/i.test(series)) return "gb-eng";
+    if (/psl|pakistan super league|national t20|quaid-e-azam/i.test(series)) return "pk";
+    if (/cpl|caribbean premier league|regional 4-day|super50/i.test(series)) return "wi";
+    if (/super smash|ford trophy|plunket shield/i.test(series)) return "nz";
+    if (/bpl|bangladesh premier league|dhaka premier/i.test(series)) return "bd";
+    if (/lpl|lanka premier league/i.test(series)) return "lk";
+
+    for (const [key, code] of Object.entries(COUNTRY_FLAGS)) {
+      if (key.length >= 4 && series.includes(key)) {
+        return code;
+      }
+    }
+
+    return null;
+  }
+
+  function getTeamFlagElement(rawName, seriesContext = "") {
+    if (!rawName) return null;
+    const code = getTeamFlagCode(rawName, seriesContext);
+    if (code === "wi") {
+      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      svg.setAttribute("viewBox", "0 0 28 21");
+      svg.setAttribute("class", "cricket-flag-icon");
+      svg.setAttribute("aria-hidden", "true");
+      svg.innerHTML = '<rect width="28" height="21" rx="2" fill="#7B002C"/><circle cx="14" cy="9.5" r="5" fill="#FDB913"/><path d="M14 6v8 M12 14h4" stroke="#006847" stroke-width="1.5" stroke-linecap="round"/><path d="M14 8c-2-2-4-1-5 1c2-1 4-1 5-1z M14 8c2-2 4-1 5 1c-2-1-4-1-5-1z" fill="#006847"/>';
+      return svg;
+    }
+    if (code) {
+      const img = document.createElement("img");
+      img.className = "cricket-flag-img";
+      img.src = `https://flagcdn.com/28x21/${code}.png`;
+      img.srcset = `https://flagcdn.com/56x42/${code}.png 2x`;
+      img.alt = "";
+      img.loading = "lazy";
+      img.width = 18;
+      img.height = 13;
+      img.onerror = () => { img.style.display = "none"; };
+      return img;
+    }
+    const badge = document.createElement("span");
+    badge.className = "cricket-flag-badge";
+    const initials = String(rawName).trim().slice(0, 2).toUpperCase();
+    badge.textContent = initials;
+    return badge;
+  }
+
+  const IPL_LOGOS = {
+    "csk": "https://raw.githubusercontent.com/sarvesharora/ipl/master/assets/team-logo/csk.png",
+    "chennai super kings": "https://raw.githubusercontent.com/sarvesharora/ipl/master/assets/team-logo/csk.png",
+    "mi": "https://raw.githubusercontent.com/sarvesharora/ipl/master/assets/team-logo/mi.png",
+    "mumbai indians": "https://raw.githubusercontent.com/sarvesharora/ipl/master/assets/team-logo/mi.png",
+    "rcb": "https://raw.githubusercontent.com/sarvesharora/ipl/master/assets/team-logo/rcb.png",
+    "royal challengers bangalore": "https://raw.githubusercontent.com/sarvesharora/ipl/master/assets/team-logo/rcb.png",
+    "royal challengers bengaluru": "https://raw.githubusercontent.com/sarvesharora/ipl/master/assets/team-logo/rcb.png",
+    "kkr": "https://raw.githubusercontent.com/sarvesharora/ipl/master/assets/team-logo/kkr.png",
+    "kolkata knight riders": "https://raw.githubusercontent.com/sarvesharora/ipl/master/assets/team-logo/kkr.png",
+    "dc": "https://raw.githubusercontent.com/sarvesharora/ipl/master/assets/team-logo/dc.png",
+    "delhi capitals": "https://raw.githubusercontent.com/sarvesharora/ipl/master/assets/team-logo/dc.png",
+    "rr": "https://raw.githubusercontent.com/sarvesharora/ipl/master/assets/team-logo/rr.png",
+    "rajasthan royals": "https://raw.githubusercontent.com/sarvesharora/ipl/master/assets/team-logo/rr.png",
+    "srh": "https://raw.githubusercontent.com/sarvesharora/ipl/master/assets/team-logo/srh.png",
+    "sunrisers hyderabad": "https://raw.githubusercontent.com/sarvesharora/ipl/master/assets/team-logo/srh.png",
+    "pbks": "https://raw.githubusercontent.com/sarvesharora/ipl/master/assets/team-logo/kp.png",
+    "punjab kings": "https://raw.githubusercontent.com/sarvesharora/ipl/master/assets/team-logo/kp.png",
+    "gt": "https://images.seeklogo.com/logo-png/43/2/gujarat-titans-ipl-logo-png_seeklogo-431226.png",
+    "gujarat titans": "https://images.seeklogo.com/logo-png/43/2/gujarat-titans-ipl-logo-png_seeklogo-431226.png",
+    "lsg": "https://images.seeklogo.com/logo-png/46/1/lucknow-super-giants-logo-png_seeklogo-465449.png",
+    "lucknow super giants": "https://images.seeklogo.com/logo-png/46/1/lucknow-super-giants-logo-png_seeklogo-465449.png"
+  };
+
+  function getTeamVisualElement(teamOrName, seriesContext = "") {
+    if (!teamOrName) return null;
+    let teamName = "";
+    let imageId = null;
+    if (typeof teamOrName === "object" && teamOrName) {
+      teamName = teamOrName.teamName || teamOrName.teamSName || "Team";
+      imageId = teamOrName.imageId;
+    } else {
+      teamName = String(teamOrName || "Team");
+    }
+
+    const nameLower = teamName.trim().toLowerCase();
+    const seriesLower = String(seriesContext || "").toLowerCase();
+
+    // 1. Dedicated IPL team logo
+    if (IPL_LOGOS[nameLower]) {
+      const img = document.createElement("img");
+      img.className = "cricket-flag-img cricket-team-logo-img";
+      img.src = IPL_LOGOS[nameLower];
+      img.alt = teamName;
+      img.loading = "lazy";
+      img.width = 17;
+      img.height = 17;
+      img.onerror = () => {
+        if (imageId) {
+          img.src = `https://static.cricbuzz.com/a/img/v1/i1/c${imageId}/i.jpg`;
+        } else {
+          img.style.display = "none";
+        }
+      };
+      return img;
+    }
+
+    // 2. Domestic state or league team logo from Cricbuzz (Ranji Trophy, SMAT, Vijay Hazare, SA20, BBL, etc.)
+    const isDomesticOrLeagueMatch = /ranji|smat|mushtaq|ipl|wpl|vijay hazare|duleep|irani|deodhar|bbl|big bash|wbbl|sa20|super smash|hundred|blast|psl|cpl/i.test(seriesLower);
+    const isDomesticTeam = INDIAN_TEAMS.has(nameLower) || SA_TEAMS.has(nameLower) || AUS_TEAMS.has(nameLower) || ENG_TEAMS.has(nameLower) || PAK_TEAMS.has(nameLower) || WI_TEAMS.has(nameLower) || NZ_TEAMS.has(nameLower);
+
+    if (imageId && (isDomesticOrLeagueMatch || isDomesticTeam)) {
+      const img = document.createElement("img");
+      img.className = "cricket-flag-img cricket-team-logo-img";
+      img.src = `https://static.cricbuzz.com/a/img/v1/i1/c${imageId}/i.jpg`;
+      img.alt = teamName;
+      img.loading = "lazy";
+      img.width = 17;
+      img.height = 17;
+      img.onerror = () => {
+        const flag = getTeamFlagElement(teamName, seriesContext);
+        if (flag) img.replaceWith(flag);
+        else img.style.display = "none";
+      };
+      return img;
+    }
+
+    // 3. Country flag for international matches & teams
+    return getTeamFlagElement(teamName, seriesContext);
+  }
+
+  function renderTeamSpan(teamOrName, seriesContext = "", extraClass = "") {
+    const teamName = typeof teamOrName === "object" && teamOrName
+      ? (teamOrName.teamName || teamOrName.teamSName || "Team")
+      : (teamOrName || "Team");
+    const span = element("span", `cricket-team-name ${extraClass}`.trim());
+    const visual = getTeamVisualElement(teamOrName, seriesContext);
+    if (visual) span.appendChild(visual);
+    span.appendChild(document.createTextNode(teamName));
+    return span;
+  }
+
   function updateCricketURL(params, push = true) {
     const u = new URL(location.href);
     u.hash = "";
@@ -439,7 +765,7 @@
         : "Yet to bat";
       const row = element("div", "cricket-team-row");
       row.append(
-        element("span", "cricket-team-name", team?.teamName || team?.teamSName || "Team"),
+        renderTeamSpan(team, match.series),
         element("strong", "cricket-team-score", scoreText)
       );
       teams.appendChild(row);
@@ -689,9 +1015,15 @@
   function directoryCard(item, label, onClick) {
     const card = element("button", "cricket-directory-card");
     card.type = "button";
+    const titleSpan = element("span", "cricket-directory-title");
+    if (label && /team/i.test(label)) {
+      const visual = getTeamVisualElement(item.title);
+      if (visual) titleSpan.appendChild(visual);
+    }
+    titleSpan.appendChild(document.createTextNode(item.title));
     card.append(
       element("span", "cricket-directory-label", label),
-      element("span", "cricket-directory-title", item.title),
+      titleSpan,
       element("span", "cricket-directory-action", "View details →")
     );
     card.addEventListener("click", onClick);
@@ -724,10 +1056,21 @@
     headers.forEach(value => headerRow.appendChild(element("th", "", value)));
     head.appendChild(headerRow);
     table.appendChild(head);
+    const teamColIndex = headers.findIndex(h => /^(team|teams)$/i.test(String(h || "").trim()));
     const body = document.createElement("tbody");
     rows.forEach(row => {
       const tr = document.createElement("tr");
-      row.forEach(value => tr.appendChild(element("td", "", value ?? "—")));
+      row.forEach((value, cIdx) => {
+        const td = element("td", "");
+        if (cIdx === teamColIndex && typeof value === "string" && value.trim()) {
+          const visual = getTeamVisualElement(value);
+          if (visual) td.appendChild(visual);
+          td.appendChild(document.createTextNode(value));
+        } else {
+          td.textContent = value ?? "—";
+        }
+        tr.appendChild(td);
+      });
       body.appendChild(tr);
     });
     table.appendChild(body);
@@ -1126,11 +1469,15 @@
           selectPage("teams", true);
         }
       }));
-      content.appendChild(element(
-        "h3",
-        "cricket-section-heading",
-        state.teamTitle || result.data?.title || "Team"
-      ));
+      const teamTitleText = state.teamTitle || result.data?.title || "Team";
+      const teamHeading = element("h3", "cricket-section-heading");
+      teamHeading.style.display = "flex";
+      teamHeading.style.alignItems = "center";
+      teamHeading.style.gap = "8px";
+      const teamVisual = getTeamVisualElement(teamTitleText);
+      if (teamVisual) teamHeading.appendChild(teamVisual);
+      teamHeading.appendChild(document.createTextNode(teamTitleText));
+      content.appendChild(teamHeading);
 
       const navigation = element("div", "cricket-tabs cricket-match-tabs");
       [
@@ -1356,11 +1703,17 @@
         selectPage(ret, true);
       }
     }));
-    content.appendChild(element("h3", "cricket-section-heading", [
-      match.team1?.teamName || "Team 1",
-      "vs",
-      match.team2?.teamName || "Team 2"
-    ].join(" ")));
+    const matchHeading = element("h3", "cricket-section-heading");
+    matchHeading.style.display = "flex";
+    matchHeading.style.alignItems = "center";
+    matchHeading.style.flexWrap = "wrap";
+    matchHeading.style.gap = "8px";
+    matchHeading.append(
+      renderTeamSpan(match.team1, match.series),
+      element("span", "cricket-vs-text", "vs"),
+      renderTeamSpan(match.team2, match.series)
+    );
+    content.appendChild(matchHeading);
     content.appendChild(element(
       "p",
       "cricket-match-meta",
@@ -1437,11 +1790,17 @@
       if (data.innings.length > 1) {
         const inningsTabs = element("div", "cricket-tabs cricket-match-tabs");
         data.innings.forEach((inning, index) => {
-          const button = element(
-            "button",
-            "cricket-tab",
-            inning.team || `Innings ${index + 1}`
-          );
+          const button = element("button", "cricket-tab");
+          if (inning.team) {
+            const matchTeam = [match?.team1, match?.team2].find(t =>
+              t && (t.teamName === inning.team || t.teamSName === inning.team)
+            );
+            const visual = getTeamVisualElement(matchTeam || inning.team, match?.series);
+            if (visual) button.appendChild(visual);
+            button.appendChild(document.createTextNode(inning.team));
+          } else {
+            button.textContent = `Innings ${index + 1}`;
+          }
           button.type = "button";
           button.classList.toggle("active", index === state.scorecardInning);
           button.addEventListener("click", () => {
@@ -1455,11 +1814,21 @@
       }
       const index = Math.min(state.scorecardInning, data.innings.length - 1);
       const inning = data.innings[index];
-      appendToTarget(element(
-        "h4",
-        "cricket-section-heading",
-        inning.team || `Innings ${index + 1}`
-      ));
+      const inngHeading = element("h4", "cricket-section-heading");
+      inngHeading.style.display = "flex";
+      inngHeading.style.alignItems = "center";
+      inngHeading.style.gap = "8px";
+      if (inning.team) {
+        const matchTeam = [match?.team1, match?.team2].find(t =>
+          t && (t.teamName === inning.team || t.teamSName === inning.team)
+        );
+        const visual = getTeamVisualElement(matchTeam || inning.team, match?.series);
+        if (visual) inngHeading.appendChild(visual);
+        inngHeading.appendChild(document.createTextNode(inning.team));
+      } else {
+        inngHeading.textContent = `Innings ${index + 1}`;
+      }
+      appendToTarget(inngHeading);
       appendToTarget(element(
         "p",
         "cricket-score-summary",
@@ -1545,11 +1914,18 @@
         return;
       }
       teams.forEach(team => {
-        appendToTarget(element(
-          "h4",
-          "cricket-section-heading",
-          team.teamName || team.teamSName || "Team"
-        ));
+        const squadTeamName = team.teamName || team.teamSName || "Team";
+        const squadHeading = element("h4", "cricket-section-heading");
+        squadHeading.style.display = "flex";
+        squadHeading.style.alignItems = "center";
+        squadHeading.style.gap = "8px";
+        const matchTeam = [match?.team1, match?.team2].find(t =>
+          t && (t.teamName === squadTeamName || t.teamSName === squadTeamName)
+        );
+        const squadVisual = getTeamVisualElement(matchTeam || team, match?.series);
+        if (squadVisual) squadHeading.appendChild(squadVisual);
+        squadHeading.appendChild(document.createTextNode(squadTeamName));
+        appendToTarget(squadHeading);
         appendMatchTable(target, ["#", "Player", "Role", "Batting style", "Bowling style"],
           team.players.map((player, index) => [
             index + 1,
@@ -1834,12 +2210,21 @@
     headers.forEach(header => tr.appendChild(element("th", "", header)));
     thead.appendChild(tr);
     table.appendChild(thead);
+    const teamColIndex = headers.findIndex(h => /^(team|teams)$/i.test(String(h || "").trim()));
     const tbody = document.createElement("tbody");
     rows.forEach(row => {
       const bodyRow = document.createElement("tr");
-      row.forEach(value =>
-        bodyRow.appendChild(element("td", "", value ?? "—"))
-      );
+      row.forEach((value, cIdx) => {
+        const td = element("td", "");
+        if (cIdx === teamColIndex && typeof value === "string" && value.trim()) {
+          const visual = getTeamVisualElement(value);
+          if (visual) td.appendChild(visual);
+          td.appendChild(document.createTextNode(value));
+        } else {
+          td.textContent = value ?? "—";
+        }
+        bodyRow.appendChild(td);
+      });
       tbody.appendChild(bodyRow);
     });
     table.appendChild(tbody);

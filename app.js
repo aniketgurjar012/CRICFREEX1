@@ -1673,12 +1673,12 @@ function initSuggestionBox() {
 
   function updateCount() {
     const words = countWords(input.value);
-    const isValid = words >= 5 && words <= 1000;
+    const isValid = words >= 5 && words <= 100;
     countEl.textContent = `${words} word${words === 1 ? "" : "s"} `;
 
     const hint = document.createElement("span");
     hint.className = "suggestion-hint";
-    hint.textContent = "(min 5, max 1000)";
+    hint.textContent = "(min 5, max 100)";
     countEl.appendChild(hint);
 
     countEl.classList.toggle("is-valid", isValid);
@@ -1705,9 +1705,9 @@ function initSuggestionBox() {
       return;
     }
 
-    if (words > 1000) {
+    if (words > 100) {
       alertEl.className = "suggestion-alert show is-error";
-      alertEl.textContent = "Word limit exceeded. Maximum 1000 words allowed.";
+      alertEl.textContent = "Word limit exceeded. Maximum 100 words allowed.";
       input.focus();
       return;
     }
@@ -1831,11 +1831,52 @@ function initChannelClose() {
   window.CricfreexApp = { closeChannelPlayer, openChannelsView };
 }
 
+function initTelegramModal() {
+  const modal = document.getElementById("telegramModal");
+  if (!modal) return;
+
+  const backdrop = document.getElementById("tgModalBackdrop");
+  const closeBtn = document.getElementById("tgModalClose");
+  const dismissBtn = document.getElementById("tgModalDismiss");
+  const joinBtn = document.getElementById("tgModalJoin");
+
+  let repeatTimer = null;
+
+  function showModal() {
+    modal.hidden = false;
+    modal.removeAttribute("hidden");
+    document.body.classList.add("tg-modal-open");
+  }
+
+  function hideModal() {
+    modal.hidden = true;
+    modal.setAttribute("hidden", "");
+    document.body.classList.remove("tg-modal-open");
+    scheduleNext();
+  }
+
+  function scheduleNext() {
+    if (repeatTimer) clearTimeout(repeatTimer);
+    repeatTimer = setTimeout(showModal, 5 * 60 * 1000);
+  }
+
+  closeBtn?.addEventListener("click", hideModal);
+  dismissBtn?.addEventListener("click", hideModal);
+  backdrop?.addEventListener("click", hideModal);
+
+  joinBtn?.addEventListener("click", () => {
+    setTimeout(hideModal, 400);
+  });
+
+  setTimeout(showModal, 10000);
+}
+
 async function start() {
   setupThemeToggle();
   initActiveUsersTracking();
   initSuggestionBox();
   initChannelClose();
+  initTelegramModal();
   await load();
 
   if (!restored) {

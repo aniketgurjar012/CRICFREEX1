@@ -14,7 +14,7 @@
             document.documentElement.setAttribute("data-theme", "light");
         }
     </script>
-    <link rel="stylesheet" href="./cricket.css?v=9">
+    <link rel="stylesheet" href="./cricket.css?v=12">
     <style>
         :root {
             --bg: #050507;
@@ -972,6 +972,347 @@
             line-height: 1.6
         }
 
+        /* Telegram Pop-up Modal */
+        .telegram-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 2147483647;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+        }
+
+        .telegram-modal[hidden] {
+            display: none !important;
+        }
+
+        .telegram-modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.78);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            animation: tgFadeIn 0.25s ease-out;
+        }
+
+        .telegram-modal-card {
+            position: relative;
+            z-index: 2;
+            width: 100%;
+            max-width: 440px;
+            background: #11131a;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 24px;
+            padding: 34px 28px 26px;
+            text-align: center;
+            box-shadow: 0 24px 70px rgba(0, 0, 0, 0.85), 0 0 45px rgba(34, 158, 217, 0.16);
+            animation: tgPopIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        [data-theme="light"] .telegram-modal-card {
+            background: #ffffff;
+            border-color: rgba(0, 0, 0, 0.1);
+            box-shadow: 0 24px 60px rgba(0, 0, 0, 0.25), 0 0 35px rgba(34, 158, 217, 0.18);
+        }
+
+        @keyframes tgFadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes tgPopIn {
+            from {
+                opacity: 0;
+                transform: scale(0.92) translateY(12px);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
+        }
+
+        .telegram-modal-close {
+            position: absolute;
+            top: 14px;
+            right: 14px;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            color: #8f95a5;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .telegram-modal-close:hover {
+            background: rgba(255, 255, 255, 0.14);
+            color: #fff;
+            transform: scale(1.05);
+        }
+
+        [data-theme="light"] .telegram-modal-close {
+            background: rgba(0, 0, 0, 0.05);
+            border-color: rgba(0, 0, 0, 0.08);
+            color: #636b7b;
+        }
+
+        [data-theme="light"] .telegram-modal-close:hover {
+            background: rgba(0, 0, 0, 0.1);
+            color: #111;
+        }
+
+        .telegram-modal-icon-wrap {
+            margin: 0 auto 16px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .telegram-modal-icon {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            background: radial-gradient(circle, #29b6f6, #0288d1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 10px 28px rgba(34, 158, 217, 0.45);
+        }
+
+        .telegram-modal-title {
+            font-size: 23px;
+            font-weight: 850;
+            color: #ffffff;
+            margin: 0 0 10px;
+            letter-spacing: -0.3px;
+            font-family: inherit;
+        }
+
+        [data-theme="light"] .telegram-modal-title {
+            color: #101217;
+        }
+
+        .telegram-modal-desc {
+            font-size: 14px;
+            line-height: 1.55;
+            color: #9ea3b4;
+            margin: 0 0 24px;
+            padding: 0 6px;
+        }
+
+        [data-theme="light"] .telegram-modal-desc {
+            color: #5d6474;
+        }
+
+        .telegram-modal-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .telegram-btn-secondary {
+            height: 48px;
+            border-radius: 999px;
+            background: #1c1e28;
+            color: #a6abbd;
+            font-weight: 750;
+            font-size: 14px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: inherit;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .telegram-btn-secondary:hover {
+            background: #272a38;
+            color: #ffffff;
+            border-color: rgba(255, 255, 255, 0.16);
+            transform: translateY(-1px);
+        }
+
+        [data-theme="light"] .telegram-btn-secondary {
+            background: #eef1f6;
+            color: #4a5162;
+            border-color: rgba(0, 0, 0, 0.08);
+        }
+
+        [data-theme="light"] .telegram-btn-secondary:hover {
+            background: #e1e5ee;
+            color: #111;
+        }
+
+        .telegram-btn-primary {
+            height: 48px;
+            border-radius: 999px;
+            background: linear-gradient(135deg, #229ED9, #0288d1);
+            color: #ffffff !important;
+            font-weight: 800;
+            font-size: 14.5px;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-decoration: none;
+            box-shadow: 0 8px 24px rgba(34, 158, 217, 0.45);
+            transition: all 0.2s;
+            font-family: inherit;
+        }
+
+        .telegram-btn-primary:hover {
+            background: linear-gradient(135deg, #2bb5f8, #039be5);
+            transform: translateY(-1px);
+            box-shadow: 0 10px 30px rgba(34, 158, 217, 0.6);
+        }
+
+        @media (max-width: 480px) {
+            .telegram-modal-card {
+                padding: 28px 20px 22px;
+                border-radius: 20px;
+            }
+            .telegram-modal-icon {
+                width: 62px;
+                height: 62px;
+            }
+            .telegram-modal-title {
+                font-size: 20px;
+            }
+            .telegram-modal-desc {
+                font-size: 13px;
+                margin-bottom: 20px;
+            }
+            .telegram-btn-secondary,
+            .telegram-btn-primary {
+                height: 44px;
+                font-size: 13.5px;
+            }
+        }
+
+        /* Telegram Banner above footer */
+        .telegram-banner-section {
+            width: min(var(--max), 94%);
+            margin: 40px auto 30px;
+        }
+
+        .telegram-banner {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 20px;
+            padding: 20px 26px;
+            background: linear-gradient(135deg, rgba(34, 158, 217, 0.12), rgba(18, 20, 28, 0.95));
+            border: 1px solid rgba(34, 158, 217, 0.35);
+            border-radius: 18px;
+            box-shadow: 0 12px 35px rgba(0, 0, 0, 0.5), 0 0 30px rgba(34, 158, 217, 0.1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        [data-theme="light"] .telegram-banner {
+            background: linear-gradient(135deg, rgba(34, 158, 217, 0.15), rgba(240, 246, 252, 0.95));
+            border-color: rgba(34, 158, 217, 0.4);
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.08);
+        }
+
+        .telegram-banner-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .telegram-banner-icon {
+            flex-shrink: 0;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: radial-gradient(circle, #29b6f6, #0288d1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 6px 18px rgba(34, 158, 217, 0.4);
+        }
+
+        .telegram-banner-text h3 {
+            margin: 0 0 4px;
+            font-size: 17px;
+            font-weight: 800;
+            color: #ffffff;
+        }
+
+        [data-theme="light"] .telegram-banner-text h3 {
+            color: #111319;
+        }
+
+        .telegram-banner-text p {
+            margin: 0;
+            font-size: 13px;
+            color: #9ea3b4;
+            line-height: 1.4;
+        }
+
+        [data-theme="light"] .telegram-banner-text p {
+            color: #5f6676;
+        }
+
+        .telegram-banner-btn {
+            flex-shrink: 0;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 24px;
+            border-radius: 999px;
+            background: linear-gradient(135deg, #229ED9, #0288d1);
+            color: #fff !important;
+            font-weight: 750;
+            font-size: 14px;
+            text-decoration: none;
+            box-shadow: 0 6px 20px rgba(34, 158, 217, 0.4);
+            transition: all 0.2s;
+        }
+
+        .telegram-banner-btn:hover {
+            background: linear-gradient(135deg, #2bb5f8, #039be5);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 26px rgba(34, 158, 217, 0.55);
+        }
+
+        @media (max-width: 720px) {
+            .telegram-banner {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 16px;
+                padding: 18px 20px;
+            }
+            .telegram-banner-btn {
+                width: 100%;
+                justify-content: center;
+            }
+        }
+
+        .footer-tg-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            color: #229ED9;
+            text-decoration: none;
+            font-size: 13px;
+            font-weight: 700;
+            transition: all 0.2s;
+        }
+
+        .footer-tg-link:hover {
+            color: #2bb5f8;
+            text-decoration: underline;
+        }
+
         footer {
             border-top: 1px solid #ffffff0f;
             background: #060608;
@@ -1544,10 +1885,391 @@
             color: #0d8a43;
         }
 
-        [data-theme="light"] .suggestion-alert.is-error {
-            background: rgba(196, 8, 18, 0.08);
-            border-color: rgba(196, 8, 18, 0.25);
-            color: #c40812;
+        /* ================= TELEGRAM MODAL ================= */
+        .telegram-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 2147483647;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+            box-sizing: border-box;
+            animation: tgFadeIn 0.25s ease-out;
+        }
+
+        .telegram-modal[hidden] {
+            display: none !important;
+        }
+
+        .telegram-modal-backdrop {
+            position: absolute;
+            inset: 0;
+            background: rgba(4, 5, 8, 0.82);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+        }
+
+        .telegram-modal-card {
+            position: relative;
+            z-index: 2;
+            width: 100%;
+            max-width: 420px;
+            background: linear-gradient(180deg, #181b24 0%, #0e1017 100%);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 24px;
+            padding: 34px 28px 28px;
+            text-align: center;
+            box-shadow: 0 25px 60px rgba(0, 0, 0, 0.75), 0 0 40px rgba(34, 158, 217, 0.15);
+            animation: tgPopIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            box-sizing: border-box;
+        }
+
+        @keyframes tgFadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes tgPopIn {
+            from {
+                opacity: 0;
+                transform: scale(0.92) translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
+        }
+
+        .telegram-modal-close {
+            position: absolute;
+            top: 14px;
+            right: 14px;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            border: none;
+            background: rgba(255, 255, 255, 0.08);
+            color: #a1a1aa;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 14px;
+            line-height: 1;
+            transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+        }
+
+        .telegram-modal-close:hover {
+            background: rgba(255, 255, 255, 0.18);
+            color: #ffffff;
+            transform: scale(1.08);
+        }
+
+        .telegram-modal-icon-wrap {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+
+        .telegram-modal-icon {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            background: #229ED9;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 10px 28px rgba(34, 158, 217, 0.5);
+            animation: tgPulse 2.4s infinite ease-in-out;
+        }
+
+        @keyframes tgPulse {
+            0%, 100% {
+                box-shadow: 0 10px 28px rgba(34, 158, 217, 0.5);
+            }
+            50% {
+                box-shadow: 0 12px 34px rgba(34, 158, 217, 0.75);
+            }
+        }
+
+        .telegram-modal-title {
+            margin: 0 0 10px;
+            font-size: 24px;
+            font-weight: 800;
+            letter-spacing: -0.4px;
+            color: #ffffff;
+        }
+
+        .telegram-modal-desc {
+            margin: 0 0 26px;
+            font-size: 14px;
+            line-height: 1.55;
+            color: #9ea3b0;
+        }
+
+        .telegram-modal-actions {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .telegram-btn-secondary {
+            flex: 1;
+            padding: 13px 18px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: #e4e4e7;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+        }
+
+        .telegram-btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.15);
+            color: #ffffff;
+            transform: translateY(-1px);
+        }
+
+        .telegram-btn-primary {
+            flex: 1;
+            padding: 13px 22px;
+            border-radius: 999px;
+            background: #229ED9;
+            border: 1px solid #229ED9;
+            color: #ffffff !important;
+            font-size: 14px;
+            font-weight: 700;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 6px 20px rgba(34, 158, 217, 0.45);
+            cursor: pointer;
+            transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        .telegram-btn-primary:hover {
+            background: #1d8bc0;
+            transform: translateY(-1px);
+            box-shadow: 0 8px 24px rgba(34, 158, 217, 0.6);
+        }
+
+        /* Light theme overrides for modal */
+        [data-theme="light"] .telegram-modal-backdrop {
+            background: rgba(15, 23, 42, 0.6);
+        }
+
+        [data-theme="light"] .telegram-modal-card {
+            background: #ffffff;
+            border-color: rgba(0, 0, 0, 0.1);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.18), 0 0 35px rgba(34, 158, 217, 0.12);
+        }
+
+        [data-theme="light"] .telegram-modal-close {
+            background: rgba(0, 0, 0, 0.06);
+            color: #64748b;
+        }
+
+        [data-theme="light"] .telegram-modal-close:hover {
+            background: rgba(0, 0, 0, 0.12);
+            color: #0f172a;
+        }
+
+        [data-theme="light"] .telegram-modal-title {
+            color: #0f172a;
+        }
+
+        [data-theme="light"] .telegram-modal-desc {
+            color: #64748b;
+        }
+
+        [data-theme="light"] .telegram-btn-secondary {
+            background: #f1f5f9;
+            border-color: #cbd5e1;
+            color: #334155;
+        }
+
+        [data-theme="light"] .telegram-btn-secondary:hover {
+            background: #e2e8f0;
+            color: #0f172a;
+        }
+
+        /* Responsive Modal */
+        @media (max-width: 480px) {
+            .telegram-modal-card {
+                padding: 26px 18px 20px;
+                border-radius: 20px;
+                max-width: 92vw;
+            }
+
+            .telegram-modal-icon {
+                width: 60px;
+                height: 60px;
+            }
+
+            .telegram-modal-icon svg {
+                width: 32px;
+                height: 32px;
+            }
+
+            .telegram-modal-title {
+                font-size: 20px;
+            }
+
+            .telegram-modal-desc {
+                font-size: 13px;
+                margin-bottom: 20px;
+            }
+
+            .telegram-btn-secondary,
+            .telegram-btn-primary {
+                padding: 11px 14px;
+                font-size: 13px;
+            }
+        }
+
+        /* ================= TELEGRAM BANNER SECTION ================= */
+        .telegram-banner-section {
+            max-width: var(--max);
+            margin: 10px auto 30px;
+            padding: 0 clamp(14px, 3vw, 24px);
+            box-sizing: border-box;
+        }
+
+        .telegram-banner {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 20px;
+            flex-wrap: wrap;
+            padding: clamp(16px, 2.5vw, 22px) clamp(20px, 3vw, 28px);
+            border-radius: 18px;
+            background:
+                radial-gradient(circle at 10% 50%, rgba(34, 158, 217, 0.18), transparent 50%),
+                linear-gradient(135deg, #131722 0%, #0c0e14 100%);
+            border: 1px solid rgba(34, 158, 217, 0.28);
+            box-shadow: 0 12px 35px rgba(0, 0, 0, 0.35);
+            transition: border-color 0.2s ease, transform 0.2s ease;
+        }
+
+        .telegram-banner:hover {
+            border-color: rgba(34, 158, 217, 0.45);
+        }
+
+        .telegram-banner-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            min-width: 0;
+        }
+
+        .telegram-banner-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: #229ED9;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            box-shadow: 0 6px 18px rgba(34, 158, 217, 0.45);
+        }
+
+        .telegram-banner-text {
+            min-width: 0;
+        }
+
+        .telegram-banner-text h3 {
+            margin: 0 0 4px;
+            font-size: clamp(16px, 2vw, 19px);
+            font-weight: 800;
+            color: #ffffff;
+            letter-spacing: -0.3px;
+        }
+
+        .telegram-banner-text p {
+            margin: 0;
+            font-size: 13px;
+            line-height: 1.5;
+            color: #9ea3b0;
+        }
+
+        .telegram-banner-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 22px;
+            border-radius: 999px;
+            background: #229ED9;
+            color: #ffffff !important;
+            font-size: 13px;
+            font-weight: 700;
+            text-decoration: none;
+            box-shadow: 0 6px 18px rgba(34, 158, 217, 0.4);
+            white-space: nowrap;
+            transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+            flex-shrink: 0;
+        }
+
+        .telegram-banner-btn:hover {
+            background: #1d8bc0;
+            transform: translateY(-1px);
+            box-shadow: 0 8px 24px rgba(34, 158, 217, 0.55);
+        }
+
+        [data-theme="light"] .telegram-banner {
+            background:
+                radial-gradient(circle at 10% 50%, rgba(34, 158, 217, 0.12), transparent 50%),
+                linear-gradient(135deg, #ffffff 0%, #f6f8fb 100%);
+            border-color: rgba(34, 158, 217, 0.35);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
+        }
+
+        [data-theme="light"] .telegram-banner-text h3 {
+            color: #0f172a;
+        }
+
+        [data-theme="light"] .telegram-banner-text p {
+            color: #64748b;
+        }
+
+        @media (max-width: 640px) {
+            .telegram-banner {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 14px;
+            }
+
+            .telegram-banner-btn {
+                width: 100%;
+                justify-content: center;
+            }
+        }
+
+        /* Footer Telegram Link */
+        .footer-tg-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            color: #229ED9 !important;
+            font-size: 13px;
+            font-weight: 700;
+            text-decoration: none;
+            padding: 6px 14px;
+            border-radius: 999px;
+            background: rgba(34, 158, 217, 0.1);
+            border: 1px solid rgba(34, 158, 217, 0.25);
+            transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+        }
+
+        .footer-tg-link:hover {
+            background: rgba(34, 158, 217, 0.18);
+            border-color: rgba(34, 158, 217, 0.45);
+            transform: translateY(-1px);
         }
     </style>
 </head>
@@ -1627,12 +2349,12 @@
                 <form id="suggestionForm" class="suggestion-form">
                     <div class="suggestion-input-wrap">
                         <textarea id="suggestionInput" class="suggestion-textarea"
-                            placeholder="Type your message or request here (min 5 words, max 1000 words)..." rows="3"
+                            placeholder="Type your message or request here (min 5 words, max 100 words)..." rows="3"
                             required></textarea>
                     </div>
                     <div class="suggestion-footer">
                         <div class="suggestion-count" id="suggestionWordCount">0 words <span
-                                class="suggestion-hint">(min 5, max 1000)</span></div>
+                                class="suggestion-hint">(min 5, max 100)</span></div>
                         <button type="submit" class="btn btn-red suggestion-btn" id="suggestionSubmitBtn">
                             <span>Send Request</span>
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -1644,6 +2366,25 @@
                     </div>
                     <div class="suggestion-alert" id="suggestionAlert" role="alert"></div>
                 </form>
+            </div>
+        </section>
+
+        <!-- Telegram Banner Section -->
+        <section class="telegram-banner-section" aria-label="Join our Telegram Channel">
+            <div class="telegram-banner">
+                <div class="telegram-banner-left">
+                    <div class="telegram-banner-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="28" height="28" fill="#ffffff"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.75-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/></svg>
+                    </div>
+                    <div class="telegram-banner-text">
+                        <h3>Join CricFreeX on Telegram</h3>
+                        <p>Get match links, free edits and live updates delivered straight to your phone.</p>
+                    </div>
+                </div>
+                <a href="https://t.me/cricfreex" target="_blank" rel="noopener noreferrer" class="telegram-banner-btn">
+                    <span>Join Channel</span>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
+                </a>
             </div>
         </section>
 
@@ -1677,13 +2418,38 @@
             <div class="footer-brand-wrap">
                 <div class="footer-logo" id="footerLogo">CRIC<span>FREEX</span></div><button class="admin-entry"
                     id="adminEntry" aria-label=" " tabindex="-1"></button>
-            </div><small>© 2026 CricFreeX</small>
+            </div>
+            <a href="https://t.me/cricfreex" target="_blank" rel="noopener noreferrer" class="footer-tg-link" title="Join Telegram Channel">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.75-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/></svg>
+                <span>Join Telegram</span>
+            </a>
+            <small>© 2026 CricFreeX</small>
         </div>
     </footer>
+
+    <!-- Telegram Pop-up Modal -->
+    <div id="telegramModal" class="telegram-modal" role="dialog" aria-modal="true" aria-labelledby="tgModalTitle" hidden>
+        <div class="telegram-modal-backdrop" id="tgModalBackdrop"></div>
+        <div class="telegram-modal-card">
+            <button type="button" class="telegram-modal-close" id="tgModalClose" aria-label="Close popup">✕</button>
+            <div class="telegram-modal-icon-wrap">
+                <div class="telegram-modal-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="38" height="38" fill="#ffffff"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.75-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/></svg>
+                </div>
+            </div>
+            <h2 id="tgModalTitle" class="telegram-modal-title">Join Telegram Channel</h2>
+            <p class="telegram-modal-desc">Get match links, free edits and live updates delivered straight to your phone.</p>
+            <div class="telegram-modal-actions">
+                <button type="button" class="telegram-btn-secondary" id="tgModalDismiss">Already Joined</button>
+                <a href="https://t.me/cricfreex" target="_blank" rel="noopener noreferrer" class="telegram-btn-primary" id="tgModalJoin">Join Now</a>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./config.js?v=2"></script>
-    <script src="./app.js?v=21"></script>
-    <script src="./cricket.js?v=21"></script>
+    <script src="./app.js?v=22"></script>
+    <script src="./cricket.js?v=24"></script>
 </body>
 
 </html>

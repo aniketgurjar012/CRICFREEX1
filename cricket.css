@@ -461,10 +461,87 @@ body.cricket-active .cricket-center {
 }
 
 .cricket-team-name {
+  display: inline-flex;
+  align-items: center;
   min-width: 0;
   font-size: 13px;
   font-weight: 750;
   overflow-wrap: anywhere;
+}
+
+.cricket-flag-img,
+.cricket-flag-icon {
+  display: inline-block;
+  vertical-align: middle;
+  width: 18px;
+  height: 13px;
+  border-radius: 2px;
+  object-fit: cover;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  margin-right: 6px;
+  flex-shrink: 0;
+}
+
+.cricket-flag-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 13px;
+  vertical-align: middle;
+  border-radius: 2px;
+  background: linear-gradient(135deg, #2b2b38, #181822);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #ff3440;
+  font-size: 8px;
+  font-weight: 900;
+  margin-right: 6px;
+  flex-shrink: 0;
+}
+
+.cricket-vs-text {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0 4px;
+}
+
+.cricket-section-heading .cricket-flag-img,
+.cricket-section-heading .cricket-flag-icon,
+.cricket-section-heading .cricket-flag-badge {
+  width: 20px;
+  height: 14px;
+}
+
+.cricket-table td .cricket-flag-img,
+.cricket-table td .cricket-flag-icon,
+.cricket-table td .cricket-flag-badge,
+.cricket-tab .cricket-flag-img,
+.cricket-tab .cricket-flag-icon,
+.cricket-tab .cricket-flag-badge {
+  width: 16px;
+  height: 12px;
+  margin-right: 5px;
+}
+
+.cricket-flag-img.cricket-team-logo-img {
+  width: 17px;
+  height: 17px;
+  object-fit: contain;
+  background: #ffffff;
+  border-radius: 3px;
+  padding: 1px;
+}
+
+.cricket-section-heading .cricket-flag-img.cricket-team-logo-img {
+  width: 20px;
+  height: 20px;
+}
+
+.cricket-table td .cricket-flag-img.cricket-team-logo-img,
+.cricket-tab .cricket-flag-img.cricket-team-logo-img {
+  width: 15px;
+  height: 15px;
 }
 
 .cricket-team-score {

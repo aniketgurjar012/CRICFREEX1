@@ -1411,8 +1411,8 @@ def create_suggestion(payload: SuggestionPayload):
     word_count = len(words)
     if word_count < 5:
         raise HTTPException(status_code=400, detail="Message must contain at least 5 words.")
-    if word_count > 1000:
-        raise HTTPException(status_code=400, detail="Message cannot exceed 1000 words.")
+    if word_count > 100:
+        raise HTTPException(status_code=400, detail="Message cannot exceed 100 words.")
 
     new_item = {
         "id": str(uuid.uuid4()),
