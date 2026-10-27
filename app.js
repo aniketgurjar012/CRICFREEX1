@@ -1863,7 +1863,18 @@ function isSiteUnlocked() {
 window.isSiteUnlocked = isSiteUnlocked;
 
 async function fetchSiteAccessConfig() {
-  const item = (content || []).find(isSiteAccessItem);
+  let item = (content || []).find(isSiteAccessItem);
+
+  if (!item && db) {
+    try {
+      const { data } = await db.from("content")
+        .select("*")
+        .eq("public_id", SITE_ACCESS_PREFIX)
+        .maybeSingle();
+      if (data) item = data;
+    } catch (e) {}
+  }
+
   if (item) {
     siteAccessConfig = {
       enabled: item.published !== false,
@@ -1947,7 +1958,9 @@ function initSiteAccessGate() {
       return true;
     }
 
-    const stored = (localStorage.getItem("cricfreex_auth_pass") || sessionStorage.getItem("cricfreex_auth_pass") || "").trim();
+    // Strictly session-based: When the website/tab is closed, session is wiped
+    try { localStorage.removeItem("cricfreex_auth_pass"); } catch (e) {}
+    const stored = (sessionStorage.getItem("cricfreex_auth_pass") || "").trim();
     if (stored && stored.toLowerCase() === siteAccessConfig.password.toLowerCase()) {
       siteAccessUnlocked = true;
       hideGate();
@@ -1993,7 +2006,7 @@ function initSiteAccessGate() {
   function verifyPassword() {
     const val = (input?.value || "").trim();
     if (!val) {
-      showError("Please enter an access code.");
+      showError("Please enter the access password.");
       input?.focus();
       return;
     }
@@ -2002,12 +2015,12 @@ function initSiteAccessGate() {
     if (val.toLowerCase() === expected.toLowerCase()) {
       siteAccessUnlocked = true;
       try {
-        localStorage.setItem("cricfreex_auth_pass", expected);
         sessionStorage.setItem("cricfreex_auth_pass", expected);
+        localStorage.removeItem("cricfreex_auth_pass");
       } catch (e) {}
 
       if (errorMsg) {
-        errorMsg.textContent = "✅ Access code verified! Unlocking stream...";
+        errorMsg.textContent = "✅ Password verified! Unlocking website...";
         errorMsg.className = "site-access-error visible success";
         errorMsg.style.display = "block";
       }
@@ -2022,7 +2035,7 @@ function initSiteAccessGate() {
         submitBtn.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg><span>Unlock Live Stream</span>';
       }, 650);
     } else {
-      showError("Invalid access code. Please check today's code on our Telegram channel and try again.");
+      showError("Invalid password. Please get today's password from our Telegram channel and try again.");
       if (card) {
         card.classList.remove("gate-shake");
         void card.offsetWidth;
@@ -2073,8 +2086,14 @@ function initSiteAccessGate() {
   // Pre-schedule 3 seconds default
   gateTimer = setTimeout(showGate, 3000);
 
-  // Sync configuration from db/api
+  // Sync configuration from db/api and listen for updates
   syncAndSchedule();
+  window.addEventListener("cricfreex:content-updated", () => {
+    syncAndSchedule();
+  });
+  setInterval(() => {
+    syncAndSchedule();
+  }, 20000);
 }
 
 async function start() {

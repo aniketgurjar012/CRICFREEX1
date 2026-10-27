@@ -2154,7 +2154,20 @@ async function savePasswordGate(event){
 
   // 1. Supabase content table
   try{
-    const existing=getSiteAccessItem();
+    let existing=getSiteAccessItem();
+    if(!existing?.id){
+      try{
+        const {data:remoteRow}=await db
+          .from("content")
+          .select("*")
+          .eq("public_id",SITE_ACCESS_PREFIX)
+          .maybeSingle();
+        if(remoteRow?.id){
+          existing=remoteRow;
+        }
+      }catch(e){}
+    }
+
     const payload={
       public_id:SITE_ACCESS_PREFIX,
       title:password,
@@ -2166,21 +2179,28 @@ async function savePasswordGate(event){
       sort_order:delay,
       updated_at:new Date().toISOString()
     };
+
+    let res;
     if(existing?.id){
-      payload.id=existing.id;
+      res=await db
+        .from("content")
+        .update(payload)
+        .eq("id",existing.id)
+        .select()
+        .maybeSingle();
+    }else{
+      res=await db
+        .from("content")
+        .insert(payload)
+        .select()
+        .maybeSingle();
     }
 
-    const {data,error}=await db
-      .from("content")
-      .upsert(payload)
-      .select()
-      .maybeSingle();
-
-    if(error)throw error;
-    if(data){
+    if(res.error)throw res.error;
+    if(res.data){
       const idx=content.findIndex(isSiteAccessItem);
-      if(idx>=0)content[idx]=data;
-      else content.push(data);
+      if(idx>=0)content[idx]=res.data;
+      else content.push(res.data);
     }
     savedOk=true;
   }catch(err){
