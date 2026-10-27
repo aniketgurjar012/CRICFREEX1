@@ -222,7 +222,7 @@ $("logout").onclick=async()=>{
 };
 
 $("openSite").onclick=()=>{
-  location.href="./index.html";
+  location.href="./";
 };
 
 /* =========================================================

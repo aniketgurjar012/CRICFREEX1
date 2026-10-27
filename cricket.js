@@ -1,6 +1,16 @@
 "use strict";
 
 (() => {
+  if (location.pathname.toLowerCase().endsWith("/index.html") || location.pathname.toLowerCase() === "/index.html") {
+    const cleanPath = location.pathname.replace(/\/index\.html$/i, "") || "/";
+    history.replaceState(null, "", cleanPath + (location.search || "") + (location.hash || ""));
+  }
+
+  function cleanCricketPath(u) {
+    const p = (u?.pathname || location.pathname || "/").replace(/\/index\.html$/i, "") || "/";
+    return p;
+  }
+
   const config = window.CRICFREEX_CONFIG || {};
   const apiBase = String(config.CRICKET_API_URL || "").replace(/\/+$/, "");
   const root = document.getElementById("cricketCenter");
@@ -186,12 +196,14 @@
       u.searchParams.delete("tab");
     }
 
+    const path = cleanCricketPath(u);
     const clean = u.searchParams.toString()
-      ? `${u.pathname}?${u.searchParams.toString()}`
-      : u.pathname;
+      ? `${path}?${u.searchParams.toString()}`
+      : path;
 
-    const current = `${location.pathname}${location.search}`;
-    if (current !== clean) {
+    const currentPath = cleanCricketPath(location);
+    const current = `${currentPath}${location.search}`;
+    if (current !== clean || location.pathname.toLowerCase().endsWith("/index.html")) {
       if (push) {
         history.pushState({}, "", clean);
       } else {
@@ -2114,7 +2126,8 @@
       updateCricketURL({ tab: null });
     } else {
       if (location.hash === "#cricketCenter" || location.hash === "#cricket") {
-        history.replaceState(null, "", location.pathname + (location.search || ""));
+        const cleanPath = cleanCricketPath(location);
+        history.replaceState(null, "", cleanPath + (location.search || ""));
       }
     }
     renderCenter();
@@ -2169,7 +2182,8 @@
     const hash = location.hash;
 
     if (hash === "#cricketCenter" || hash === "#cricket") {
-      history.replaceState(null, "", location.pathname + (location.search || ""));
+      const cleanPath = cleanCricketPath(location);
+      history.replaceState(null, "", cleanPath + (location.search || ""));
     }
 
     const view = params.get("view");
@@ -2241,8 +2255,9 @@
     selectPage(targetTab, push);
 
     if (targetTab === "live" && !params.toString()) {
-      if (location.search || location.hash) {
-        history.replaceState(null, "", location.pathname);
+      if (location.search || location.hash || location.pathname.toLowerCase().endsWith("/index.html")) {
+        const cleanPath = cleanCricketPath(location);
+        history.replaceState(null, "", cleanPath);
       }
     }
   }

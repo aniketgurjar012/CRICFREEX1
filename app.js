@@ -1,5 +1,17 @@
 "use strict";
 
+(() => {
+  if (location.pathname.toLowerCase().endsWith("/index.html") || location.pathname.toLowerCase() === "/index.html") {
+    const cleanPath = location.pathname.replace(/\/index\.html$/i, "") || "/";
+    history.replaceState(null, "", cleanPath + (location.search || "") + (location.hash || ""));
+  }
+})();
+
+function cleanAppPath(u) {
+  const p = (u?.pathname || location.pathname || "/").replace(/\/index\.html$/i, "") || "/";
+  return p;
+}
+
 const C = window.CRICFREEX_CONFIG;
 
 const db = window.supabase.createClient(
@@ -599,7 +611,8 @@ function clearURL() {
     key => u.searchParams.delete(key)
   );
 
-  const clean = u.searchParams.toString() ? `${u.pathname}?${u.searchParams.toString()}` : u.pathname;
+  const path = cleanAppPath(u);
+  const clean = u.searchParams.toString() ? `${path}?${u.searchParams.toString()}` : path;
   history.replaceState({}, "", clean);
 }
 
@@ -673,10 +686,11 @@ function updateURL(item) {
     }
   }
 
+  const path = cleanAppPath(u);
   history.pushState(
     {},
     "",
-    `${u.pathname}?${u.searchParams.toString()}`
+    u.searchParams.toString() ? `${path}?${u.searchParams.toString()}` : path
   );
 }
 
@@ -1315,7 +1329,8 @@ function openChannelsView(update = true) {
     ].forEach(k => u.searchParams.delete(k));
     u.searchParams.set("view", "channels");
     u.hash = "";
-    history.pushState({}, "", `${u.pathname}?${u.searchParams.toString()}`);
+    const path = cleanAppPath(u);
+    history.pushState({}, "", `${path}?${u.searchParams.toString()}`);
   }
   $("channels").scrollIntoView({ behavior: "smooth", block: "start" });
 }
@@ -1643,7 +1658,8 @@ function initSuggestionBox() {
       ].forEach(k => u.searchParams.delete(k));
       u.searchParams.set("view", "suggestion");
       u.hash = "";
-      history.pushState({}, "", `${u.pathname}?${u.searchParams.toString()}`);
+      const path = cleanAppPath(u);
+      history.pushState({}, "", `${path}?${u.searchParams.toString()}`);
     }
   }
 
@@ -1795,7 +1811,8 @@ function closeChannelPlayer(update = true) {
     const u = new URL(location.href);
     ["channel", "show", "episode"].forEach(k => u.searchParams.delete(k));
     u.searchParams.set("view", "channels");
-    history.pushState({}, "", `${u.pathname}?${u.searchParams.toString()}`);
+    const path = cleanAppPath(u);
+    history.pushState({}, "", `${path}?${u.searchParams.toString()}`);
   }
 }
 
