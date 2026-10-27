@@ -2079,7 +2079,26 @@ async function loadPasswordGate(){
     statusEl.textContent="";
   }
 
-  let item=getSiteAccessItem();
+  let item=null;
+
+  // 1. Try dedicated site_access table
+  try{
+    const {data:saData}=await db
+      .from("site_access")
+      .select("*")
+      .eq("id",1)
+      .maybeSingle();
+    if(saData&&saData.password){
+      item={
+        title:saData.password,
+        media_url:saData.telegram_url||"https://t.me/+FIO2pSdFBRBkNDZl",
+        published:saData.enabled!==false,
+        sort_order:saData.delay_seconds||3
+      };
+    }
+  }catch(e){}
+
+  if(!item) item=getSiteAccessItem();
 
   if(!item){
     try{
@@ -2152,7 +2171,29 @@ async function savePasswordGate(event){
   let savedOk=false;
   let errorMsg="";
 
-  // 1. Supabase content table
+  // 1. Supabase site_access table (Primary dedicated table)
+  try{
+    const {data:saData,error:saError}=await db
+      .from("site_access")
+      .upsert({
+        id:1,
+        password:password,
+        telegram_url:telegramUrl,
+        delay_seconds:delay,
+        enabled:enabled,
+        updated_at:new Date().toISOString()
+      })
+      .select()
+      .maybeSingle();
+
+    if(!saError&&saData){
+      savedOk=true;
+    }
+  }catch(err){
+    console.warn("Supabase site_access save error:",err);
+  }
+
+  // 2. Supabase content table (Dual-save)
   try{
     let existing=getSiteAccessItem();
     if(!existing?.id){

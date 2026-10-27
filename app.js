@@ -1863,6 +1863,26 @@ function isSiteUnlocked() {
 window.isSiteUnlocked = isSiteUnlocked;
 
 async function fetchSiteAccessConfig() {
+  // 1. Dedicated site_access table in Supabase
+  if (db) {
+    try {
+      const { data } = await db.from("site_access")
+        .select("*")
+        .eq("id", 1)
+        .maybeSingle();
+      if (data && data.password) {
+        siteAccessConfig = {
+          enabled: data.enabled !== false,
+          password: String(data.password).trim(),
+          telegram_url: String(data.telegram_url || "https://t.me/+FIO2pSdFBRBkNDZl").trim(),
+          delay_seconds: Math.max(1, Math.min(60, parseInt(data.delay_seconds || 3, 10)))
+        };
+        return siteAccessConfig;
+      }
+    } catch (e) {}
+  }
+
+  // 2. Content table fallback
   let item = (content || []).find(isSiteAccessItem);
 
   if (!item && db) {
@@ -1885,6 +1905,7 @@ async function fetchSiteAccessConfig() {
     return siteAccessConfig;
   }
 
+  // 3. Backend API fallback
   try {
     const endpoints = [];
     if (C.CRICKET_API_URL) endpoints.push(`${C.CRICKET_API_URL}/api/access-control`);
@@ -1958,14 +1979,11 @@ function initSiteAccessGate() {
       return true;
     }
 
-    // Strictly session-based: When the website/tab is closed, session is wiped
-    try { localStorage.removeItem("cricfreex_auth_pass"); } catch (e) {}
-    const stored = (sessionStorage.getItem("cricfreex_auth_pass") || "").trim();
-    if (stored && stored.toLowerCase() === siteAccessConfig.password.toLowerCase()) {
-      siteAccessUnlocked = true;
-      hideGate();
-      return true;
-    }
+    // Require password on every page reload and every time site opens
+    try { 
+      localStorage.removeItem("cricfreex_auth_pass"); 
+      sessionStorage.removeItem("cricfreex_auth_pass"); 
+    } catch (e) {}
 
     siteAccessUnlocked = false;
     return false;
