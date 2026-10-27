@@ -440,6 +440,8 @@ function makeCard(item, label, meta) {
   const name = document.createElement("div");
   name.className = "channel-name";
   name.textContent = item.title;
+  name.title = item.title;
+  b.title = item.title;
 
   const id = document.createElement("div");
   id.className = "channel-id";
