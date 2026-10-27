@@ -554,6 +554,25 @@ function clearURL() {
   history.replaceState({}, "", clean);
 }
 
+function getIdentifier(item) {
+  if (!item) return "";
+  if (item.public_id && String(item.public_id).trim()) {
+    return String(item.public_id).trim();
+  }
+  if (item.slug && String(item.slug).trim()) {
+    return String(item.slug).trim();
+  }
+  if (item.title && String(item.title).trim()) {
+    const slug = String(item.title)
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+    if (slug) return slug;
+  }
+  return String(item.id || "");
+}
+
 function updateURL(item) {
   const u = new URL(location.href);
   u.hash = "";
@@ -582,33 +601,27 @@ function updateURL(item) {
       x => x.id === item.parent_id
     );
 
-    if (parent?.public_id) {
-      u.searchParams.set(
-        "show",
-        parent.public_id
-      );
+    const parentId = getIdentifier(parent);
+    if (parentId) {
+      u.searchParams.set("show", parentId);
     }
 
-    if (item.public_id) {
-      u.searchParams.set(
-        "episode",
-        item.public_id
-      );
+    const episodeId = getIdentifier(item);
+    if (episodeId) {
+      u.searchParams.set("episode", episodeId);
     }
 
   } else if (item.kind === "series") {
-    if (item.public_id) {
-      u.searchParams.set(
-        "show",
-        item.public_id
-      );
+    const showId = getIdentifier(item);
+    if (showId) {
+      u.searchParams.set("show", showId);
     }
 
-  } else if (item.public_id) {
-    u.searchParams.set(
-      "channel",
-      item.public_id
-    );
+  } else {
+    const channelId = getIdentifier(item);
+    if (channelId) {
+      u.searchParams.set("channel", channelId);
+    }
   }
 
   history.pushState(
@@ -1287,11 +1300,22 @@ function restoreURL() {
   const channelId = p.get("channel");
   const showId = p.get("show");
 
+  function matchItem(x, ref) {
+    if (!x || !ref) return false;
+    const clean = String(ref).toLowerCase().trim();
+    if (x.public_id && String(x.public_id).toLowerCase().trim() === clean) return true;
+    if (String(x.id).toLowerCase().trim() === clean) return true;
+    if (x.slug && String(x.slug).toLowerCase().trim() === clean) return true;
+    const titleSlug = String(x.title || "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+    if (titleSlug === clean) return true;
+    return false;
+  }
+
   if (episodeId) {
     const episode = content.find(
       x =>
         x.kind === "episode" &&
-        x.public_id === episodeId
+        matchItem(x, episodeId)
     );
 
     if (episode) {
@@ -1303,9 +1327,9 @@ function restoreURL() {
   if (channelId) {
     const channel = content.find(
       x =>
-        x.public_id === channelId &&
         x.kind !== "episode" &&
-        x.kind !== "series"
+        x.kind !== "series" &&
+        matchItem(x, channelId)
     );
 
     if (channel) {
@@ -1318,7 +1342,7 @@ function restoreURL() {
     const show = content.find(
       x =>
         x.kind === "series" &&
-        x.public_id === showId
+        matchItem(x, showId)
     );
 
     if (show) {
