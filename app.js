@@ -697,6 +697,11 @@ function play(item, update = true) {
     activeSeries = null;
   }
 
+  // Single Active Stream: Stop cricket match stream if running
+  if (window.CricfreexCricket?.closeWatchPlayer) {
+    window.CricfreexCricket.closeWatchPlayer(false);
+  }
+
   /*
     Shareable URL update.
   */
@@ -705,20 +710,10 @@ function play(item, update = true) {
     updateURL(item);
   }
 
-  // Single Active Stream: Stop cricket match stream if running
-  if (window.CricfreexCricket?.closeWatchPlayer) {
-    window.CricfreexCricket.closeWatchPlayer();
-  }
-
   $("cricketCenter").hidden = true;
   $("channels").hidden = false;
   $("mainTabs").hidden = false;
   document.body.classList.remove("cricket-active");
-  if (location.hash) {
-    const url = new URL(location.href);
-    url.hash = "";
-    history.replaceState({}, "", url.pathname + (url.search || ""));
-  }
 
   /*
     Player information.

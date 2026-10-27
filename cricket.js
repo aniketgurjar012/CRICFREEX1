@@ -553,7 +553,7 @@
     return true;
   }
 
-  function closeCricketPlayer(updateUrl = true) {
+  function closeCricketPlayer(updateUrl = false) {
     if (watchPlayer) {
       const iframes = watchPlayer.querySelectorAll("iframe");
       iframes.forEach(el => {
@@ -2283,7 +2283,7 @@
     openTeam,
     openArticle,
     openArchiveYear,
-    closeWatchPlayer: closeCricketPlayer,
+    closeWatchPlayer: (updateUrl = false) => closeCricketPlayer(updateUrl),
     startMatchServer,
     restoreRoute
   };
