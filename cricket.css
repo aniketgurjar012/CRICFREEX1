@@ -370,6 +370,27 @@ body.cricket-active .cricket-center {
   font-weight: 750;
 }
 
+.cricket-watch-frame-wrap {
+  position: relative !important;
+  width: 100%;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.player-top-guard {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 38%;
+  z-index: 18;
+  pointer-events: auto !important;
+  background: transparent !important;
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 .cricket-watch-frame {
   display: block;
   width: 100%;

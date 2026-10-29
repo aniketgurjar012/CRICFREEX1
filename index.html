@@ -923,6 +923,21 @@
             box-shadow: 0 35px 90px #0009
         }
 
+        /* Top Unclickable Guard: disables Copy Embed, watermarks & third-party top buttons */
+        .player-top-guard {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 38%;
+            z-index: 18;
+            pointer-events: auto !important;
+            background: transparent !important;
+            cursor: default;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
         .stream-frame,
         .stream-video {
             display: block;

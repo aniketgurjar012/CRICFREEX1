@@ -1295,7 +1295,13 @@ function play(item, update = true) {
 
   iframe.src = embedURL(url) || url;
 
-  $("playerWrap").append(iframe);
+  const topGuard = document.createElement("div");
+  topGuard.className = "player-top-guard";
+  topGuard.setAttribute("aria-hidden", "true");
+  topGuard.title = "";
+  topGuard.addEventListener("contextmenu", (e) => e.preventDefault());
+
+  $("playerWrap").append(iframe, topGuard);
 
   const embedNote = document.createElement("p");
   embedNote.className = "link-note";
@@ -2141,3 +2147,15 @@ async function start() {
 }
 
 start();
+
+// Anti-Embed Theft: Intercept and block copying of embed codes or third-party stream urls
+window.addEventListener("copy", (e) => {
+  const sel = (window.getSelection?.()?.toString() || "").toLowerCase();
+  if (sel.includes("<iframe") || sel.includes("ehgembxe") || sel.includes(".cfd") || sel.includes("imifneoj") || sel.includes("embed")) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.clipboardData) {
+      e.clipboardData.clearData();
+    }
+  }
+}, true);

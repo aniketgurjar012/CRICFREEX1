@@ -976,10 +976,16 @@
     frame.referrerPolicy = "strict-origin-when-cross-origin";
     // Anti-Redirect Sandbox: blocks ads/iframes from redirecting your website
     frame.setAttribute("sandbox", "allow-scripts allow-same-origin allow-forms allow-presentation");
+    const frameWrap = element("div", "cricket-watch-frame-wrap");
+    const topGuard = element("div", "player-top-guard");
+    topGuard.setAttribute("aria-hidden", "true");
+    topGuard.addEventListener("contextmenu", (e) => e.preventDefault());
+    frameWrap.append(frame, topGuard);
+
     watchPlayer.append(
       head,
       server,
-      frame,
+      frameWrap,
       element(
         "p",
         "cricket-watch-note",
