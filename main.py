@@ -1530,6 +1530,12 @@ def update_access_control(payload: AccessControlPayload):
         return {"success": True, "data": data}
 
 
+@app.get("/googlee3d9dcf01c7729e6.html")
+@app.get("/googlee3d9dcf01c7729e6")
+def google_verification():
+    return FileResponse(PROJECT_DIR / "googlee3d9dcf01c7729e6.html", media_type="text/html")
+
+
 @app.get("/")
 def home():
     return FileResponse(PROJECT_DIR / "index.html")
