@@ -370,7 +370,7 @@ def extract_page(html, path):
 
             if links_in_container:
                 if all(
-                    "video" in link.get("href", "").lower()
+                    "video" in str(link.get("href") or "").lower()
                     or "video" in link.get_text(" ", strip=True).lower()
                     for link in links_in_container
                 ):
@@ -457,6 +457,7 @@ def extract_page(html, path):
         None
     )
 
+    category: Optional[str] = None
     if path.startswith("/cricket-team/"):
         category = "teams"
     elif path.startswith("/cricket-scorecard-archives/"):
@@ -464,12 +465,12 @@ def extract_page(html, path):
     elif path.startswith("/cricket-series/"):
         category = "series"
 
-    allowed_prefixes = prefixes.get(category)
+    allowed_prefixes = prefixes.get(category) if category else None
 
     for a in main.find_all("a", href=True):
 
         text = a.get_text(" ", strip=True)
-        href = a.get("href", "")
+        href = str(a.get("href") or "")
 
         if not text or len(text) < 3:
             continue
@@ -1006,7 +1007,7 @@ def extract_team_players(html):
     seen = set()
 
     for link in soup.find_all("a", href=True):
-        path = link.get("href", "")
+        path = str(link.get("href") or "")
         if not re.fullmatch(r"/profiles/\d+/[a-zA-Z0-9-]+/?", path):
             continue
 
@@ -1534,6 +1535,16 @@ def update_access_control(payload: AccessControlPayload):
 @app.get("/googlee3d9dcf01c7729e6")
 def google_verification():
     return FileResponse(PROJECT_DIR / "googlee3d9dcf01c7729e6.html", media_type="text/html")
+
+
+@app.get("/sitemap.xml")
+def sitemap():
+    return FileResponse(PROJECT_DIR / "sitemap.xml", media_type="application/xml")
+
+
+@app.get("/robots.txt")
+def robots():
+    return FileResponse(PROJECT_DIR / "robots.txt", media_type="text/plain")
 
 
 @app.get("/")
