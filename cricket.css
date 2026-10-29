@@ -382,7 +382,7 @@ body.cricket-active .cricket-center {
   top: 0;
   left: 0;
   right: 0;
-  height: 25%;
+  height: 15% !important;
   z-index: 18;
   pointer-events: auto !important;
   background: transparent !important;
@@ -395,8 +395,9 @@ body.cricket-active .cricket-center {
   display: block;
   width: 100%;
   aspect-ratio: 16 / 9;
-  min-height: clamp(260px, 50vw, 580px);
-  max-height: 600px;
+  height: clamp(320px, 48vw, 560px);
+  min-height: 320px;
+  max-height: 560px;
   border: 1px solid var(--cricket-line);
   border-radius: 10px;
   background: #050507;
@@ -421,6 +422,22 @@ body.cricket-active .cricket-center {
   background: rgba(0, 0, 0, 0.04);
   border-color: rgba(0, 0, 0, 0.1);
   color: #334155;
+}
+
+@media(max-width:768px) {
+  .cricket-watch-player-dock {
+    padding: 12px 10px;
+    margin: 16px 0;
+    border-radius: 12px;
+  }
+
+  .cricket-watch-frame {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    height: clamp(230px, 56.25vw, 360px);
+    min-height: 230px;
+    max-height: 360px;
+  }
 }
 
 @media(max-width:620px) {
@@ -496,11 +513,13 @@ body.cricket-active .cricket-center {
 .cricket-flag-icon {
   display: inline-block;
   vertical-align: middle;
-  width: 18px;
+  width: 19px;
   height: 13px;
   border-radius: 2px;
   object-fit: cover;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
   margin-right: 6px;
   flex-shrink: 0;
 }
@@ -509,15 +528,15 @@ body.cricket-active .cricket-center {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
+  width: 19px;
   height: 13px;
   vertical-align: middle;
   border-radius: 2px;
-  background: linear-gradient(135deg, #2b2b38, #181822);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: #181822;
+  border: 1px solid rgba(255, 255, 255, 0.1);
   color: #ff3440;
   font-size: 8px;
-  font-weight: 900;
+  font-weight: 800;
   margin-right: 6px;
   flex-shrink: 0;
 }
@@ -551,9 +570,11 @@ body.cricket-active .cricket-center {
   width: 17px;
   height: 17px;
   object-fit: contain;
-  background: #ffffff;
-  border-radius: 3px;
-  padding: 1px;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 2px;
+  padding: 0 !important;
+  box-shadow: none !important;
 }
 
 .cricket-section-heading .cricket-flag-img.cricket-team-logo-img {
@@ -565,6 +586,104 @@ body.cricket-active .cricket-center {
 .cricket-tab .cricket-flag-img.cricket-team-logo-img {
   width: 15px;
   height: 15px;
+}
+
+/* Match Stumps Notice */
+.cricket-stumps-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: clamp(28px, 5vw, 50px) 18px;
+  background: radial-gradient(circle at center, #181922 0%, #08090d 100%);
+  border: 1px solid rgba(255, 52, 64, 0.3);
+  border-radius: 12px;
+  margin: 10px 0;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+
+.cricket-stumps-icon {
+  font-size: 38px;
+  margin-bottom: 12px;
+  animation: pulse-stumps 2.5s infinite ease-in-out;
+}
+
+@keyframes pulse-stumps {
+  0%, 100% { transform: scale(1); opacity: 0.9; }
+  50% { transform: scale(1.08); opacity: 1; }
+}
+
+.cricket-stumps-title {
+  margin: 0 0 8px;
+  font-size: clamp(18px, 3.2vw, 23px);
+  font-weight: 850;
+  color: #fff;
+  letter-spacing: -0.3px;
+}
+
+.cricket-stumps-msg {
+  margin: 0 0 8px;
+  font-size: clamp(14px, 2.4vw, 16px);
+  font-weight: 750;
+  color: #ff5252;
+}
+
+.cricket-stumps-sub {
+  font-size: 12px;
+  color: var(--cricket-muted);
+  font-weight: 600;
+}
+
+[data-theme="light"] .cricket-stumps-box {
+  background: #f8fafc;
+  border-color: rgba(184, 0, 10, 0.25);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="light"] .cricket-stumps-title {
+  color: #0f172a;
+}
+
+[data-theme="light"] .cricket-stumps-msg {
+  color: #b8000a;
+}
+
+/* Toast alert notification */
+.cricket-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(30px);
+  background: #11121a;
+  color: #fff;
+  border: 1px solid #ff3440;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.65);
+  padding: 12px 24px;
+  border-radius: 30px;
+  font-size: 13.5px;
+  font-weight: 700;
+  z-index: 999999;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  white-space: nowrap;
+  max-width: 90vw;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+.cricket-toast.is-show {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(-50%) translateY(0);
+}
+
+[data-theme="light"] .cricket-toast {
+  background: #ffffff;
+  color: #0f172a;
+  border-color: #b8000a;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.15);
 }
 
 .cricket-team-score {

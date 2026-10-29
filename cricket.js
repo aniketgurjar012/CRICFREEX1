@@ -637,7 +637,18 @@
     ].filter(Boolean).join(" ").toLowerCase();
   }
 
+  function isMatchStartingSoon(match) {
+    if (!match?.startDate) return false;
+    const startMs = Number(match.startDate);
+    if (!startMs || isNaN(startMs)) return false;
+    // 1 hour before match start time (3600 * 1000 ms)
+    const diffMs = startMs - Date.now();
+    return diffMs <= 3600000 && !isCompletedMatch(match);
+  }
+
   function isLiveMatch(match) {
+    if (isCompletedMatch(match)) return false;
+    if (isMatchStartingSoon(match)) return true;
     return [
       "in progress",
       "live",
@@ -679,6 +690,7 @@
   }
 
   function isUpcomingMatch(match) {
+    if (isMatchStartingSoon(match)) return false;
     const s = String(match?.state || "").trim().toLowerCase();
     return ["preview", "upcoming", "scheduled"].includes(s);
   }
@@ -687,13 +699,42 @@
     if (state.page === "upcoming" || state.page === "recent") {
       return false;
     }
-    if (isUpcomingMatch(match) || isCompletedMatch(match)) {
+    if (isCompletedMatch(match)) {
+      return false;
+    }
+    if (isMatchStartingSoon(match)) {
+      return true;
+    }
+    if (isUpcomingMatch(match)) {
       return false;
     }
     if (state.page === "live") {
       return isLiveMatch(match) || !isUpcomingMatch(match);
     }
     return isLiveMatch(match);
+  }
+
+  function isMatchAtStumps(match) {
+    if (!match) return false;
+    const stateStr = String(match.state || "").trim().toLowerCase();
+    const statusStr = String(match.status || "").trim().toLowerCase();
+    return stateStr.includes("stumps") || statusStr.includes("stumps");
+  }
+
+  function showCricketToast(message) {
+    let toast = document.getElementById("cricketToast");
+    if (!toast) {
+      toast = document.createElement("div");
+      toast.id = "cricketToast";
+      toast.className = "cricket-toast";
+      document.body.appendChild(toast);
+    }
+    toast.textContent = message;
+    toast.classList.add("is-show");
+    clearTimeout(toast._timer);
+    toast._timer = setTimeout(() => {
+      toast.classList.remove("is-show");
+    }, 3500);
   }
 
   async function pruneCompletedWatchLinks(knownRecentMatches) {
@@ -862,12 +903,18 @@
     const serverLabel = `Server ${serverIndex + 1}`;
     const { url, sourceURL } = validLinks[serverIndex];
 
+    const isStumps = isMatchAtStumps(match);
+    if (isStumps) {
+      showCricketToast("This stream will be live when the match resumes.");
+    }
+
     state.activeWatch = {
       match,
       serverIndex,
       serverLabel,
       url,
-      sourceURL
+      sourceURL,
+      isStumps
     };
     renderWatchPlayer();
 
@@ -880,11 +927,18 @@
     });
 
     if (updateUrl) {
-      updateCricketURL({
-        match: match.id,
-        tab: state.page === "match" ? (state.matchTab || "scorecard") : null,
-        server: serverIndex + 1
-      });
+      if (state.page === "match" && state.selectedMatch) {
+        updateCricketURL({
+          match: match.id,
+          tab: state.matchTab || "scorecard",
+          server: serverIndex + 1
+        });
+      } else {
+        updateCricketURL({
+          tab: state.page === "live" ? null : state.page,
+          server: serverIndex + 1
+        });
+      }
     }
 
     watchPlayer?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -968,6 +1022,22 @@
       "cricket-watch-player-server",
       `${active.serverLabel} selected`
     );
+    if (active.isStumps) {
+      const stumpsBox = element("div", "cricket-stumps-box");
+      const stumpsIcon = element("div", "cricket-stumps-icon", "🏏");
+      const stumpsTitle = element("h3", "cricket-stumps-title", "Match at Stumps");
+      const stumpsMsg = element("p", "cricket-stumps-msg", "This stream will be live when the match resumes.");
+      const stumpsSub = element("span", "cricket-stumps-sub", active.match.status || "Play will resume on the next scheduled day.");
+      stumpsBox.append(stumpsIcon, stumpsTitle, stumpsMsg, stumpsSub);
+
+      watchPlayer.append(
+        head,
+        server,
+        stumpsBox
+      );
+      return;
+    }
+
     const frame = document.createElement("iframe");
     frame.className = "cricket-watch-frame";
     frame.src = active.url;
@@ -2574,6 +2644,16 @@
   }
 
   async function restoreRoute(push = false) {
+    // When site is freshly opened or browser reopened, always land on homepage
+    const isNewSession = !sessionStorage.getItem("cricfreex_session_active");
+    sessionStorage.setItem("cricfreex_session_active", "1");
+    if (isNewSession) {
+      const cleanPath = cleanCricketPath(location);
+      if (location.search || location.hash) {
+        history.replaceState(null, "", cleanPath);
+      }
+    }
+
     const params = new URLSearchParams(location.search);
     const hash = location.hash;
 

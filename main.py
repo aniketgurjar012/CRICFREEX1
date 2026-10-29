@@ -301,9 +301,6 @@ def extract_matches(html):
 def classify_match(match):
     state = " ".join(str(match.get("state") or "").lower().split())
 
-    if state in {"preview", "upcoming", "scheduled"}:
-        return "upcoming"
-
     if state in {
         "complete",
         "completed",
@@ -316,6 +313,21 @@ def classify_match(match):
         "forfeit",
     }:
         return "recent"
+
+    # Check if upcoming match starts within 1 hour (3600 seconds) -> promote to live
+    start_date = match.get("startDate")
+    if start_date:
+        try:
+            val = float(start_date)
+            start_sec = val / 1000.0 if val > 1e11 else val
+            now_sec = time.time()
+            if (start_sec - now_sec) <= 3600:
+                return "live"
+        except (ValueError, TypeError):
+            pass
+
+    if state in {"preview", "upcoming", "scheduled"}:
+        return "upcoming"
 
     if state in {
         "in progress",
@@ -505,10 +517,23 @@ def get_matches(category: str):
     try:
 
         html = fetch(PAGES[category], MATCH_CACHE_TTL)
+        raw_matches = extract_matches(html)
+
+        if category == "live":
+            # Also extract upcoming matches so matches starting within 1 hour appear in live section
+            try:
+                up_html = fetch(PAGES["upcoming"], MATCH_CACHE_TTL)
+                up_matches = extract_matches(up_html)
+                seen_ids = {m.get("id") for m in raw_matches}
+                for m in up_matches:
+                    if m.get("id") not in seen_ids:
+                        raw_matches.append(m)
+            except Exception:
+                pass
 
         matches = [
             match
-            for match in extract_matches(html)
+            for match in raw_matches
             if classify_match(match) == category
         ]
 

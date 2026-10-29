@@ -14,7 +14,7 @@
             document.documentElement.setAttribute("data-theme", "light");
         }
     </script>
-    <link rel="stylesheet" href="./cricket.css?v=15">
+    <link rel="stylesheet" href="./cricket.css?v=16">
     <style>
         :root {
             --bg: #050507;
@@ -929,7 +929,7 @@
             top: 0;
             left: 0;
             right: 0;
-            height: 25%;
+            height: 15% !important;
             z-index: 18;
             pointer-events: auto !important;
             background: transparent !important;
@@ -943,8 +943,9 @@
             display: block;
             width: 100%;
             aspect-ratio: 16 / 9;
-            min-height: clamp(260px, 50vw, 580px);
-            max-height: 600px;
+            height: clamp(320px, 48vw, 560px);
+            min-height: 320px;
+            max-height: 560px;
             border: 0;
             background: #000;
         }
@@ -1907,9 +1908,9 @@
             .stream-video {
                 width: 100%;
                 aspect-ratio: 16 / 9;
-                min-height: clamp(220px, 48vw, 540px);
-                max-height: 580px;
-                height: auto;
+                height: clamp(230px, 56.25vw, 360px);
+                min-height: 230px;
+                max-height: 360px;
             }
 
             .watch-head {
@@ -2486,8 +2487,8 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./config.js?v=2"></script>
-    <script src="./app.js?v=26"></script>
-    <script src="./cricket.js?v=25"></script>
+    <script src="./app.js?v=27"></script>
+    <script src="./cricket.js?v=26"></script>
 </body>
 
 </html>

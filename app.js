@@ -1353,6 +1353,16 @@ function openChannelsView(update = true) {
 }
 
 function restoreURL() {
+  const isNewSession = !sessionStorage.getItem("cricfreex_app_session_active");
+  sessionStorage.setItem("cricfreex_app_session_active", "1");
+  if (isNewSession) {
+    const checkParams = new URLSearchParams(location.search);
+    if (checkParams.has("match") || checkParams.has("tab") || checkParams.has("server")) {
+      const path = location.pathname.toLowerCase().endsWith("/index.html") ? "/" : (location.pathname || "/");
+      history.replaceState({}, "", path);
+    }
+  }
+
   const p = new URLSearchParams(location.search);
   const view = p.get("view");
   const tab = p.get("tab");
