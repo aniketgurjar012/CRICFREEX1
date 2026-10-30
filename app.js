@@ -1308,7 +1308,23 @@ function play(item, update = true) {
     }, { capture: true, passive: false });
   });
 
-  $("playerWrap").append(iframe, topGuard);
+  const fsHotspot = document.createElement("div");
+  fsHotspot.className = "player-fs-hotspot";
+  fsHotspot.setAttribute("aria-hidden", "true");
+  fsHotspot.title = "";
+  fsHotspot.addEventListener("click", () => {
+    const wrap = $("playerWrap");
+    if (!wrap) return;
+    if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+      if (wrap.requestFullscreen) wrap.requestFullscreen().catch(() => {});
+      else if (wrap.webkitRequestFullscreen) wrap.webkitRequestFullscreen().catch(() => {});
+    } else {
+      if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
+      else if (document.webkitExitFullscreen) document.webkitExitFullscreen().catch(() => {});
+    }
+  });
+
+  $("playerWrap").append(iframe, topGuard, fsHotspot);
 
   const embedNote = document.createElement("p");
   embedNote.className = "link-note";

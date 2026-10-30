@@ -15,7 +15,7 @@
             document.documentElement.setAttribute("data-theme", "light");
         }
     </script>
-    <link rel="stylesheet" href="./cricket.css?v=17">
+    <link rel="stylesheet" href="./cricket.css?v=21">
     <style>
         :root {
             --bg: #050507;
@@ -2252,6 +2252,85 @@
                 justify-content: center;
             }
         }
+
+        /* Container Fullscreen & Orientation 25% Guard */
+        .player-wrap:fullscreen,
+        .player-wrap:-webkit-full-screen,
+        .cricket-watch-frame-wrap:fullscreen,
+        .cricket-watch-frame-wrap:-webkit-full-screen {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            z-index: 2147483640 !important;
+            background: #000 !important;
+            border: none !important;
+            border-radius: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+
+        .player-wrap:fullscreen iframe,
+        .player-wrap:-webkit-full-screen iframe,
+        .cricket-watch-frame-wrap:fullscreen iframe,
+        .cricket-watch-frame-wrap:-webkit-full-screen iframe {
+            width: 100vw !important;
+            height: 100vh !important;
+            max-height: 100vh !important;
+            border: none !important;
+            border-radius: 0 !important;
+        }
+
+        .player-wrap:fullscreen .player-top-guard,
+        .player-wrap:-webkit-full-screen .player-top-guard,
+        .cricket-watch-frame-wrap:fullscreen .player-top-guard,
+        .cricket-watch-frame-wrap:-webkit-full-screen .player-top-guard {
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            width: 100vw !important;
+            height: 25vh !important;
+            min-height: 25vh !important;
+            max-height: 25vh !important;
+            z-index: 2147483647 !important;
+            pointer-events: auto !important;
+            touch-action: none !important;
+            background: rgba(0, 0, 0, 0.001) !important;
+        }
+
+        @media (orientation: portrait) {
+            .player-wrap:fullscreen .player-top-guard,
+            .player-wrap:-webkit-full-screen .player-top-guard,
+            .cricket-watch-frame-wrap:fullscreen .player-top-guard,
+            .cricket-watch-frame-wrap:-webkit-full-screen .player-top-guard {
+                height: 25vh !important;
+                min-height: 25vh !important;
+            }
+        }
+
+        @media (orientation: landscape) {
+            .player-wrap:fullscreen .player-top-guard,
+            .player-wrap:-webkit-full-screen .player-top-guard,
+            .cricket-watch-frame-wrap:fullscreen .player-top-guard,
+            .cricket-watch-frame-wrap:-webkit-full-screen .player-top-guard {
+                height: 25vh !important;
+                min-height: 25vh !important;
+            }
+        }
+
+        .player-fs-hotspot {
+            position: absolute !important;
+            bottom: 0 !important;
+            right: 0 !important;
+            width: 58px !important;
+            height: 50px !important;
+            z-index: 99999 !important;
+            background: transparent !important;
+            cursor: pointer !important;
+            touch-action: manipulation !important;
+        }
     </style>
 </head>
 
@@ -2491,8 +2570,8 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./config.js?v=2"></script>
-    <script src="./app.js?v=28"></script>
-    <script src="./cricket.js?v=27"></script>
+    <script src="./app.js?v=32"></script>
+    <script src="./cricket.js?v=31"></script>
 </body>
 
 </html>

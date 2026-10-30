@@ -1057,7 +1057,20 @@
         return false;
       }, { capture: true, passive: false });
     });
-    frameWrap.append(frame, topGuard);
+    const fsHotspot = element("div", "player-fs-hotspot");
+    fsHotspot.setAttribute("aria-hidden", "true");
+    fsHotspot.title = "";
+    fsHotspot.addEventListener("click", () => {
+      if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+        if (frameWrap.requestFullscreen) frameWrap.requestFullscreen().catch(() => {});
+        else if (frameWrap.webkitRequestFullscreen) frameWrap.webkitRequestFullscreen().catch(() => {});
+      } else {
+        if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
+        else if (document.webkitExitFullscreen) document.webkitExitFullscreen().catch(() => {});
+      }
+    });
+
+    frameWrap.append(frame, topGuard, fsHotspot);
 
     watchPlayer.append(
       head,
