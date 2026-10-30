@@ -1299,7 +1299,14 @@ function play(item, update = true) {
   topGuard.className = "player-top-guard";
   topGuard.setAttribute("aria-hidden", "true");
   topGuard.title = "";
-  topGuard.addEventListener("contextmenu", (e) => e.preventDefault());
+  ["click", "dblclick", "mousedown", "mouseup", "touchstart", "touchend", "touchmove", "pointerdown", "pointerup", "pointermove", "contextmenu"].forEach(evt => {
+    topGuard.addEventListener(evt, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+      return false;
+    }, { capture: true, passive: false });
+  });
 
   $("playerWrap").append(iframe, topGuard);
 

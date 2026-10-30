@@ -15,7 +15,7 @@
             document.documentElement.setAttribute("data-theme", "light");
         }
     </script>
-    <link rel="stylesheet" href="./cricket.css?v=16">
+    <link rel="stylesheet" href="./cricket.css?v=17">
     <style>
         :root {
             --bg: #050507;
@@ -926,17 +926,20 @@
 
         /* Top Unclickable Guard: disables Copy Embed, watermarks & third-party top buttons */
         .player-top-guard {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 15% !important;
-            z-index: 18;
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            width: 100% !important;
+            height: 25% !important;
+            z-index: 99999 !important;
             pointer-events: auto !important;
-            background: transparent !important;
-            cursor: default;
-            user-select: none;
-            -webkit-user-select: none;
+            touch-action: none !important;
+            background: rgba(0, 0, 0, 0.001) !important;
+            cursor: default !important;
+            user-select: none !important;
+            -webkit-user-select: none !important;
+            -webkit-touch-callout: none !important;
         }
 
         .stream-frame,
@@ -944,9 +947,9 @@
             display: block;
             width: 100%;
             aspect-ratio: 16 / 9;
-            height: clamp(320px, 48vw, 560px);
-            min-height: 320px;
-            max-height: 560px;
+            height: clamp(380px, 52vh, 620px);
+            min-height: 380px;
+            max-height: 640px;
             border: 0;
             background: #000;
         }
@@ -1907,11 +1910,11 @@
 
             .stream-frame,
             .stream-video {
-                width: 100%;
-                aspect-ratio: 16 / 9;
-                height: clamp(230px, 56.25vw, 360px);
-                min-height: 230px;
-                max-height: 360px;
+                width: 100% !important;
+                height: clamp(300px, 48vh, 460px) !important;
+                min-height: 300px !important;
+                max-height: 480px !important;
+                aspect-ratio: auto !important;
             }
 
             .watch-head {
@@ -2488,8 +2491,8 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./config.js?v=2"></script>
-    <script src="./app.js?v=27"></script>
-    <script src="./cricket.js?v=26"></script>
+    <script src="./app.js?v=28"></script>
+    <script src="./cricket.js?v=27"></script>
 </body>
 
 </html>
