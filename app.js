@@ -725,6 +725,53 @@ function openSeries(item, update = true) {
   });
 }
 
+function createChannelTopGuard() {
+  const topGuard = document.createElement("div");
+  topGuard.className = "player-top-guard";
+  topGuard.setAttribute("aria-hidden", "true");
+  topGuard.innerHTML = '<svg width="100%" height="100%" style="display:block;width:100%;height:100%;pointer-events:auto;" preserveAspectRatio="none"><rect width="100%" height="100%" fill="#000" fill-opacity="0.02"/></svg>';
+  ["click", "dblclick", "mousedown", "mouseup", "touchstart", "touchend", "touchmove", "pointerdown", "pointerup", "pointermove", "contextmenu"].forEach(evt => {
+    topGuard.addEventListener(evt, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+      return false;
+    }, { capture: true, passive: false });
+  });
+  return topGuard;
+}
+
+function createChannelFsHotspot() {
+  const fsHotspot = document.createElement("div");
+  fsHotspot.className = "player-fs-hotspot";
+  fsHotspot.setAttribute("aria-hidden", "true");
+  fsHotspot.addEventListener("click", () => {
+    const wrap = $("playerWrap");
+    if (!wrap) return;
+    if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+      if (wrap.requestFullscreen) wrap.requestFullscreen().catch(() => {});
+      else if (wrap.webkitRequestFullscreen) wrap.webkitRequestFullscreen().catch(() => {});
+    } else {
+      if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
+      else if (document.webkitExitFullscreen) document.webkitExitFullscreen().catch(() => {});
+    }
+  });
+  return fsHotspot;
+}
+
+function enforceChannelFullscreen() {
+  const fs = document.fullscreenElement || document.webkitFullscreenElement;
+  if (fs && (fs.classList && fs.classList.contains("stream-frame") || fs.tagName === "IFRAME")) {
+    const wrap = fs.closest(".player-wrap");
+    if (wrap && wrap !== fs) {
+      if (wrap.requestFullscreen) wrap.requestFullscreen().catch(() => {});
+      else if (wrap.webkitRequestFullscreen) wrap.webkitRequestFullscreen();
+    }
+  }
+}
+document.addEventListener("fullscreenchange", enforceChannelFullscreen, true);
+document.addEventListener("webkitfullscreenchange", enforceChannelFullscreen, true);
+
 function play(item, update = true) {
 
   /* =========================================================
@@ -1238,7 +1285,9 @@ function play(item, update = true) {
     video.src = url;
 
     $("playerWrap").append(
-      video
+      video,
+      createChannelTopGuard(),
+      createChannelFsHotspot()
     );
 
     /*
@@ -1295,36 +1344,7 @@ function play(item, update = true) {
 
   iframe.src = embedURL(url) || url;
 
-  const topGuard = document.createElement("div");
-  topGuard.className = "player-top-guard";
-  topGuard.setAttribute("aria-hidden", "true");
-  topGuard.title = "";
-  ["click", "dblclick", "mousedown", "mouseup", "touchstart", "touchend", "touchmove", "pointerdown", "pointerup", "pointermove", "contextmenu"].forEach(evt => {
-    topGuard.addEventListener(evt, (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      if (e.stopImmediatePropagation) e.stopImmediatePropagation();
-      return false;
-    }, { capture: true, passive: false });
-  });
-
-  const fsHotspot = document.createElement("div");
-  fsHotspot.className = "player-fs-hotspot";
-  fsHotspot.setAttribute("aria-hidden", "true");
-  fsHotspot.title = "";
-  fsHotspot.addEventListener("click", () => {
-    const wrap = $("playerWrap");
-    if (!wrap) return;
-    if (!document.fullscreenElement && !document.webkitFullscreenElement) {
-      if (wrap.requestFullscreen) wrap.requestFullscreen().catch(() => {});
-      else if (wrap.webkitRequestFullscreen) wrap.webkitRequestFullscreen().catch(() => {});
-    } else {
-      if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
-      else if (document.webkitExitFullscreen) document.webkitExitFullscreen().catch(() => {});
-    }
-  });
-
-  $("playerWrap").append(iframe, topGuard, fsHotspot);
+  $("playerWrap").append(iframe, createChannelTopGuard(), createChannelFsHotspot());
 
   const embedNote = document.createElement("p");
   embedNote.className = "link-note";

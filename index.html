@@ -932,14 +932,18 @@
             right: 0 !important;
             width: 100% !important;
             height: 25% !important;
-            z-index: 99999 !important;
+            min-height: 25% !important;
+            max-height: 25% !important;
+            z-index: 2147483647 !important;
             pointer-events: auto !important;
             touch-action: none !important;
-            background: rgba(0, 0, 0, 0.001) !important;
+            background: rgba(0, 0, 0, 0.02) !important;
             cursor: default !important;
             user-select: none !important;
             -webkit-user-select: none !important;
             -webkit-touch-callout: none !important;
+            display: block !important;
+            overflow: hidden !important;
         }
 
         .stream-frame,
@@ -2271,22 +2275,48 @@
             padding: 0 !important;
         }
 
-        .player-wrap:fullscreen iframe,
-        .player-wrap:-webkit-full-screen iframe,
-        .cricket-watch-frame-wrap:fullscreen iframe,
-        .cricket-watch-frame-wrap:-webkit-full-screen iframe {
+        .player-wrap:fullscreen,
+        .player-wrap:-webkit-full-screen,
+        .cricket-watch-frame-wrap:fullscreen,
+        .cricket-watch-frame-wrap:-webkit-full-screen {
+            position: fixed !important;
+            inset: 0 !important;
             width: 100vw !important;
             height: 100vh !important;
+            max-width: 100vw !important;
+            max-height: 100vh !important;
+            background: #000 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            border: none !important;
+            border-radius: 0 !important;
+            overflow: hidden !important;
+        }
+
+        .player-wrap:fullscreen iframe,
+        .player-wrap:-webkit-full-screen iframe,
+        .player-wrap:fullscreen video,
+        .player-wrap:-webkit-full-screen video,
+        .cricket-watch-frame-wrap:fullscreen iframe,
+        .cricket-watch-frame-wrap:-webkit-full-screen iframe {
+            position: absolute !important;
+            inset: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            max-width: 100vw !important;
             max-height: 100vh !important;
             border: none !important;
             border-radius: 0 !important;
+            z-index: 1 !important;
         }
 
+        :fullscreen .player-top-guard,
+        :-webkit-full-screen .player-top-guard,
         .player-wrap:fullscreen .player-top-guard,
         .player-wrap:-webkit-full-screen .player-top-guard,
         .cricket-watch-frame-wrap:fullscreen .player-top-guard,
         .cricket-watch-frame-wrap:-webkit-full-screen .player-top-guard {
-            position: absolute !important;
+            position: fixed !important;
             top: 0 !important;
             left: 0 !important;
             right: 0 !important;
@@ -2297,26 +2327,35 @@
             z-index: 2147483647 !important;
             pointer-events: auto !important;
             touch-action: none !important;
-            background: rgba(0, 0, 0, 0.001) !important;
+            background: rgba(0, 0, 0, 0.02) !important;
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
         }
 
         @media (orientation: portrait) {
+            :fullscreen .player-top-guard,
+            :-webkit-full-screen .player-top-guard,
             .player-wrap:fullscreen .player-top-guard,
             .player-wrap:-webkit-full-screen .player-top-guard,
             .cricket-watch-frame-wrap:fullscreen .player-top-guard,
             .cricket-watch-frame-wrap:-webkit-full-screen .player-top-guard {
                 height: 25vh !important;
                 min-height: 25vh !important;
+                max-height: 25vh !important;
             }
         }
 
         @media (orientation: landscape) {
+            :fullscreen .player-top-guard,
+            :-webkit-full-screen .player-top-guard,
             .player-wrap:fullscreen .player-top-guard,
             .player-wrap:-webkit-full-screen .player-top-guard,
             .cricket-watch-frame-wrap:fullscreen .player-top-guard,
             .cricket-watch-frame-wrap:-webkit-full-screen .player-top-guard {
                 height: 25vh !important;
                 min-height: 25vh !important;
+                max-height: 25vh !important;
             }
         }
 
@@ -2324,9 +2363,9 @@
             position: absolute !important;
             bottom: 0 !important;
             right: 0 !important;
-            width: 58px !important;
-            height: 50px !important;
-            z-index: 99999 !important;
+            width: 75px !important;
+            height: 60px !important;
+            z-index: 2147483646 !important;
             background: transparent !important;
             cursor: pointer !important;
             touch-action: manipulation !important;
@@ -2570,8 +2609,8 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./config.js?v=2"></script>
-    <script src="./app.js?v=32"></script>
-    <script src="./cricket.js?v=31"></script>
+    <script src="./app.js?v=36"></script>
+    <script src="./cricket.js?v=36"></script>
 </body>
 
 </html>

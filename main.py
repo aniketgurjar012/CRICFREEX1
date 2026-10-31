@@ -5,7 +5,12 @@ import threading
 import uuid
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Any
+import urllib.request
+import urllib.parse
+import logging
+
+logger = logging.getLogger('cricfreex')
 from urllib.parse import urlparse
 
 import requests
@@ -65,7 +70,7 @@ PAGES = {
     "rankings": "/cricket-stats/icc-rankings/men/batting",
 }
 
-MATCH_CACHE_TTL = 25
+MATCH_CACHE_TTL = 3
 
 cache = {}
 lock = threading.Lock()
@@ -509,6 +514,384 @@ def extract_page(html, path):
     }
 
 
+
+# =========================================================
+# ALLROUNDERLIVE 24/7 AUTO STREAM SYNC
+# =========================================================
+AUTO_MATCH_SERVERS: dict[str, list[dict[str, Any]]] = {}
+AUTO_SERVERS_LOCK = threading.Lock()
+LAST_AUTO_SYNC_TIME: float = 0.0
+
+
+TEAM_ALIASES: dict[str, list[str]] = {
+    "south africa": ["south africa", "rsa", "sa", "proteas"],
+    "rsa": ["south africa", "rsa", "sa", "proteas"],
+    "sa": ["south africa", "rsa", "sa", "proteas"],
+
+    "australia": ["australia", "aus", "aussies"],
+    "aus": ["australia", "aus", "aussies"],
+
+    "united arab emirates": ["united arab emirates", "uae", "u a e"],
+    "uae": ["united arab emirates", "uae", "u a e"],
+
+    "papua new guinea": ["papua new guinea", "png"],
+    "png": ["papua new guinea", "png"],
+
+    "west indies": ["west indies", "wi", "windies"],
+    "wi": ["west indies", "wi", "windies"],
+
+    "new zealand": ["new zealand", "nz", "blackcaps", "black caps"],
+    "nz": ["new zealand", "nz", "blackcaps", "black caps"],
+
+    "india": ["india", "ind"],
+    "ind": ["india", "ind"],
+
+    "pakistan": ["pakistan", "pak"],
+    "pak": ["pakistan", "pak"],
+
+    "sri lanka": ["sri lanka", "sl"],
+    "sl": ["sri lanka", "sl"],
+
+    "bangladesh": ["bangladesh", "ban", "bd", "tigers"],
+    "ban": ["bangladesh", "ban", "bd", "tigers"],
+
+    "afghanistan": ["afghanistan", "afg"],
+    "afg": ["afghanistan", "afg"],
+
+    "england": ["england", "eng"],
+    "eng": ["england", "eng"],
+
+    "netherlands": ["netherlands", "ned", "dutch", "holland"],
+    "ned": ["netherlands", "ned", "dutch", "holland"],
+
+    "ireland": ["ireland", "ire"],
+    "ire": ["ireland", "ire"],
+
+    "zimbabwe": ["zimbabwe", "zim"],
+    "zim": ["zimbabwe", "zim"],
+
+    "scotland": ["scotland", "sco"],
+    "sco": ["scotland", "sco"],
+
+    "namibia": ["namibia", "nam"],
+    "nam": ["namibia", "nam"],
+
+    "nepal": ["nepal", "nep"],
+    "nep": ["nepal", "nep"],
+
+    "united states": ["united states", "usa", "us"],
+    "usa": ["united states", "usa", "us"],
+
+    "hong kong": ["hong kong", "hk", "hkg"],
+    "hk": ["hong kong", "hk", "hkg"],
+
+    "oman": ["oman", "oma", "omn"],
+    "canada": ["canada", "can"],
+    "uganda": ["uganda", "uga"],
+    "kenya": ["kenya", "ken"],
+    "jersey": ["jersey", "jer"],
+    "kuwait": ["kuwait", "kuw"],
+    "qatar": ["qatar", "qat"],
+    "denmark": ["denmark", "den"],
+    "singapore": ["singapore", "sin"],
+    "malaysia": ["malaysia", "mas"],
+    "italy": ["italy", "ita"],
+    "germany": ["germany", "ger"],
+
+    # WBBL / BBL teams
+    "melbourne renegades": ["melbourne renegades", "renegades", "mlrw", "mlr"],
+    "perth scorchers": ["perth scorchers", "scorchers", "prsw", "prs"],
+    "sydney thunder": ["sydney thunder", "thunder", "sytw", "syt"],
+    "sydney sixers": ["sydney sixers", "sixers", "sysw", "sys"],
+    "brisbane heat": ["brisbane heat", "heat", "bhw", "bwhw", "bwh"],
+    "hobart hurricanes": ["hobart hurricanes", "hurricanes", "hbhw", "hbh"],
+    "adelaide strikers": ["adelaide strikers", "strikers", "asw", "as"],
+    "melbourne stars": ["melbourne stars", "stars", "msw", "mlsw"]
+}
+
+
+def _clean_stream_str(text: str) -> str:
+    if not text:
+        return ""
+    t = re.sub(r"[^a-zA-Z0-9\s]", " ", str(text).lower())
+    return " ".join(t.split())
+
+
+def _is_a_team(name: str) -> bool:
+    if not name:
+        return False
+    # Isolated single letter 'a' following a word, e.g. "india a", "nz a", "australia a"
+    return bool(re.search(r'\b[a-z0-9-]+\s+a\b', str(name).lower()))
+
+
+def _is_women_match(name_or_obj: Any) -> bool:
+    if isinstance(name_or_obj, dict):
+        text = " ".join([
+            str(name_or_obj.get("team1", {}).get("teamName", "")),
+            str(name_or_obj.get("team2", {}).get("teamName", "")),
+            str(name_or_obj.get("series", "")),
+            str(name_or_obj.get("description", ""))
+        ]).lower()
+        t1_s = str(name_or_obj.get("team1", {}).get("teamSName", "")).strip()
+        t2_s = str(name_or_obj.get("team2", {}).get("teamSName", "")).strip()
+        if t1_s.endswith("W") or t2_s.endswith("W"):
+            return True
+    else:
+        text = str(name_or_obj).lower()
+
+    if bool(re.search(r'\b(women|womens|wbbl)\b', text)):
+        return True
+    if "-w" in text:
+        return True
+    return False
+
+
+def _team_matches_stream(team_dict: dict[str, Any], clean_stream: str) -> bool:
+    raw_name = str(team_dict.get("teamName", "")).lower().strip()
+    raw_short = str(team_dict.get("teamSName", "")).lower().strip()
+    clean_name = _clean_stream_str(raw_name)
+    clean_short = _clean_stream_str(raw_short)
+
+    terms = set()
+    if clean_name:
+        terms.add(clean_name)
+        stripped = " ".join([w for w in clean_name.split() if w not in {"women", "team"}])
+        if stripped:
+            terms.add(stripped)
+
+    if clean_short and len(clean_short) >= 2:
+        terms.add(clean_short)
+        if clean_short.endswith("w") and len(clean_short) > 2:
+            terms.add(clean_short[:-1])
+
+    for key in (clean_name, clean_short, raw_name, raw_short):
+        if key in TEAM_ALIASES:
+            for alias in TEAM_ALIASES[key]:
+                terms.add(_clean_stream_str(alias))
+
+    for term in terms:
+        if not term:
+            continue
+        if " " in term:
+            pattern = r'\b' + r'\s+'.join(re.escape(w) for w in term.split()) + r'\b'
+            if re.search(pattern, clean_stream):
+                return True
+        else:
+            if re.search(r'\b' + re.escape(term) + r'\b', clean_stream):
+                return True
+    return False
+
+
+def _match_stream_to_cb(stream_title: str, cb_match: dict[str, Any]) -> bool:
+    clean_stream = _clean_stream_str(stream_title)
+
+    cb_women = _is_women_match(cb_match)
+    st_women = _is_women_match(clean_stream)
+    if cb_women != st_women:
+        return False
+
+    t1_name = str(cb_match.get("team1", {}).get("teamName", ""))
+    t2_name = str(cb_match.get("team2", {}).get("teamName", ""))
+    cb_a = _is_a_team(t1_name) or _is_a_team(t2_name)
+    st_a = _is_a_team(clean_stream)
+    if cb_a != st_a:
+        return False
+
+    t1 = cb_match.get("team1", {})
+    t2 = cb_match.get("team2", {})
+
+    return _team_matches_stream(t1, clean_stream) and _team_matches_stream(t2, clean_stream)
+
+
+def sync_allrounder_streams() -> dict[str, list[dict[str, Any]]]:
+    global LAST_AUTO_SYNC_TIME
+    try:
+        cb_matches: list[dict[str, Any]] = []
+        try:
+            live_html = fetch(PAGES["live"], 10)
+            cb_matches.extend(extract_matches(live_html))
+        except Exception:
+            pass
+        try:
+            up_html = fetch(PAGES["upcoming"], 10)
+            cb_matches.extend(extract_matches(up_html))
+        except Exception:
+            pass
+
+        unique_cb: dict[str, dict[str, Any]] = {
+            str(m["id"]): m for m in cb_matches if m.get("id")
+        }
+        def _match_priority(m: dict[str, Any]) -> int:
+            st = str(m.get("state", "")).strip().lower()
+            if st in ("in progress", "live", "innings break", "toss", "drinks", "rain delay", "delayed", "stumps"):
+                return 0
+            if st in ("preview", "upcoming", "scheduled"):
+                return 1
+            return 2
+
+        cb_list = sorted(list(unique_cb.values()), key=_match_priority)
+
+        matched_servers: dict[str, list[dict[str, Any]]] = {}
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+
+        # 1. FanCode streams from allrounderlive
+        try:
+            req = urllib.request.Request(
+                "https://sportlink-fancode10.pages.dev/fan.json",
+                headers=headers
+            )
+            with urllib.request.urlopen(req, timeout=12) as r:
+                fc_data = json.loads(r.read().decode("utf-8"))
+            for fc in fc_data.get("matches", []):
+                fc_status = str(fc.get("status", "")).upper()
+                if "LIVE" not in fc_status and fc_status != "":
+                    continue
+
+                stream_url = ""
+                auto_streams = fc.get("auto_streams", {})
+                for lang, lang_data in auto_streams.items():
+                    streams = lang_data.get("streams", {})
+                    stream_url = (
+                        streams.get("1080p") or
+                        streams.get("720p") or
+                        streams.get("540p") or ""
+                    )
+                    if stream_url:
+                        break
+                if not stream_url:
+                    stream_url = fc.get("streams", {}).get("primary", "")
+                if not stream_url:
+                    continue
+
+                title = fc.get("title", "")
+                match_id = str(fc.get("match_id", ""))
+                params = urllib.parse.urlencode({
+                    "url": stream_url,
+                    "title": title,
+                    "match_id": match_id
+                })
+                player_url = f"https://allrounderlive.in/fc-play?{params}"
+
+                for cb in cb_list:
+                    if _match_stream_to_cb(title, cb):
+                        mid = str(cb["id"])
+                        matched_servers.setdefault(mid, [])
+                        matched_servers[mid].append({
+                            "id": f"auto_fc_{mid}_{len(matched_servers[mid])}",
+                            "title": f"Server {len(matched_servers[mid]) + 1}",
+                            "serverLabel": "FanCode 1080p",
+                            "category": f"__cricket_watch__:{mid}",
+                            "media_type": "link",
+                            "media_url": player_url,
+                            "source": "fancode",
+                            "published": True,
+                            "sort_order": len(matched_servers[mid])
+                        })
+                        break
+        except Exception as e:
+            logger.warning("AutoStreamSync FanCode error: %s", e)
+
+        # 2. Willow streams from allrounderlive
+        try:
+            req = urllib.request.Request(
+                "https://willow-api.sayanwork-studioo.workers.dev/",
+                headers=headers
+            )
+            with urllib.request.urlopen(req, timeout=12) as r:
+                willow_data = json.loads(r.read().decode("utf-8"))
+            for w in willow_data.get("Matches", []):
+                w_status = str(w.get("status", "")).upper()
+                is_live = "LIVE" in w_status or w.get("isLive")
+                has_stream = bool(
+                    w.get("stream_url_alpha") or w.get("stream_url_bravo") or
+                    w.get("streamUrl") or w.get("hls") or
+                    w.get("playbackUrl") or w.get("drm_key") or
+                    w.get("channel_id") or w.get("tvgId")
+                )
+                if not is_live and not has_stream:
+                    continue
+
+                safe_id = (
+                    w.get("title") or w.get("tvgId") or
+                    w.get("tvgName") or w.get("match_id") or ""
+                )
+                if not safe_id:
+                    continue
+                title = w.get("title") or safe_id
+                encoded_id = urllib.parse.quote(str(safe_id))
+                player_url = f"https://allrounderlive.in/willow-player?id={encoded_id}"
+
+                for cb in cb_list:
+                    if _match_stream_to_cb(title, cb):
+                        mid = str(cb["id"])
+                        matched_servers.setdefault(mid, [])
+                        if not any(s.get("source") == "willow" for s in matched_servers[mid]):
+                            matched_servers[mid].append({
+                                "id": f"auto_w_{mid}_{len(matched_servers[mid])}",
+                                "title": f"Server {len(matched_servers[mid]) + 1}",
+                                "serverLabel": "Willow HD",
+                                "category": f"__cricket_watch__:{mid}",
+                                "media_type": "link",
+                                "media_url": player_url,
+                                "source": "willow",
+                                "published": True,
+                                "sort_order": len(matched_servers[mid])
+                            })
+                        break
+        except Exception as e:
+            logger.warning("AutoStreamSync Willow error: %s", e)
+
+        with AUTO_SERVERS_LOCK:
+            if matched_servers:
+                AUTO_MATCH_SERVERS.clear()
+                AUTO_MATCH_SERVERS.update(matched_servers)
+            LAST_AUTO_SYNC_TIME = time.time()
+
+        return matched_servers
+    except Exception as e:
+        logger.error("AutoStreamSync top-level error: %s", e)
+        return {}
+
+
+def _auto_sync_background_loop():
+    while True:
+        try:
+            sync_allrounder_streams()
+        except Exception as e:
+            logger.error("Background stream sync error: %s", e)
+        time.sleep(60)
+
+
+_sync_thread = threading.Thread(
+    target=_auto_sync_background_loop,
+    daemon=True,
+    name="AutoStreamSyncThread"
+)
+_sync_thread.start()
+
+
+@app.get("/api/auto-servers")
+def get_auto_servers():
+    with AUTO_SERVERS_LOCK:
+        return {
+            "success": True,
+            "count": len(AUTO_MATCH_SERVERS),
+            "servers": AUTO_MATCH_SERVERS,
+            "last_sync": LAST_AUTO_SYNC_TIME
+        }
+
+
+@app.get("/api/auto-servers/refresh")
+def force_refresh_auto_servers():
+    result = sync_allrounder_streams()
+    return {
+        "success": True,
+        "count": len(result),
+        "servers": result,
+        "last_sync": LAST_AUTO_SYNC_TIME
+    }
+
+
 @app.get("/api/matches/{category}")
 def get_matches(category: str):
 
@@ -537,6 +920,12 @@ def get_matches(category: str):
             for match in raw_matches
             if classify_match(match) == category
         ]
+
+        with AUTO_SERVERS_LOCK:
+            for match in matches:
+                mid_str = str(match.get("id"))
+                if mid_str in AUTO_MATCH_SERVERS:
+                    match["auto_servers"] = AUTO_MATCH_SERVERS[mid_str]
 
         return {
             "success": True,
@@ -804,12 +1193,23 @@ def get_match(match_id: int):
     try:
 
         html = fetch(PAGES["live"], MATCH_CACHE_TTL)
-
         matches = extract_matches(html)
+
+        # Also search upcoming if not found in live
+        if not any(m["id"] == match_id for m in matches):
+            try:
+                up_html = fetch(PAGES["upcoming"], MATCH_CACHE_TTL)
+                matches.extend(extract_matches(up_html))
+            except Exception:
+                pass
 
         for match in matches:
 
             if match["id"] == match_id:
+                with AUTO_SERVERS_LOCK:
+                    mid_str = str(match["id"])
+                    if mid_str in AUTO_MATCH_SERVERS:
+                        match["auto_servers"] = AUTO_MATCH_SERVERS[mid_str]
                 return {
                     "success": True,
                     "match": match
