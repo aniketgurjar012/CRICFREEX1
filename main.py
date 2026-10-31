@@ -519,68 +519,8 @@ def extract_page(html, path):
 # ALLROUNDERLIVE 24/7 AUTO STREAM SYNC
 # =========================================================
 AUTO_MATCH_SERVERS: dict[str, list[dict[str, Any]]] = {}
-SYNTHETIC_MATCHES: list[dict[str, Any]] = []
 AUTO_SERVERS_LOCK = threading.Lock()
 LAST_AUTO_SYNC_TIME: float = 0.0
-
-
-def parse_stream_title(raw_title: str, default_series: str = "Cricket Match") -> dict[str, str]:
-    if not raw_title:
-        return {"team1": "Team 1", "team2": "Team 2", "series": default_series, "description": ""}
-    title = str(raw_title).strip()
-    series = default_series
-    description = ""
-
-    dash_parts = re.split(r"\s+[-–—]\s+", title)
-    match_part = title
-
-    if len(dash_parts) >= 2:
-        series = dash_parts[0].strip()
-        if len(dash_parts) == 2:
-            match_part = dash_parts[1].strip()
-        else:
-            description = dash_parts[1].strip()
-            match_part = " - ".join(dash_parts[2:]).strip()
-
-    vs_match = re.search(r"^(.+?)\s+(?:vs\.?|v\/s|v)\s+(.+)$", match_part, re.IGNORECASE)
-    t1 = ""
-    t2 = ""
-
-    if vs_match:
-        t1 = vs_match.group(1).strip()
-        t2 = vs_match.group(2).strip()
-    else:
-        raw_vs = re.search(r"^(.+?)\s+(?:vs\.?|v\/s|v)\s+(.+)$", title, re.IGNORECASE)
-        if raw_vs:
-            t1 = raw_vs.group(1).strip()
-            t2 = raw_vs.group(2).strip()
-        else:
-            t1 = match_part or "Team 1"
-            t2 = "Team 2"
-
-    t1 = re.sub(r"^(live|stream|watch)\s+", "", t1, flags=re.IGNORECASE).strip()
-    t2 = re.sub(r"\s+(live|stream|streaming|hd)$", "", t2, flags=re.IGNORECASE).strip()
-
-    return {
-        "team1": t1 or "Team 1",
-        "team2": t2 or "Team 2",
-        "series": series or default_series,
-        "description": description or ""
-    }
-
-
-def get_short_name(name: str) -> str:
-    if not name:
-        return "TM"
-    clean = re.sub(r"[^a-zA-Z\s]", "", str(name)).strip()
-    words = [w for w in clean.split() if w]
-    if not words:
-        return "TM"
-    if len(words) == 1:
-        return words[0][:4].upper()
-    if len(words) == 2:
-        return (words[0][:2] + words[1][:2]).upper()
-    return "".join(w[0] for w in words)[:4].upper()
 
 
 TEAM_ALIASES: dict[str, list[str]] = {
@@ -792,7 +732,6 @@ def sync_allrounder_streams() -> dict[str, list[dict[str, Any]]]:
         cb_list = sorted(list(unique_cb.values()), key=_match_priority)
 
         matched_servers: dict[str, list[dict[str, Any]]] = {}
-        unmatched_streams: list[dict[str, Any]] = []
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 
         # 1. FanCode streams from allrounderlive
@@ -804,8 +743,8 @@ def sync_allrounder_streams() -> dict[str, list[dict[str, Any]]]:
             with urllib.request.urlopen(req, timeout=12) as r:
                 fc_data = json.loads(r.read().decode("utf-8"))
             for fc in fc_data.get("matches", []):
-                # Strictly cricket only
-                if str(fc.get("category", "")).lower() != "cricket":
+                fc_status = str(fc.get("status", "")).upper()
+                if "LIVE" not in fc_status and fc_status != "":
                     continue
 
                 stream_url = ""
@@ -832,13 +771,9 @@ def sync_allrounder_streams() -> dict[str, list[dict[str, Any]]]:
                     "match_id": match_id
                 })
                 player_url = f"https://allrounderlive.in/fc-play?{params}"
-                fc_status = str(fc.get("status", "")).upper()
-                is_live = "LIVE" in fc_status or not fc_status
 
-                matched = False
                 for cb in cb_list:
                     if _match_stream_to_cb(title, cb):
-                        matched = True
                         mid = str(cb["id"])
                         matched_servers.setdefault(mid, [])
                         matched_servers[mid].append({
@@ -853,13 +788,6 @@ def sync_allrounder_streams() -> dict[str, list[dict[str, Any]]]:
                             "sort_order": len(matched_servers[mid])
                         })
                         break
-                if not matched:
-                    unmatched_streams.append({
-                        "source": "fancode",
-                        "title": title,
-                        "player_url": player_url,
-                        "is_live": is_live
-                    })
         except Exception as e:
             logger.warning("AutoStreamSync FanCode error: %s", e)
 
@@ -873,7 +801,7 @@ def sync_allrounder_streams() -> dict[str, list[dict[str, Any]]]:
                 willow_data = json.loads(r.read().decode("utf-8"))
             for w in willow_data.get("Matches", []):
                 w_status = str(w.get("status", "")).upper()
-                is_live = "LIVE" in w_status or bool(w.get("isLive"))
+                is_live = "LIVE" in w_status or w.get("isLive")
                 has_stream = bool(
                     w.get("stream_url_alpha") or w.get("stream_url_bravo") or
                     w.get("streamUrl") or w.get("hls") or
@@ -893,10 +821,8 @@ def sync_allrounder_streams() -> dict[str, list[dict[str, Any]]]:
                 encoded_id = urllib.parse.quote(str(safe_id))
                 player_url = f"https://allrounderlive.in/willow-player?id={encoded_id}"
 
-                matched = False
                 for cb in cb_list:
                     if _match_stream_to_cb(title, cb):
-                        matched = True
                         mid = str(cb["id"])
                         matched_servers.setdefault(mid, [])
                         if not any(s.get("source") == "willow" for s in matched_servers[mid]):
@@ -912,106 +838,13 @@ def sync_allrounder_streams() -> dict[str, list[dict[str, Any]]]:
                                 "sort_order": len(matched_servers[mid])
                             })
                         break
-                if not matched:
-                    unmatched_streams.append({
-                        "source": "willow",
-                        "title": title,
-                        "player_url": player_url,
-                        "is_live": is_live
-                    })
         except Exception as e:
             logger.warning("AutoStreamSync Willow error: %s", e)
-
-        # Build synthetic matches from unmatched streams
-        new_synthetics: list[dict[str, Any]] = []
-        for st in unmatched_streams:
-            syn: dict[str, Any] | None = None
-            for existing in new_synthetics:
-                if _match_stream_to_cb(st["title"], existing):
-                    syn = existing
-                    break
-
-            if syn:
-                servers = syn.setdefault("auto_servers", [])
-                if not any(s.get("media_url") == st["player_url"] for s in servers):
-                    s_num = len(servers) + 1
-                    servers.append({
-                        "id": f"auto_syn_{syn['id']}_{s_num}",
-                        "title": f"Server {s_num}",
-                        "serverLabel": f"Server {s_num}",
-                        "category": f"__cricket_watch__:{syn['id']}",
-                        "media_type": "link",
-                        "media_url": st["player_url"],
-                        "source": st["source"],
-                        "published": True,
-                        "sort_order": s_num
-                    })
-                if st["is_live"]:
-                    syn["isLiveStream"] = True
-                    syn["state"] = "In Progress"
-                    syn["status"] = "Live Streaming"
-            else:
-                parsed = parse_stream_title(st["title"])
-                t1_clean = re.sub(r"[^a-z0-9]", "", _clean_stream_str(parsed["team1"]))
-                t2_clean = re.sub(r"[^a-z0-9]", "", _clean_stream_str(parsed["team2"]))
-                syn_id = f"ar_{t1_clean or 'team1'}_vs_{t2_clean or 'team2'}"
-
-                title_lower = st["title"].lower()
-                fmt = "Sixes" if "sixes" in title_lower else (
-                    "T20" if any(k in title_lower for k in ("t20", "wbbl", "bbl")) else (
-                        "ODI" if any(k in title_lower for k in ("odi", "tri-series")) else (
-                            "Test" if "test" in title_lower else "T20"
-                        )
-                    )
-                )
-
-                new_syn = {
-                    "id": syn_id,
-                    "series": parsed["series"] or "Cricket Match",
-                    "description": parsed["description"] or ("Live Streaming" if st["is_live"] else "Scheduled"),
-                    "format": fmt,
-                    "state": "In Progress" if st["is_live"] else "Preview",
-                    "status": "Live Streaming" if st["is_live"] else "Scheduled",
-                    "isSynthetic": True,
-                    "isLiveStream": st["is_live"],
-                    "startDate": int(time.time() * 1000),
-                    "team1": {
-                        "teamName": parsed["team1"],
-                        "teamSName": get_short_name(parsed["team1"]),
-                        "imageId": None
-                    },
-                    "team2": {
-                        "teamName": parsed["team2"],
-                        "teamSName": get_short_name(parsed["team2"]),
-                        "imageId": None
-                    },
-                    "venue": {"ground": "", "city": ""},
-                    "score": {},
-                    "auto_servers": [
-                        {
-                            "id": f"auto_syn_{syn_id}_1",
-                            "title": "Server 1",
-                            "serverLabel": "Server 1",
-                            "category": f"__cricket_watch__:{syn_id}",
-                            "media_type": "link",
-                            "media_url": st["player_url"],
-                            "source": st["source"],
-                            "published": True,
-                            "sort_order": 1
-                        }
-                    ]
-                }
-                new_synthetics.append(new_syn)
-
-        for syn in new_synthetics:
-            matched_servers[str(syn["id"])] = syn["auto_servers"]
 
         with AUTO_SERVERS_LOCK:
             if matched_servers:
                 AUTO_MATCH_SERVERS.clear()
                 AUTO_MATCH_SERVERS.update(matched_servers)
-            SYNTHETIC_MATCHES.clear()
-            SYNTHETIC_MATCHES.extend(new_synthetics)
             LAST_AUTO_SYNC_TIME = time.time()
 
         return matched_servers
@@ -1044,7 +877,6 @@ def get_auto_servers():
             "success": True,
             "count": len(AUTO_MATCH_SERVERS),
             "servers": AUTO_MATCH_SERVERS,
-            "synthetic_matches": SYNTHETIC_MATCHES,
             "last_sync": LAST_AUTO_SYNC_TIME
         }
 
@@ -1056,7 +888,6 @@ def force_refresh_auto_servers():
         "success": True,
         "count": len(result),
         "servers": result,
-        "synthetic_matches": SYNTHETIC_MATCHES,
         "last_sync": LAST_AUTO_SYNC_TIME
     }
 
@@ -1091,15 +922,6 @@ def get_matches(category: str):
         ]
 
         with AUTO_SERVERS_LOCK:
-            if category == "live":
-                for syn in SYNTHETIC_MATCHES:
-                    if syn.get("isLiveStream") and not any(str(m.get("id")) == str(syn.get("id")) for m in matches):
-                        matches.append(syn)
-            elif category == "upcoming":
-                for syn in SYNTHETIC_MATCHES:
-                    if not syn.get("isLiveStream") and not any(str(m.get("id")) == str(syn.get("id")) for m in matches):
-                        matches.append(syn)
-
             for match in matches:
                 mid_str = str(match.get("id"))
                 if mid_str in AUTO_MATCH_SERVERS:
