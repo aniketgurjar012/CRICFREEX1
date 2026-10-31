@@ -578,6 +578,97 @@ function updateWatchLinkControls(){
     :"+ Add another server";
 }
 
+function getPublicSiteBase() {
+  if (location.hostname === "localhost" || location.hostname === "127.0.0.1") {
+    return location.origin;
+  }
+  return "https://cricfreex-freecricket.vercel.app";
+}
+
+function updateWatchShareableLinks(matchId, records) {
+  const box = $("watchShareableLinksBox");
+  const list = $("watchShareableLinksList");
+  if (!box || !list) return;
+  if (!matchId) {
+    box.classList.add("hidden");
+    list.replaceChildren();
+    return;
+  }
+
+  const base = getPublicSiteBase();
+  const allMatches = (watchMatches.live || []).concat(watchMatches.upcoming || []);
+  const matchObj = allMatches.find(m => String(m.id) === String(matchId));
+  const matchTitle = matchObj
+    ? `${matchObj.team1?.teamName || "Team 1"} vs ${matchObj.team2?.teamName || "Team 2"}`
+    : `Match ${matchId}`;
+
+  const rows = [...$("watchLinkRows").children];
+  const count = (records && records.length)
+    ? records.length
+    : (rows.length || (selectedMatchLinks && selectedMatchLinks.length ? selectedMatchLinks.length : 1));
+
+  const items = [];
+  items.push({
+    label: "Match Link",
+    url: `${base}/?match=${matchId}`,
+    desc: "Opens match page & auto-plays Server 1"
+  });
+
+  for (let i = 0; i < count; i++) {
+    const sNum = i + 1;
+    items.push({
+      label: `Server ${sNum} Link`,
+      url: `${base}/?match=${matchId}&server=${sNum}`,
+      desc: `Directly launches Server ${sNum} for ${matchTitle}`
+    });
+  }
+
+  list.replaceChildren();
+  items.forEach(it => {
+    const row = document.createElement("div");
+    row.className = "watch-share-item";
+
+    const labelSpan = document.createElement("span");
+    labelSpan.className = "watch-share-label";
+    labelSpan.textContent = it.label;
+
+    const urlCode = document.createElement("code");
+    urlCode.className = "watch-share-url";
+    urlCode.textContent = it.url;
+    urlCode.title = `${it.url} (${it.desc})`;
+
+    const copyBtn = document.createElement("button");
+    copyBtn.type = "button";
+    copyBtn.className = "ghost watch-share-copy-btn";
+    copyBtn.textContent = "📋 Copy Link";
+    copyBtn.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(it.url);
+        copyBtn.textContent = "✓ Copied!";
+        copyBtn.style.color = "var(--green)";
+        setTimeout(() => {
+          copyBtn.textContent = "📋 Copy Link";
+          copyBtn.style.color = "";
+        }, 2000);
+      } catch (err) {
+        const ta = document.createElement("textarea");
+        ta.value = it.url;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        ta.remove();
+        copyBtn.textContent = "✓ Copied!";
+        setTimeout(() => { copyBtn.textContent = "📋 Copy Link"; }, 2000);
+      }
+    });
+
+    row.append(labelSpan, urlCode, copyBtn);
+    list.appendChild(row);
+  });
+
+  box.classList.remove("hidden");
+}
+
 function loadSelectedMatchLinks(){
   const matchId=$("watchMatch").value;
   selectedMatchLinks=matchId
@@ -591,12 +682,14 @@ function loadSelectedMatchLinks(){
   if(matchId&&!selectedMatchLinks.length){
     addWatchLinkRow();
   }
+  updateWatchShareableLinks(matchId, selectedMatchLinks);
 }
 
 $("watchMatchCategory").addEventListener("change",()=>{
   $("watchMatch").value="";
   $("watchLinkRows").replaceChildren();
   selectedMatchLinks=[];
+  updateWatchShareableLinks("", []);
   loadCricketMatches($("watchMatchCategory").value);
 });
 
@@ -611,6 +704,7 @@ $("addWatchLink").addEventListener("click",()=>{
     return;
   }
   addWatchLinkRow();
+  updateWatchShareableLinks($("watchMatch").value);
 });
 
 $("refreshWatchMatches").addEventListener("click",()=>{
@@ -722,11 +816,13 @@ $("watchLinksForm").addEventListener("submit",async event=>{
       cricketWatchMatchId(item)!==matchId
     ).concat(savedLinks||[]);
     loadSelectedMatchLinks();
+    updateWatchShareableLinks(matchId, records);
     const isUpcoming = $("watchMatchCategory")?.value === "upcoming";
+    const pubBase = getPublicSiteBase();
     setWatchLinkStatus(
       isUpcoming
-        ? `${records.length} watch link${records.length===1?"":"s"} saved for this upcoming match. They will automatically appear to viewers once the match goes live.`
-        : `${records.length} watch link${records.length===1?"":"s"} saved. They are now live on this match card.`
+        ? `✅ ${records.length} watch link${records.length===1?"":"s"} saved! Tomorrow/when live, viewers will directly stream this. Link: ${pubBase}/?match=${matchId}&server=1`
+        : `✅ ${records.length} watch link${records.length===1?"":"s"} saved and live on match card! Link: ${pubBase}/?match=${matchId}&server=1`
     );
   }catch(error){
     console.error(error);

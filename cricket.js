@@ -1268,7 +1268,7 @@
         });
       } else {
         updateCricketURL({
-          tab: state.page === "live" ? null : state.page,
+          match: match.id,
           server: serverIndex + 1
         });
       }
@@ -1345,10 +1345,39 @@
         ].filter(Boolean).join(" · ")
       )
     );
+    const actions = element("div", "cricket-watch-player-actions");
+    actions.style.display = "flex";
+    actions.style.gap = "8px";
+    actions.style.alignItems = "center";
+
+    const shareBtn = element("button", "cricket-action-button", "📋 Copy Link");
+    shareBtn.type = "button";
+    shareBtn.title = "Copy direct shareable link for this match and server";
+    shareBtn.addEventListener("click", async () => {
+      const shareUrl = `${location.origin}${cleanCricketPath(location)}?match=${active.match.id}&server=${active.serverIndex + 1}`;
+      try {
+        await navigator.clipboard.writeText(shareUrl);
+        shareBtn.textContent = "✓ Copied!";
+        showCricketToast("Direct Server Link copied to clipboard!");
+        setTimeout(() => { shareBtn.textContent = "📋 Copy Link"; }, 2000);
+      } catch (e) {
+        const ta = document.createElement("textarea");
+        ta.value = shareUrl;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        ta.remove();
+        shareBtn.textContent = "✓ Copied!";
+        showCricketToast("Direct Server Link copied to clipboard!");
+        setTimeout(() => { shareBtn.textContent = "📋 Copy Link"; }, 2000);
+      }
+    });
+
     const close = element("button", "cricket-action-button", "Close player");
     close.type = "button";
     close.addEventListener("click", () => closeCricketPlayer(true));
-    head.append(title, close);
+    actions.append(shareBtn, close);
+    head.append(title, actions);
 
     const server = element(
       "div",
@@ -2994,37 +3023,67 @@
     document.querySelector(".cricket-main-tab")?.setAttribute("aria-pressed", "true");
   }
 
-  async function openMatchById(matchId, tab = "scorecard", serverNum = null, updateUrl = false) {
+  async function openMatchById(matchId, tab = "scorecard", serverNum = 1, updateUrl = false) {
+    if (!state.matches || !state.matches.length) {
+      try {
+        const [liveRes, upRes] = await Promise.allSettled([
+          request("/api/matches/live"),
+          request("/api/matches/upcoming")
+        ]);
+        const all = [];
+        if (liveRes.status === "fulfilled" && Array.isArray(liveRes.value?.matches)) {
+          all.push(...liveRes.value.matches);
+        }
+        if (upRes.status === "fulfilled" && Array.isArray(upRes.value?.matches)) {
+          all.push(...upRes.value.matches);
+        }
+        if (all.length) {
+          state.matches = all;
+        }
+      } catch (e) {}
+    }
+
     let match = state.matches?.find(m => String(m.id) === String(matchId));
     if (!match) {
-      match = { id: matchId, series: "Cricket Match", description: "Match details", state: "Live" };
+      match = { id: matchId, series: "Cricket Match", description: "Live Match", state: "Live" };
     }
-    await openMatch(match, "live", tab, updateUrl);
 
-    if (serverNum && !isNaN(serverNum)) {
-      const idx = serverNum - 1;
-      const started = startMatchServer(match, idx, updateUrl);
-      if (!started) {
-        setTimeout(() => {
-          startMatchServer(match, idx, updateUrl);
-        }, 1000);
-      }
+    try {
+      await syncAllrounderClient();
+    } catch (e) {}
+
+    await openMatch(match, "live", tab || "scorecard", updateUrl);
+
+    const targetIdx = (serverNum && !isNaN(serverNum) && serverNum > 0) ? (serverNum - 1) : 0;
+    const started = startMatchServer(match, targetIdx, updateUrl);
+    if (!started) {
+      setTimeout(() => {
+        startMatchServer(match, targetIdx, updateUrl);
+      }, 500);
+      setTimeout(() => {
+        startMatchServer(match, targetIdx, updateUrl);
+      }, 1500);
     }
   }
 
   async function restoreRoute(push = false) {
-    // When site is freshly opened or browser reopened, always land on homepage
+    const params = new URLSearchParams(location.search);
+    const hash = location.hash;
+
+    const hasRouteParams = Boolean(
+      params.get("match") || params.get("channel") || params.get("server") ||
+      params.get("series") || params.get("team") || params.get("news") ||
+      params.get("view") || params.get("tab")
+    );
+
     const isNewSession = !sessionStorage.getItem("cricfreex_session_active");
     sessionStorage.setItem("cricfreex_session_active", "1");
-    if (isNewSession) {
+    if (isNewSession && !hasRouteParams) {
       const cleanPath = cleanCricketPath(location);
       if (location.search || location.hash) {
         history.replaceState(null, "", cleanPath);
       }
     }
-
-    const params = new URLSearchParams(location.search);
-    const hash = location.hash;
 
     if (hash === "#cricketCenter" || hash === "#cricket") {
       const cleanPath = cleanCricketPath(location);

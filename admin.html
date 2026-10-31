@@ -25,6 +25,18 @@ if(localStorage.getItem("cricfreex_theme")==="light"){
 .watch-link-row button{height:42px}
 .watch-match-status{grid-column:1/-1}
 @media(max-width:700px){.watch-link-row{grid-template-columns:1fr}.watch-link-list,.watch-match-status{grid-column:auto}}
+.watch-shareable-box{margin-top:20px;padding:16px;border:1px solid #20df7b44;border-radius:12px;background:#09140f;display:flex;flex-direction:column;gap:12px}
+[data-theme="light"] .watch-shareable-box{background:#f0fbf5;border-color:#0d8a4333}
+.watch-shareable-head h3{margin:0 0 4px;font-size:15px;color:var(--green);display:flex;align-items:center;gap:6px}
+.watch-shareable-head p{margin:0;font-size:12px}
+.watch-shareable-list{display:flex;flex-direction:column;gap:8px}
+.watch-share-item{display:grid;grid-template-columns:110px 1fr auto;gap:10px;align-items:center;padding:10px 12px;background:#0d0e12;border:1px solid var(--border);border-radius:8px}
+[data-theme="light"] .watch-share-item{background:#fff;border-color:rgba(0,0,0,.1)}
+.watch-share-label{font-size:12px;font-weight:700;color:var(--white)}
+.watch-share-url{font-size:12px;color:#7bf0ae;background:rgba(0,0,0,.3);padding:6px 10px;border-radius:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:monospace;border:1px solid #ffffff12}
+[data-theme="light"] .watch-share-url{background:#f4f5f8;color:#0b7337;border-color:rgba(0,0,0,.08)}
+.watch-share-copy-btn{padding:6px 14px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap}
+@media(max-width:700px){.watch-share-item{grid-template-columns:1fr;gap:6px}}
 .suggestion-item{border:1px solid var(--border);border-radius:12px;padding:16px;background:#09090d;display:flex;flex-direction:column;gap:10px}
 .suggestion-header{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
 .suggestion-badge{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:800;color:var(--green);border:1px solid #20df7b33;background:#20df7b0e;padding:4px 8px;border-radius:20px}
@@ -137,6 +149,13 @@ if(localStorage.getItem("cricfreex_theme")==="light"){
 <div id="watchLinkRows" class="watch-link-list"></div>
 <div class="editor-actions"><button class="ghost" type="button" id="addWatchLink">+ Add another link</button><button class="primary" id="saveWatchLinks">Save Match Links</button></div>
 </form>
+<div id="watchShareableLinksBox" class="watch-shareable-box hidden">
+<div class="watch-shareable-head">
+<h3>🔗 Match &amp; Server Shareable Links (For Telegram / Socials)</h3>
+<p class="muted">These direct links open this specific match and start the selected server immediately for viewers:</p>
+</div>
+<div id="watchShareableLinksList" class="watch-shareable-list"></div>
+</div>
 </section>
 
 <section id="suggestionsPanel" class="panel hidden">
@@ -222,6 +241,6 @@ if(localStorage.getItem("cricfreex_theme")==="light"){
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="./config.js?v=2"></script>
-<script src="./admin.js?v=11"></script>
+<script src="./admin.js?v=12"></script>
 </body>
 </html>
