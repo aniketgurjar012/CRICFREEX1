@@ -131,6 +131,7 @@
     matchTab: "scorecard",
     query: "",
     matches: [],
+    syntheticMatches: [],
     returnPage: "live",
     teamPath: "",
     teamTitle: "",
@@ -197,6 +198,7 @@
     "netherlands": "nl", "ned": "nl", "dutch": "nl",
     "scotland": "gb-sct", "sco": "gb-sct",
     "united arab emirates": "ae", "uae": "ae",
+    "sharjah": "ae", "emirates blues": "ae", "dubai": "ae", "abu dhabi": "ae", "fujairah": "ae", "ajman": "ae",
     "oman": "om", "omn": "om",
     "namibia": "na", "nam": "na",
     "canada": "ca", "can": "ca",
@@ -330,6 +332,10 @@
     "slc reds", "slc blues", "ssc", "ncc", "colts", "sri lanka a"
   ]);
 
+  const UAE_TEAMS = new Set([
+    "sharjah", "emirates blues", "dubai", "abu dhabi", "fujairah", "ajman"
+  ]);
+
   function getTeamFlagCode(rawName, seriesContext = "") {
     if (!rawName || typeof rawName !== "string") return null;
     const name = rawName.trim().toLowerCase()
@@ -355,6 +361,7 @@
     if (NZ_TEAMS.has(name) || NZ_TEAMS.has(rawLower)) return "nz";
     if (BD_TEAMS.has(name) || BD_TEAMS.has(rawLower)) return "bd";
     if (LK_TEAMS.has(name) || LK_TEAMS.has(rawLower)) return "lk";
+    if (UAE_TEAMS.has(name) || UAE_TEAMS.has(rawLower)) return "ae";
 
     for (const [key, code] of Object.entries(COUNTRY_FLAGS)) {
       if (key.length >= 4 && (name.includes(key) || rawLower.includes(key))) {
@@ -926,6 +933,64 @@
     return teamMatchesStream(cb.team1, cleanStream) && teamMatchesStream(cb.team2, cleanStream);
   }
 
+  function parseStreamTitle(rawTitle, defaultSeries = "Cricket Match") {
+    if (!rawTitle) return { team1: "Team 1", team2: "Team 2", series: defaultSeries, description: "" };
+    let title = String(rawTitle).trim();
+    let series = defaultSeries;
+    let description = "";
+
+    const dashParts = title.split(/\s+[-–—]\s+/);
+    let matchPart = title;
+
+    if (dashParts.length >= 2) {
+      series = dashParts[0].trim();
+      if (dashParts.length === 2) {
+        matchPart = dashParts[1].trim();
+      } else {
+        description = dashParts[1].trim();
+        matchPart = dashParts.slice(2).join(" - ").trim();
+      }
+    }
+
+    const vsMatch = matchPart.match(/^(.+?)\s+(?:vs\.?|v\/s|v)\s+(.+)$/i);
+    let t1 = "";
+    let t2 = "";
+
+    if (vsMatch) {
+      t1 = vsMatch[1].trim();
+      t2 = vsMatch[2].trim();
+    } else {
+      const rawVs = title.match(/^(.+?)\s+(?:vs\.?|v\/s|v)\s+(.+)$/i);
+      if (rawVs) {
+        t1 = rawVs[1].trim();
+        t2 = rawVs[2].trim();
+      } else {
+        t1 = matchPart || "Team 1";
+        t2 = "Team 2";
+      }
+    }
+
+    t1 = t1.replace(/^(live|stream|watch)\s+/i, "").trim();
+    t2 = t2.replace(/\s+(live|stream|streaming|hd)$/i, "").trim();
+
+    return {
+      team1: t1 || "Team 1",
+      team2: t2 || "Team 2",
+      series: series || defaultSeries,
+      description: description || ""
+    };
+  }
+
+  function getShortName(teamName) {
+    if (!teamName) return "TM";
+    const clean = String(teamName).replace(/[^a-zA-Z\s]/g, "").trim();
+    const words = clean.split(/\s+/).filter(Boolean);
+    if (!words.length) return "TM";
+    if (words.length === 1) return words[0].slice(0, 4).toUpperCase();
+    if (words.length === 2) return (words[0].slice(0, 2) + words[1].slice(0, 2)).toUpperCase();
+    return words.map(w => w[0]).join("").slice(0, 4).toUpperCase();
+  }
+
   function updateDomMatchServers() {
     (state.matches || []).forEach(match => {
       const card = root.querySelector(`.cricket-match-card[data-card-match-id="${match.id}"]`);
@@ -963,6 +1028,43 @@
         linksWrap.remove();
       }
     });
+
+    if (["live", "upcoming"].includes(state.page)) {
+      const content = root.querySelector(".cricket-content");
+      if (content) {
+        const relevantSynthetics = (state.syntheticMatches || []).filter(sm =>
+          state.page === "live" ? sm.isLiveStream : !sm.isLiveStream
+        );
+
+        let grid = content.querySelector(".cricket-match-grid");
+        let addedAny = false;
+
+        relevantSynthetics.forEach(sm => {
+          if (!state.matches.some(m => String(m.id) === String(sm.id))) {
+            state.matches.push(sm);
+          }
+          const existingCard = content.querySelector(`.cricket-match-card[data-card-match-id="${sm.id}"]`);
+          if (!existingCard) {
+            if (!grid) {
+              const emptyMsg = content.querySelector(".cricket-message");
+              if (emptyMsg) emptyMsg.remove();
+              grid = element("div", "cricket-match-grid");
+              content.appendChild(grid);
+            }
+            const newCard = matchCard(sm, () => openMatch(sm, state.page, "scorecard", true), true);
+            grid.appendChild(newCard);
+            addedAny = true;
+          }
+        });
+
+        if (addedAny) {
+          const countEl = content.querySelector(".cricket-count");
+          if (countEl) {
+            countEl.textContent = `${filtered(state.matches, matchSearchText).length} of ${state.matches.length} matches`;
+          }
+        }
+      }
+    }
 
     if (state.page === "match" && state.selectedMatch) {
       renderMatchViewServers(state.selectedMatch);
@@ -1031,10 +1133,9 @@
             Object.entries(beData.servers).forEach(([mid, sList]) => {
               state.autoServers[mid] = sList;
             });
-            lastClientSyncTime = now;
-            updateDomMatchServers();
-            clientSyncInProgress = false;
-            return;
+            if (Array.isArray(beData.synthetic_matches) && beData.synthetic_matches.length > 0) {
+              state.syntheticMatches = beData.synthetic_matches;
+            }
           }
         }
       } catch (e) {}
@@ -1047,11 +1148,13 @@
 
       const candidateMatches = state.matches || [];
       const newAutoServers = {};
+      const unmatchedStreams = [];
 
       if (fcRes.status === "fulfilled" && Array.isArray(fcRes.value?.matches)) {
         for (const fc of fcRes.value.matches) {
-          const status = String(fc.status || "").toUpperCase();
-          if (status && !status.includes("LIVE")) continue;
+          const cat = String(fc.category || "").toLowerCase();
+          if (cat !== "cricket") continue;
+
           let streamUrl = "";
           const autoStreams = fc.auto_streams || {};
           for (const lang of Object.keys(autoStreams)) {
@@ -1065,9 +1168,13 @@
           const title = fc.title || "";
           const matchId = String(fc.match_id || "");
           const playerUrl = `https://allrounderlive.in/fc-play?url=${encodeURIComponent(streamUrl)}&title=${encodeURIComponent(title)}&match_id=${encodeURIComponent(matchId)}`;
+          const statusStr = String(fc.status || "").toUpperCase();
+          const isLive = !statusStr || statusStr.includes("LIVE");
 
+          let matched = false;
           for (const cb of candidateMatches) {
             if (matchStreamToCb(title, cb)) {
+              matched = true;
               const mid = String(cb.id);
               if (!newAutoServers[mid]) newAutoServers[mid] = [];
               const sNum = newAutoServers[mid].length + 1;
@@ -1085,13 +1192,22 @@
               break;
             }
           }
+
+          if (!matched) {
+            unmatchedStreams.push({
+              source: "fancode",
+              title,
+              playerUrl,
+              isLive
+            });
+          }
         }
       }
 
       if (wRes.status === "fulfilled" && Array.isArray(wRes.value?.Matches)) {
         for (const w of wRes.value.Matches) {
-          const status = String(w.status || "").toUpperCase();
-          const isLive = status.includes("LIVE") || w.isLive;
+          const statusStr = String(w.status || "").toUpperCase();
+          const isLive = statusStr.includes("LIVE") || Boolean(w.isLive);
           const hasStream = Boolean(w.stream_url_alpha || w.stream_url_bravo || w.streamUrl || w.playbackUrl || w.drm_key);
           if (!isLive && !hasStream) continue;
 
@@ -1100,8 +1216,10 @@
           const title = w.title || safeId;
           const playerUrl = `https://allrounderlive.in/willow-player?id=${encodeURIComponent(safeId)}`;
 
+          let matched = false;
           for (const cb of candidateMatches) {
             if (matchStreamToCb(title, cb)) {
+              matched = true;
               const mid = String(cb.id);
               if (!newAutoServers[mid]) newAutoServers[mid] = [];
               if (!newAutoServers[mid].some(s => s.source === "willow")) {
@@ -1121,8 +1239,106 @@
               break;
             }
           }
+
+          if (!matched) {
+            unmatchedStreams.push({
+              source: "willow",
+              title,
+              playerUrl,
+              isLive
+            });
+          }
         }
       }
+
+      const newSyntheticMatches = [];
+      for (const st of unmatchedStreams) {
+        let syn = null;
+        for (const existing of newSyntheticMatches) {
+          if (matchStreamToCb(st.title, existing)) {
+            syn = existing;
+            break;
+          }
+        }
+
+        if (syn) {
+          if (!syn.auto_servers.some(s => s.media_url === st.playerUrl)) {
+            const sNum = syn.auto_servers.length + 1;
+            syn.auto_servers.push({
+              id: `client_syn_${syn.id}_${sNum}`,
+              title: `Server ${sNum}`,
+              serverLabel: `Server ${sNum}`,
+              category: `${watchLinkPrefix}${syn.id}`,
+              media_type: "link",
+              media_url: st.playerUrl,
+              source: st.source,
+              published: true,
+              sort_order: sNum
+            });
+          }
+          if (st.isLive) {
+            syn.isLiveStream = true;
+            syn.state = "In Progress";
+            syn.status = "Live Streaming";
+          }
+        } else {
+          const parsed = parseStreamTitle(st.title);
+          const t1Clean = cleanStreamStr(parsed.team1).replace(/[^a-z0-9]/g, "");
+          const t2Clean = cleanStreamStr(parsed.team2).replace(/[^a-z0-9]/g, "");
+          const synId = `ar_${t1Clean || "team1"}_vs_${t2Clean || "team2"}`;
+
+          const format = /sixes/i.test(st.title)
+            ? "Sixes"
+            : (/t20|wbbl|bbl/i.test(st.title)
+              ? "T20"
+              : (/odi|tri-series/i.test(st.title)
+                ? "ODI"
+                : (/test/i.test(st.title) ? "Test" : "T20")));
+
+          const newSyn = {
+            id: synId,
+            series: parsed.series || "Cricket Match",
+            description: parsed.description || (st.isLive ? "Live Streaming" : "Scheduled"),
+            format,
+            state: st.isLive ? "In Progress" : "Preview",
+            status: st.isLive ? "Live Streaming" : "Scheduled",
+            isSynthetic: true,
+            isLiveStream: st.isLive,
+            startDate: Date.now(),
+            team1: {
+              teamName: parsed.team1,
+              teamSName: getShortName(parsed.team1),
+              imageId: null
+            },
+            team2: {
+              teamName: parsed.team2,
+              teamSName: getShortName(parsed.team2),
+              imageId: null
+            },
+            venue: { ground: "", city: "" },
+            score: {},
+            auto_servers: [
+              {
+                id: `client_syn_${synId}_1`,
+                title: "Server 1",
+                serverLabel: "Server 1",
+                category: `${watchLinkPrefix}${synId}`,
+                media_type: "link",
+                media_url: st.playerUrl,
+                source: st.source,
+                published: true,
+                sort_order: 1
+              }
+            ]
+          };
+          newSyntheticMatches.push(newSyn);
+        }
+      }
+
+      state.syntheticMatches = newSyntheticMatches;
+      newSyntheticMatches.forEach(syn => {
+        newAutoServers[syn.id] = syn.auto_servers;
+      });
 
       Object.entries(newAutoServers).forEach(([mid, sList]) => {
         state.autoServers[mid] = sList;
@@ -1165,7 +1381,7 @@
         ? Object.values(score).map(innings =>
           `${innings.runs ?? 0}/${innings.wickets ?? 0} (${innings.overs ?? 0})`
         ).join(" & ")
-        : "Yet to bat";
+        : (match.isSynthetic ? (match.isLiveStream ? "Live" : "Scheduled") : "Yet to bat");
       const row = element("div", "cricket-team-row");
       row.append(
         renderTeamSpan(team, match.series),
@@ -1175,10 +1391,12 @@
     });
 
     const isOutside = isMatchOutsideIndia(match);
-    const normalizedStatus = normalizeMatchStatus(
-      match.status || match.state || "Match details",
-      match
-    );
+    const normalizedStatus = match.isSynthetic
+      ? (match.status || (match.isLiveStream ? "Live Streaming" : "Scheduled"))
+      : normalizeMatchStatus(
+          match.status || match.state || "Match details",
+          match
+        );
     const status = element(
       "p",
       "cricket-match-status",
@@ -1693,6 +1911,21 @@
     const result = await request(`/api/matches/${category}`);
     if (requestId !== state.request) return;
     const matches = result.matches || [];
+
+    if (category === "live") {
+      (state.syntheticMatches || []).filter(m => m.isLiveStream).forEach(sm => {
+        if (!matches.some(m => String(m.id) === String(sm.id))) {
+          matches.push(sm);
+        }
+      });
+    } else if (category === "upcoming") {
+      (state.syntheticMatches || []).filter(m => !m.isLiveStream).forEach(sm => {
+        if (!matches.some(m => String(m.id) === String(sm.id))) {
+          matches.push(sm);
+        }
+      });
+    }
+
     state.matches = matches;
     matches.forEach(m => {
       if (m.auto_servers?.length) {
@@ -2228,6 +2461,18 @@
     });
     content.appendChild(navigation);
     renderMatchViewServers(match, content);
+
+    if (match.isSynthetic) {
+      const target = element("div", "cricket-match-data");
+      const note = element("div", "cricket-message is-info");
+      note.style.textAlign = "center";
+      note.style.padding = "24px 16px";
+      note.innerHTML = `<h4 style="margin:0 0 8px;font-size:16px;">⚡ Live Video Stream Active</h4><p style="margin:0;opacity:0.85;font-size:14px;">Watch live stream above using Server buttons. Ball-by-ball Cricbuzz commentary is not available for this broadcast.</p>`;
+      target.appendChild(note);
+      content.appendChild(target);
+      return;
+    }
+
     content.appendChild(element("div", "cricket-match-data is-loading", "Loading match data…"));
 
     const apiVersion = ["squad", "points", "overs", "graphs", "news"].includes(tab)
@@ -3043,14 +3288,15 @@
       } catch (e) {}
     }
 
-    let match = state.matches?.find(m => String(m.id) === String(matchId));
-    if (!match) {
-      match = { id: matchId, series: "Cricket Match", description: "Live Match", state: "Live" };
-    }
-
     try {
-      await syncAllrounderClient();
+      await syncAllrounderClient(true);
     } catch (e) {}
+
+    let match = state.matches?.find(m => String(m.id) === String(matchId))
+      || state.syntheticMatches?.find(m => String(m.id) === String(matchId));
+    if (!match) {
+      match = { id: matchId, series: "Cricket Match", description: "Live Match", state: "Live", isSynthetic: true };
+    }
 
     await openMatch(match, "live", tab || "scorecard", updateUrl);
 
