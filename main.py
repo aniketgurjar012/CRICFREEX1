@@ -779,7 +779,7 @@ def sync_allrounder_streams() -> dict[str, list[dict[str, Any]]]:
                         matched_servers[mid].append({
                             "id": f"auto_fc_{mid}_{len(matched_servers[mid])}",
                             "title": f"Server {len(matched_servers[mid]) + 1}",
-                            "serverLabel": "FanCode 1080p",
+                            "serverLabel": f"Server {len(matched_servers[mid]) + 1}",
                             "category": f"__cricket_watch__:{mid}",
                             "media_type": "link",
                             "media_url": player_url,
@@ -829,7 +829,7 @@ def sync_allrounder_streams() -> dict[str, list[dict[str, Any]]]:
                             matched_servers[mid].append({
                                 "id": f"auto_w_{mid}_{len(matched_servers[mid])}",
                                 "title": f"Server {len(matched_servers[mid]) + 1}",
-                                "serverLabel": "Willow HD",
+                                "serverLabel": f"Server {len(matched_servers[mid]) + 1}",
                                 "category": f"__cricket_watch__:{mid}",
                                 "media_type": "link",
                                 "media_url": player_url,
@@ -1877,7 +1877,7 @@ def load_access_control():
         return {
             "enabled": True,
             "password": "CRIC",
-            "telegram_url": "https://t.me/+FIO2pSdFBRBkNDZl",
+            "telegram_url": "https://t.me/cricxcreate",
             "delay_seconds": 3,
             "updated_at": datetime.now(timezone.utc).isoformat()
         }
@@ -1891,7 +1891,7 @@ def load_access_control():
         return {
             "enabled": True,
             "password": "CRIC",
-            "telegram_url": "https://t.me/+FIO2pSdFBRBkNDZl",
+            "telegram_url": "https://t.me/cricxcreate",
             "delay_seconds": 3,
             "updated_at": datetime.now(timezone.utc).isoformat()
         }
@@ -1912,7 +1912,7 @@ def get_access_control():
 class AccessControlPayload(BaseModel):
     enabled: bool = True
     password: str
-    telegram_url: str = "https://t.me/+FIO2pSdFBRBkNDZl"
+    telegram_url: str = "https://t.me/cricxcreate"
     delay_seconds: int = 3
 
 

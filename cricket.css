@@ -1305,7 +1305,9 @@ body {
 .player-wrap:fullscreen .player-top-guard,
 .player-wrap:-webkit-full-screen .player-top-guard,
 .cricket-watch-frame-wrap:fullscreen .player-top-guard,
-.cricket-watch-frame-wrap:-webkit-full-screen .player-top-guard {
+.cricket-watch-frame-wrap:-webkit-full-screen .player-top-guard,
+.player-wrap.is-fullscreen .player-top-guard,
+.cricket-watch-frame-wrap.is-fullscreen .player-top-guard {
   position: fixed !important;
   top: 0 !important;
   left: 0 !important;

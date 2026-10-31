@@ -730,7 +730,7 @@ function createChannelTopGuard() {
   topGuard.className = "player-top-guard";
   topGuard.setAttribute("aria-hidden", "true");
   topGuard.innerHTML = '<svg width="100%" height="100%" style="display:block;width:100%;height:100%;pointer-events:auto;" preserveAspectRatio="none"><rect width="100%" height="100%" fill="#000" fill-opacity="0.02"/></svg>';
-  ["click", "dblclick", "mousedown", "mouseup", "touchstart", "touchend", "touchmove", "pointerdown", "pointerup", "pointermove", "contextmenu"].forEach(evt => {
+  ["click", "dblclick", "mousedown", "mouseup", "touchstart", "touchend", "touchmove", "pointerdown", "pointerup", "pointermove", "contextmenu", "selectstart", "dragstart"].forEach(evt => {
     topGuard.addEventListener(evt, (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -761,16 +761,36 @@ function createChannelFsHotspot() {
 
 function enforceChannelFullscreen() {
   const fs = document.fullscreenElement || document.webkitFullscreenElement;
+  const wrap = document.getElementById("playerWrap");
+  if (wrap) {
+    wrap.classList.toggle("is-fullscreen", Boolean(fs));
+  }
   if (fs && (fs.classList && fs.classList.contains("stream-frame") || fs.tagName === "IFRAME")) {
-    const wrap = fs.closest(".player-wrap");
-    if (wrap && wrap !== fs) {
-      if (wrap.requestFullscreen) wrap.requestFullscreen().catch(() => {});
-      else if (wrap.webkitRequestFullscreen) wrap.webkitRequestFullscreen();
+    const pWrap = fs.closest(".player-wrap");
+    if (pWrap && pWrap !== fs) {
+      if (pWrap.requestFullscreen) pWrap.requestFullscreen().catch(() => {});
+      else if (pWrap.webkitRequestFullscreen) pWrap.webkitRequestFullscreen();
     }
   }
 }
 document.addEventListener("fullscreenchange", enforceChannelFullscreen, true);
 document.addEventListener("webkitfullscreenchange", enforceChannelFullscreen, true);
+
+// Global viewport shield: intercept ANY click/touch in top 25% of screen during fullscreen
+function blockFullscreenTop25(e) {
+  const fs = document.fullscreenElement || document.webkitFullscreenElement;
+  if (!fs) return;
+  const y = e.clientY ?? e.touches?.[0]?.clientY ?? e.changedTouches?.[0]?.clientY;
+  if (typeof y === "number" && y <= window.innerHeight * 0.25) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+    return false;
+  }
+}
+["click", "dblclick", "mousedown", "mouseup", "touchstart", "touchend", "pointerdown", "pointerup", "contextmenu"].forEach(evt => {
+  window.addEventListener(evt, blockFullscreenTop25, { capture: true, passive: false });
+});
 
 function play(item, update = true) {
 
@@ -1908,7 +1928,7 @@ function initChannelClose() {
 let siteAccessConfig = {
   enabled: true,
   password: "CRIC",
-  telegram_url: "https://t.me/+FIO2pSdFBRBkNDZl",
+  telegram_url: "https://t.me/cricxcreate",
   delay_seconds: 3
 };
 
@@ -1933,7 +1953,7 @@ async function fetchSiteAccessConfig() {
         siteAccessConfig = {
           enabled: data.enabled !== false,
           password: String(data.password).trim(),
-          telegram_url: String(data.telegram_url || "https://t.me/+FIO2pSdFBRBkNDZl").trim(),
+          telegram_url: String(data.telegram_url || "https://t.me/cricxcreate").trim(),
           delay_seconds: Math.max(1, Math.min(60, parseInt(data.delay_seconds || 3, 10)))
         };
         return siteAccessConfig;
@@ -1958,7 +1978,7 @@ async function fetchSiteAccessConfig() {
     siteAccessConfig = {
       enabled: item.published !== false,
       password: String(item.title || "").trim(),
-      telegram_url: String(item.media_url || "https://t.me/+FIO2pSdFBRBkNDZl").trim(),
+      telegram_url: String(item.media_url || "https://t.me/cricxcreate").trim(),
       delay_seconds: Math.max(1, Math.min(60, parseInt(item.sort_order || 3, 10)))
     };
     return siteAccessConfig;
@@ -1979,7 +1999,7 @@ async function fetchSiteAccessConfig() {
             siteAccessConfig = {
               enabled: json.enabled !== false,
               password: String(json.password || "").trim(),
-              telegram_url: String(json.telegram_url || "https://t.me/+FIO2pSdFBRBkNDZl").trim(),
+              telegram_url: String(json.telegram_url || "https://t.me/cricxcreate").trim(),
               delay_seconds: Math.max(1, Math.min(60, parseInt(json.delay_seconds || 3, 10)))
             };
             return siteAccessConfig;

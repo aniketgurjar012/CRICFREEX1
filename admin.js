@@ -2091,7 +2091,7 @@ async function loadPasswordGate(){
     if(saData&&saData.password){
       item={
         title:saData.password,
-        media_url:saData.telegram_url||"https://t.me/+FIO2pSdFBRBkNDZl",
+        media_url:saData.telegram_url||"https://t.me/cricxcreate",
         published:saData.enabled!==false,
         sort_order:saData.delay_seconds||3
       };
@@ -2126,7 +2126,7 @@ async function loadPasswordGate(){
         if(json){
           item={
             title:json.password||"CRIC",
-            media_url:json.telegram_url||"https://t.me/+FIO2pSdFBRBkNDZl",
+            media_url:json.telegram_url||"https://t.me/cricxcreate",
             published:json.enabled!==false,
             sort_order:json.delay_seconds||3
           };
@@ -2137,7 +2137,7 @@ async function loadPasswordGate(){
 
   const enabled=item?(item.published!==false):true;
   const password=item?(item.title||""):"CRIC";
-  const telegramUrl=item?(item.media_url||""):"https://t.me/+FIO2pSdFBRBkNDZl";
+  const telegramUrl=item?(item.media_url||""):"https://t.me/cricxcreate";
   const delay=item?(item.sort_order||3):3;
 
   if($("accessGateEnabled"))$("accessGateEnabled").value=enabled?"true":"false";

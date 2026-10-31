@@ -806,11 +806,12 @@
         const parsed = new URL(item.media_url);
         if (["http:", "https:"].includes(parsed.protocol) && !seenUrls.has(parsed.href)) {
           seenUrls.add(parsed.href);
+          const sNum = validLinks.length + 1;
           validLinks.push({
             item,
             url: embedSourceURL(parsed.href),
             sourceURL: parsed.href,
-            label: item.title || `Server ${validLinks.length + 1}`
+            label: `Server ${sNum}`
           });
         }
       } catch {}
@@ -821,18 +822,319 @@
         const parsed = new URL(autoS.media_url);
         if (["http:", "https:"].includes(parsed.protocol) && !seenUrls.has(parsed.href)) {
           seenUrls.add(parsed.href);
-          const label = autoS.serverLabel || (autoS.source === "fancode" ? "FanCode 1080p" : autoS.source === "willow" ? "Willow HD" : `Server ${validLinks.length + 1}`);
+          const sNum = validLinks.length + 1;
           validLinks.push({
             item: autoS,
             url: embedSourceURL(parsed.href),
             sourceURL: parsed.href,
-            label
+            label: `Server ${sNum}`
           });
         }
       } catch {}
     });
 
     return validLinks.slice(0, 6);
+  }
+
+  const STREAM_ALIASES = {
+    ind: ["ind", "india", "indians"],
+    pak: ["pak", "pakistan"],
+    aus: ["aus", "australia", "aussies"],
+    sa: ["sa", "rsa", "south africa", "proteas"],
+    nz: ["nz", "new zealand", "black caps", "blackcaps"],
+    eng: ["eng", "england"],
+    wi: ["wi", "west indies", "windies"],
+    sl: ["sl", "sri lanka"],
+    ban: ["ban", "bangladesh", "tigers"],
+    afg: ["afg", "afghanistan"],
+    ire: ["ire", "ireland"],
+    zim: ["zim", "zimbabwe"],
+    ned: ["ned", "netherlands", "dutch"],
+    sco: ["sco", "scotland"],
+    uae: ["uae", "united arab emirates"],
+    png: ["png", "papua new guinea"],
+    nep: ["nepal", "nep"],
+    oma: ["oman", "oma"],
+    nam: ["namibia", "nam"],
+    can: ["canada", "can"],
+    usa: ["usa", "united states"],
+    ken: ["kenya", "ken"],
+    hk: ["hong kong", "hk", "hong kong china"],
+    jer: ["jersey", "jer"],
+    qat: ["qatar", "qat"],
+    uga: ["uganda", "uga"],
+    kuw: ["kuwait", "kuw"],
+    bah: ["bahrain", "bah"],
+    ksa: ["saudi arabia", "ksa"],
+    ita: ["italy", "ita"],
+    ger: ["germany", "ger"],
+    tas: ["tasmania", "tas"],
+    nsw: ["new south wales", "nsw"],
+    vic: ["victoria", "vic"],
+    qld: ["queensland", "qld"],
+    wa: ["western australia", "wa"],
+    sa_au: ["south australia", "redbacks"]
+  };
+
+  function cleanStreamStr(text) {
+    if (!text) return "";
+    return String(text).toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+  }
+
+  function isStreamWomenMatch(obj) {
+    const s = typeof obj === "string" ? obj : [obj.team1?.teamName, obj.team2?.teamName, obj.series, obj.description].join(" ");
+    return /\b(women|womens|wbbl)\b/i.test(s) || /-w\b/i.test(s) || /W$/.test(obj.team1?.teamSName || "") || /W$/.test(obj.team2?.teamSName || "");
+  }
+
+  function isStreamATeam(name) {
+    return /\b[a-z0-9-]+\s+a\b/i.test(String(name || ""));
+  }
+
+  function teamMatchesStream(team, streamStr) {
+    if (!team) return false;
+    const name = cleanStreamStr(team.teamName);
+    const sname = cleanStreamStr(team.teamSName);
+    const terms = new Set();
+    if (name) {
+      terms.add(name);
+      const stripped = name.split(" ").filter(w => !["women", "team", "men"].includes(w)).join(" ");
+      if (stripped) terms.add(stripped);
+    }
+    if (sname && sname.length >= 2) {
+      terms.add(sname);
+      if (sname.endsWith("w") && sname.length > 2) terms.add(sname.slice(0, -1));
+    }
+    [name, sname].forEach(key => {
+      if (STREAM_ALIASES[key]) {
+        STREAM_ALIASES[key].forEach(a => terms.add(cleanStreamStr(a)));
+      }
+    });
+    for (const term of terms) {
+      if (!term) continue;
+      const re = new RegExp("\\b" + term.replace(/\s+/g, "\\s+") + "\\b");
+      if (re.test(streamStr)) return true;
+    }
+    return false;
+  }
+
+  function matchStreamToCb(streamTitle, cb) {
+    const cleanStream = cleanStreamStr(streamTitle);
+    if (isStreamWomenMatch(streamTitle) !== isStreamWomenMatch(cb)) return false;
+    const cbA = isStreamATeam(cb.team1?.teamName) || isStreamATeam(cb.team2?.teamName);
+    const stA = isStreamATeam(cleanStream);
+    if (cbA !== stA) return false;
+    return teamMatchesStream(cb.team1, cleanStream) && teamMatchesStream(cb.team2, cleanStream);
+  }
+
+  function updateDomMatchServers() {
+    (state.matches || []).forEach(match => {
+      const card = root.querySelector(`.cricket-match-card[data-card-match-id="${match.id}"]`);
+      if (!card) return;
+      const validLinks = getMatchServers(match, true);
+      let linksWrap = card.querySelector(".cricket-watch-links");
+      if (validLinks.length) {
+        if (!linksWrap) {
+          linksWrap = element("div", "cricket-watch-links");
+          card.appendChild(linksWrap);
+        }
+        linksWrap.replaceChildren();
+        linksWrap.appendChild(element("strong", "cricket-watch-label", "Watch Live"));
+        validLinks.forEach(({ url, sourceURL }, index) => {
+          const serverLabel = `Server ${index + 1}`;
+          const button = element("button", "cricket-watch-link", `▶ ${serverLabel}`);
+          button.type = "button";
+          button.setAttribute("data-match-id", String(match.id));
+          button.setAttribute("data-server-idx", String(index));
+          button.setAttribute(
+            "aria-label",
+            `${serverLabel} for ${match.team1?.teamName || "Team 1"} vs ${match.team2?.teamName || "Team 2"}`
+          );
+          const selected = state.activeWatch?.match?.id === match.id &&
+            state.activeWatch.serverIndex === index;
+          button.classList.toggle("is-selected", selected);
+          button.setAttribute("aria-pressed", String(selected));
+          button.addEventListener("click", event => {
+            event.stopPropagation();
+            startMatchServer(match, index, true);
+          });
+          linksWrap.appendChild(button);
+        });
+      } else if (linksWrap) {
+        linksWrap.remove();
+      }
+    });
+
+    if (state.page === "match" && state.selectedMatch) {
+      renderMatchViewServers(state.selectedMatch);
+    }
+  }
+
+  function renderMatchViewServers(match, container) {
+    const parent = container || root.querySelector(".cricket-content");
+    if (!parent || state.page !== "match" || String(state.selectedMatch?.id) !== String(match?.id)) return;
+    const validLinks = getMatchServers(match, true);
+    let bar = parent.querySelector(".cricket-match-view-servers");
+    if (!validLinks.length) {
+      if (bar) bar.remove();
+      return;
+    }
+    if (!bar) {
+      bar = element("div", "cricket-watch-links cricket-match-view-servers");
+      bar.style.margin = "12px 0 16px";
+      const nav = parent.querySelector(".cricket-tabs");
+      if (nav) {
+        parent.insertBefore(bar, nav);
+      } else {
+        parent.appendChild(bar);
+      }
+    }
+    bar.replaceChildren();
+    bar.appendChild(element("strong", "cricket-watch-label", "Watch Live:"));
+    validLinks.forEach(({ url, sourceURL }, index) => {
+      const serverLabel = `Server ${index + 1}`;
+      const button = element("button", "cricket-watch-link", `▶ ${serverLabel}`);
+      button.type = "button";
+      button.setAttribute("data-match-id", String(match.id));
+      button.setAttribute("data-server-idx", String(index));
+      button.setAttribute(
+        "aria-label",
+        `${serverLabel} for ${match.team1?.teamName || "Team 1"} vs ${match.team2?.teamName || "Team 2"}`
+      );
+      const selected = state.activeWatch?.match?.id === match.id &&
+        state.activeWatch.serverIndex === index;
+      button.classList.toggle("is-selected", selected);
+      button.setAttribute("aria-pressed", String(selected));
+      button.addEventListener("click", event => {
+        event.stopPropagation();
+        startMatchServer(match, index, true);
+      });
+      bar.appendChild(button);
+    });
+  }
+
+  let lastClientSyncTime = 0;
+  let clientSyncInProgress = false;
+
+  async function syncAllrounderClient(force = false) {
+    const now = Date.now();
+    if (clientSyncInProgress) return;
+    if (!force && now - lastClientSyncTime < 40000) return;
+    clientSyncInProgress = true;
+
+    try {
+      // 1. Try backend /api/auto-servers
+      try {
+        const beRes = await fetch(`${apiBase}/api/auto-servers`, { cache: "no-store" });
+        if (beRes.ok) {
+          const beData = await beRes.json();
+          if (beData && beData.servers && Object.keys(beData.servers).length > 0) {
+            Object.entries(beData.servers).forEach(([mid, sList]) => {
+              state.autoServers[mid] = sList;
+            });
+            lastClientSyncTime = now;
+            updateDomMatchServers();
+            clientSyncInProgress = false;
+            return;
+          }
+        }
+      } catch (e) {}
+
+      // 2. Direct client-side fetch from FanCode & Willow (both have CORS enabled)
+      const [fcRes, wRes] = await Promise.allSettled([
+        fetch("https://sportlink-fancode10.pages.dev/fan.json").then(r => r.json()),
+        fetch("https://willow-api.sayanwork-studioo.workers.dev/").then(r => r.json())
+      ]);
+
+      const candidateMatches = state.matches || [];
+      const newAutoServers = {};
+
+      if (fcRes.status === "fulfilled" && Array.isArray(fcRes.value?.matches)) {
+        for (const fc of fcRes.value.matches) {
+          const status = String(fc.status || "").toUpperCase();
+          if (status && !status.includes("LIVE")) continue;
+          let streamUrl = "";
+          const autoStreams = fc.auto_streams || {};
+          for (const lang of Object.keys(autoStreams)) {
+            const s = autoStreams[lang]?.streams || {};
+            streamUrl = s["1080p"] || s["720p"] || s["540p"] || "";
+            if (streamUrl) break;
+          }
+          if (!streamUrl) streamUrl = fc.streams?.primary || "";
+          if (!streamUrl) continue;
+
+          const title = fc.title || "";
+          const matchId = String(fc.match_id || "");
+          const playerUrl = `https://allrounderlive.in/fc-play?url=${encodeURIComponent(streamUrl)}&title=${encodeURIComponent(title)}&match_id=${encodeURIComponent(matchId)}`;
+
+          for (const cb of candidateMatches) {
+            if (matchStreamToCb(title, cb)) {
+              const mid = String(cb.id);
+              if (!newAutoServers[mid]) newAutoServers[mid] = [];
+              const sNum = newAutoServers[mid].length + 1;
+              newAutoServers[mid].push({
+                id: `client_fc_${mid}_${sNum}`,
+                title: `Server ${sNum}`,
+                serverLabel: `Server ${sNum}`,
+                category: `${watchLinkPrefix}${mid}`,
+                media_type: "link",
+                media_url: playerUrl,
+                source: "fancode",
+                published: true,
+                sort_order: sNum
+              });
+              break;
+            }
+          }
+        }
+      }
+
+      if (wRes.status === "fulfilled" && Array.isArray(wRes.value?.Matches)) {
+        for (const w of wRes.value.Matches) {
+          const status = String(w.status || "").toUpperCase();
+          const isLive = status.includes("LIVE") || w.isLive;
+          const hasStream = Boolean(w.stream_url_alpha || w.stream_url_bravo || w.streamUrl || w.playbackUrl || w.drm_key);
+          if (!isLive && !hasStream) continue;
+
+          const safeId = w.title || w.tvgId || w.match_id || "";
+          if (!safeId) continue;
+          const title = w.title || safeId;
+          const playerUrl = `https://allrounderlive.in/willow-player?id=${encodeURIComponent(safeId)}`;
+
+          for (const cb of candidateMatches) {
+            if (matchStreamToCb(title, cb)) {
+              const mid = String(cb.id);
+              if (!newAutoServers[mid]) newAutoServers[mid] = [];
+              if (!newAutoServers[mid].some(s => s.source === "willow")) {
+                const sNum = newAutoServers[mid].length + 1;
+                newAutoServers[mid].push({
+                  id: `client_w_${mid}_${sNum}`,
+                  title: `Server ${sNum}`,
+                  serverLabel: `Server ${sNum}`,
+                  category: `${watchLinkPrefix}${mid}`,
+                  media_type: "link",
+                  media_url: playerUrl,
+                  source: "willow",
+                  published: true,
+                  sort_order: sNum
+                });
+              }
+              break;
+            }
+          }
+        }
+      }
+
+      Object.entries(newAutoServers).forEach(([mid, sList]) => {
+        state.autoServers[mid] = sList;
+      });
+
+      lastClientSyncTime = now;
+      updateDomMatchServers();
+    } catch (err) {
+      console.warn("Client stream sync error:", err);
+    } finally {
+      clientSyncInProgress = false;
+    }
   }
 
   function matchCard(match, onSelect, allowWatchLinks) {
@@ -1081,7 +1383,7 @@
     const topGuard = element("div", "player-top-guard");
     topGuard.setAttribute("aria-hidden", "true");
     topGuard.innerHTML = '<svg width="100%" height="100%" style="display:block;width:100%;height:100%;pointer-events:auto;" preserveAspectRatio="none"><rect width="100%" height="100%" fill="#000" fill-opacity="0.02"/></svg>';
-    ["click", "dblclick", "mousedown", "mouseup", "touchstart", "touchend", "touchmove", "pointerdown", "pointerup", "pointermove", "contextmenu"].forEach(evt => {
+    ["click", "dblclick", "mousedown", "mouseup", "touchstart", "touchend", "touchmove", "pointerdown", "pointerup", "pointermove", "contextmenu", "selectstart", "dragstart"].forEach(evt => {
       topGuard.addEventListener(evt, (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -1385,6 +1687,7 @@
     root.querySelector(".cricket-content")?.prepend(
       element("p", "cricket-count", `${filtered(matches, matchSearchText).length} of ${matches.length} matches`)
     );
+    syncAllrounderClient();
   }
 
   async function loadSection(name, label, emptyText, requestId) {
@@ -1796,6 +2099,13 @@
     state.returnPage = returnPage || state.returnPage || "live";
     state.page = "match";
     state.matchTab = initialTab;
+
+    // Auto-select Server 1 if match has streams ("or andar bhi server 1 selected bss")
+    const validLinks = getMatchServers(match, true);
+    if (validLinks.length > 0 && String(state.activeWatch?.match?.id) !== String(match.id)) {
+      startMatchServer(match, 0, false);
+    }
+
     if (updateUrl) {
       updateCricketURL({
         match: match.id,
@@ -1805,6 +2115,7 @@
     }
     renderShell();
     await loadMatchTab(initialTab, false);
+    renderMatchViewServers(match);
   }
 
   async function loadMatchTab(tab, updateUrl = true) {
@@ -1887,6 +2198,7 @@
       navigation.appendChild(button);
     });
     content.appendChild(navigation);
+    renderMatchViewServers(match, content);
     content.appendChild(element("div", "cricket-match-data is-loading", "Loading match data…"));
 
     const apiVersion = ["squad", "points", "overs", "graphs", "news"].includes(tab)
@@ -2814,6 +3126,7 @@
             state.autoServers[String(m.id)] = m.auto_servers;
           }
         });
+        syncAllrounderClient();
 
         // Update cards in-place
         matches.forEach(match => {
@@ -2904,6 +3217,10 @@
     updateLiveScoresSilent();
   }, 4000);
 
+  window.setInterval(() => {
+    syncAllrounderClient();
+  }, 45000);
+
   window.addEventListener("cricfreex:content-updated", event => {
     watchLinks = (event.detail || []).filter(item =>
       String(item.category || "").startsWith(watchLinkPrefix)
@@ -2927,11 +3244,15 @@
 
   function enforceCricketFullscreen() {
     const fs = document.fullscreenElement || document.webkitFullscreenElement;
+    const wrap = root.querySelector(".cricket-watch-frame-wrap");
+    if (wrap) {
+      wrap.classList.toggle("is-fullscreen", Boolean(fs));
+    }
     if (fs && fs.classList && fs.classList.contains("cricket-watch-frame")) {
-      const wrap = fs.closest(".cricket-watch-frame-wrap");
-      if (wrap && wrap !== fs) {
-        if (wrap.requestFullscreen) wrap.requestFullscreen().catch(() => {});
-        else if (wrap.webkitRequestFullscreen) wrap.webkitRequestFullscreen();
+      const cWrap = fs.closest(".cricket-watch-frame-wrap");
+      if (cWrap && cWrap !== fs) {
+        if (cWrap.requestFullscreen) cWrap.requestFullscreen().catch(() => {});
+        else if (cWrap.webkitRequestFullscreen) cWrap.webkitRequestFullscreen();
       }
     }
   }
