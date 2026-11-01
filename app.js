@@ -2030,6 +2030,7 @@ function initSiteAccessGate() {
     if (!siteAccessConfig.enabled || !siteAccessConfig.password) return;
     modal.hidden = false;
     modal.removeAttribute("hidden");
+    document.documentElement.classList.add("site-access-locked");
     document.body.classList.add("site-access-locked");
 
     try {
@@ -2051,6 +2052,7 @@ function initSiteAccessGate() {
   function hideGate() {
     modal.hidden = true;
     modal.setAttribute("hidden", "");
+    document.documentElement.classList.remove("site-access-locked");
     document.body.classList.remove("site-access-locked");
   }
 

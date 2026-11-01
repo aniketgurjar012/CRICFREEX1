@@ -17,9 +17,11 @@ const $=id=>document.getElementById(id);
 
 const CRICKET_WATCH_LINK_PREFIX="__cricket_watch__:";
 const SITE_ACCESS_PREFIX="__site_access__";
-const CRICKET_API_BASE=(location.hostname==="localhost"||location.hostname==="127.0.0.1")
+const isPort8765 = location.port === "8765";
+const isLocalHost = location.hostname === "localhost" || location.hostname === "127.0.0.1" || location.hostname === "0.0.0.0";
+const CRICKET_API_BASE = isPort8765
   ? ""
-  : String(CONFIG.CRICKET_API_URL||"").replace(/\/+$/,"");
+  : (isLocalHost ? "http://127.0.0.1:8765" : String(CONFIG.CRICKET_API_URL || "").replace(/\/+$/, ""));
 
 let sections=[];
 let content=[];
@@ -1315,7 +1317,6 @@ $("contentSearch").oninput=renderContent;
 
 function fillSelectors(){
   const oldSection=$("contentSection").value;
-  const oldParent=$("parentId").value;
 
   $("contentSection").replaceChildren();
 
@@ -1331,74 +1332,7 @@ function fillSelectors(){
   ){
     $("contentSection").value=oldSection;
   }
-
-  $("parentId").innerHTML=
-    '<option value="">Select Parent Show</option>';
-
-  content
-    .filter(x=>x.kind==="series")
-    .forEach(show=>{
-      const option=document.createElement("option");
-      option.value=show.id;
-      option.textContent=show.title;
-      $("parentId").append(option);
-    });
-
-  if(
-    content.some(
-      x=>
-        x.id===oldParent &&
-        x.kind==="series"
-    )
-  ){
-    $("parentId").value=oldParent;
-  }
 }
-
-function applyKindRules(){
-  const kind=$("contentKind").value;
-  const isEpisode=kind==="episode";
-
-  $("parentId").disabled=!isEpisode;
-  $("episodeNumber").disabled=!isEpisode;
-
-  if(!isEpisode){
-    $("parentId").value="";
-    $("episodeNumber").value="";
-  }
-}
-
-$("contentKind").addEventListener(
-  "change",
-  applyKindRules
-);
-
-$("parentId").addEventListener(
-  "change",
-  ()=>{
-    if(
-      $("contentKind").value!=="episode"
-    )return;
-
-    const show=content.find(
-      x=>
-        x.id===$("parentId").value &&
-        x.kind==="series"
-    );
-
-    if(!show)return;
-
-    /*
-      Episodes inherit show location.
-    */
-
-    $("contentSection").value=
-      show.section_slug||"";
-
-    $("contentCategory").value=
-      show.category||"series";
-  }
-);
 
 /* =========================================================
    EDITOR
@@ -1408,9 +1342,6 @@ function resetEditor(){
   $("contentForm").reset();
   $("contentId").value="";
   $("sortOrder").value="0";
-  $("published").value="true";
-  $("contentKind").value="channel";
-  $("mediaType").value="iframe";
   $("editorHeading").textContent="Add Content";
   $("deleteContent").classList.add("hidden");
 
@@ -1419,13 +1350,7 @@ function resetEditor(){
   if(sections.length){
     $("contentSection").value=
       sections[0].slug;
-  }else{
-    throw new Error(
-      "No content section is available. Refresh Admin and try again."
-    );
   }
-
-  applyKindRules();
 }
 
 $("addContent").onclick=()=>{
@@ -1451,32 +1376,8 @@ function editContent(item){
   $("publicId").value=item.public_id||"";
   $("contentSection").value=item.section_slug||"";
   $("contentCategory").value=item.category||"";
-  $("contentKind").value=item.kind||"channel";
-
-  /*
-    Enable episode controls before
-    setting parent.
-  */
-
-  applyKindRules();
-
-  if(item.kind==="episode"){
-    $("parentId").value=item.parent_id||"";
-    $("episodeNumber").value=
-      item.episode_number||"";
-  }
-
-  $("mediaType").value=
-    item.media_type||"iframe";
-
-  $("mediaUrl").value=
-    item.media_url||"";
-
-  $("sortOrder").value=
-    item.sort_order||0;
-
-  $("published").value=
-    String(item.published);
+  $("mediaUrl").value=item.media_url||"";
+  $("sortOrder").value=item.sort_order||0;
 
   $("editorHeading").textContent="Edit Content";
   $("deleteContent").classList.remove("hidden");
@@ -1620,8 +1521,6 @@ $("contentForm").onsubmit=async event=>{
       ?content.find(x=>x.id===id)
       :null;
 
-    const kind=$("contentKind").value;
-
     const title=$("contentTitle")
       .value
       .trim();
@@ -1630,62 +1529,12 @@ $("contentForm").onsubmit=async event=>{
       throw new Error("Title is required.");
     }
 
-    let parent=null;
-
-    if(kind==="episode"){
-      const parentId=$("parentId").value;
-
-      if(!parentId){
-        throw new Error(
-          "Episode must have a Parent Show."
-        );
-      }
-
-      parent=content.find(
-        x=>
-          x.id===parentId &&
-          x.kind==="series"
-      );
-
-      if(!parent){
-        throw new Error(
-          "Selected parent show is invalid."
-        );
-      }
-    }
-
-    const videoFile=
-      $("videoUpload").files[0];
-
     let mediaUrl=
       $("mediaUrl").value.trim()
       ||
       existing?.media_url
       ||
       null;
-
-    let mediaType=
-      $("mediaType").value;
-
-    if(videoFile){
-      uploadedVideo=
-        await uploadFile(
-          videoFile,
-          "videos"
-        );
-
-      mediaUrl=uploadedVideo;
-      mediaType="video";
-    }
-
-    /*
-      Series = container.
-      Its media is not used by player.
-    */
-
-    if(kind==="series"){
-      mediaUrl=null;
-    }
 
     const payload={
       title,
@@ -1694,52 +1543,20 @@ $("contentForm").onsubmit=async event=>{
         null,
 
       section_slug:
-        kind==="episode"
-          ?parent.section_slug
-          :$("contentSection").value,
+        $("contentSection").value,
 
       category:
-        kind==="episode"
-          ?(parent.category||"series")
-          :($("contentCategory").value.trim()||null),
+        $("contentCategory").value.trim()||null,
 
-      kind,
-
-      parent_id:
-        kind==="episode"
-          ?parent.id
-          :null,
-
-      media_type:
-        mediaType,
-
-      media_url:
-        mediaUrl,
-
-      image_url:
-        existing?.image_url||null,
-
-      episode_number:
-        kind==="episode"
-          ?(
-              $("episodeNumber").value
-                ?Number(
-                    $("episodeNumber").value
-                  )
-                :null
-            )
-          :null,
-
-      sort_order:
-        Number(
-          $("sortOrder").value
-        )||0,
-
-      published:
-        $("published").value==="true",
-
-      updated_at:
-        new Date().toISOString()
+      kind: "channel",
+      parent_id: null,
+      media_type: "iframe",
+      media_url: mediaUrl,
+      image_url: existing?.image_url||null,
+      episode_number: null,
+      sort_order: Number($("sortOrder").value)||0,
+      published: true,
+      updated_at: new Date().toISOString()
     };
 
     let result;

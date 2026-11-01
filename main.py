@@ -705,6 +705,222 @@ def _match_stream_to_cb(stream_title: str, cb_match: dict[str, Any]) -> bool:
     return _team_matches_stream(t1, clean_stream) and _team_matches_stream(t2, clean_stream)
 
 
+def _clean_team_tokens(name: str) -> set[str]:
+    cleaned = re.sub(r'[^a-zA-Z0-9\s]', ' ', str(name or "")).lower()
+    stop = {"team", "cricket", "club", "npl", "mens", "women", "womens", "the", "xi"}
+    return {w for w in cleaned.split() if len(w) > 2 and w not in stop}
+
+
+def _team_token_match(name1: str, name2: str) -> bool:
+    t1 = _clean_team_tokens(name1)
+    t2 = _clean_team_tokens(name2)
+    if not t1 or not t2:
+        return False
+    return bool(t1.intersection(t2))
+
+
+def _parse_cricinfo_score(score_str: str) -> dict[str, Any]:
+    if not score_str:
+        return {}
+    s = str(score_str).strip()
+    m = re.search(r'(\d+)(?:/(\d+))?(?:\s*\(([0-9.]+)\s*(?:ov)?\))?', s)
+    if m:
+        runs = int(m.group(1))
+        wkts = int(m.group(2)) if m.group(2) is not None else (10 if "/" not in s and runs > 0 else 0)
+        overs = float(m.group(3)) if m.group(3) is not None else None
+        res = {"runs": runs, "wickets": wkts}
+        if overs is not None:
+            res["overs"] = overs
+        return {"inngs1": res, "summary": s}
+    return {"summary": s}
+
+
+_CRICINFO_CACHE: dict[str, Any] = {"time": 0.0, "matches": []}
+_CRICINFO_CACHE_TTL = 45.0  # 45 seconds refresh interval
+
+
+def fetch_cricinfo_matches() -> list[dict[str, Any]]:
+    global _CRICINFO_CACHE
+    now = time.time()
+    if now - float(_CRICINFO_CACHE["time"]) < _CRICINFO_CACHE_TTL and _CRICINFO_CACHE["matches"]:
+        return _CRICINFO_CACHE["matches"]
+
+    url = "https://site.web.api.espn.com/apis/v2/scoreboard/header?sport=cricket"
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+    ci_matches = []
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=8) as res:
+            data = json.loads(res.read().decode("utf-8"))
+
+        for sport in data.get("sports", []):
+            for league in sport.get("leagues", []):
+                league_name = league.get("name", "Cricket")
+                league_id = str(league.get("id", ""))
+                for ev in league.get("events", []):
+                    try:
+                        cid = str(ev.get("id"))
+                        comps = ev.get("competitors", [])
+                        if len(comps) < 2:
+                            continue
+                        c1, c2 = comps[0], comps[1]
+
+                        status_obj = ev.get("fullStatus", {})
+                        state_val = str(status_obj.get("type", {}).get("state", "")).lower()
+                        summary_val = str(ev.get("summary", "")).lower()
+                        detail_val = str(status_obj.get("type", {}).get("detail", "")).lower()
+
+                        if state_val == "in" or "live" in detail_val or "stumps" in summary_val or "tea" in summary_val or "lunch" in summary_val or "in progress" in summary_val:
+                            state_str = "Live"
+                            cat = "live"
+                        elif state_val == "post" or "result" in summary_val or "won" in summary_val or "drawn" in summary_val:
+                            state_str = "Complete"
+                            cat = "recent"
+                        else:
+                            state_str = "Upcoming"
+                            cat = "upcoming"
+
+                        long_status = status_obj.get("longSummary") or ev.get("summary") or state_str
+                        location = ev.get("location") or ""
+                        venue_dict = {"ground": location, "city": ""}
+                        if "," in location:
+                            parts = [p.strip() for p in location.split(",")]
+                            venue_dict = {"ground": parts[0], "city": ", ".join(parts[1:])}
+
+                        c1_name = c1.get("displayName") or c1.get("name") or "Team 1"
+                        c2_name = c2.get("displayName") or c2.get("name") or "Team 2"
+
+                        match_obj = {
+                            "id": f"ci_{cid}",
+                            "series": league_name,
+                            "seriesId": league_id,
+                            "description": ev.get("description") or ev.get("name") or "Cricket Match",
+                            "state": state_str,
+                            "status": long_status,
+                            "venue": venue_dict,
+                            "team1": {
+                                "teamName": c1_name,
+                                "teamSName": c1.get("abbreviation") or c1_name[:4].upper(),
+                                "logo": c1.get("logo") or "",
+                                "imageId": c1.get("logo") or None
+                            },
+                            "team2": {
+                                "teamName": c2_name,
+                                "teamSName": c2.get("abbreviation") or c2_name[:4].upper(),
+                                "logo": c2.get("logo") or "",
+                                "imageId": c2.get("logo") or None
+                            },
+                            "score": {
+                                "team1Score": _parse_cricinfo_score(c1.get("score", "")),
+                                "team2Score": _parse_cricinfo_score(c2.get("score", ""))
+                            },
+                            "_category": cat,
+                            "source": "cricinfo"
+                        }
+                        ci_matches.append(match_obj)
+                    except Exception as ev_err:
+                        logger.warning("Error parsing Cricinfo event: %s", ev_err)
+
+        if ci_matches:
+            _CRICINFO_CACHE["time"] = now
+            _CRICINFO_CACHE["matches"] = ci_matches
+    except Exception as e:
+        logger.warning("Error fetching Cricinfo scoreboard: %s", e)
+
+    return _CRICINFO_CACHE.get("matches", [])
+
+
+_WILLOW_COOLDOWN_UNTIL = 0.0
+_CRICINFO_SUMMARY_CACHE: dict[str, Any] = {}
+
+
+def get_cricinfo_tab_data(match_id: str, tab: str) -> dict[str, Any]:
+    cid = str(match_id).replace("ci_", "").strip()
+    ci_match = next((m for m in fetch_cricinfo_matches() if str(m.get("id")) in (match_id, f"ci_{cid}")), None)
+    series_id = ci_match.get("seriesId") if ci_match else ""
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+    data: dict[str, Any] = {}
+    try:
+        espn_summary = _CRICINFO_SUMMARY_CACHE.get(cid)
+        if not espn_summary:
+            summary_url = (
+                f"https://site.web.api.espn.com/apis/site/v2/sports/cricket/{series_id}/summary?event={cid}"
+                if (series_id and series_id != "0")
+                else f"https://site.web.api.espn.com/apis/site/v2/sports/cricket/summary?event={cid}"
+            )
+            req = urllib.request.Request(summary_url, headers=headers)
+            with urllib.request.urlopen(req, timeout=3) as res:
+                espn_summary = json.loads(res.read().decode("utf-8"))
+                _CRICINFO_SUMMARY_CACHE[cid] = espn_summary
+
+        if tab == "scorecard":
+            matchcards = espn_summary.get("matchcards", [])
+            innings = []
+            for mc in matchcards:
+                batting_rows = []
+                for p in mc.get("playerDetails", []):
+                    runs_val = str(p.get("runs", "0"))
+                    balls_val = str(p.get("ballsFaced", "0"))
+                    try:
+                        r_f = float(runs_val)
+                        b_f = float(balls_val)
+                        sr = str(round(r_f / max(b_f, 1.0) * 100.0, 2))
+                    except Exception:
+                        sr = "0.0"
+                    batting_rows.append({
+                        "name": p.get("playerName", ""),
+                        "dismissal": p.get("dismissal", ""),
+                        "runs": runs_val,
+                        "balls": balls_val,
+                        "fours": str(p.get("fours", "0")),
+                        "sixes": str(p.get("sixes", "0")),
+                        "strikeRate": sr
+                    })
+                innings.append({
+                    "title": f"{mc.get('teamName', 'Team')} ({mc.get('runs', '')} - {mc.get('total', '')})",
+                    "batting": batting_rows,
+                    "bowling": []
+                })
+            data = {"innings": innings}
+        elif tab == "info":
+            game_info = espn_summary.get("gameInfo", {})
+            venue_info = game_info.get("venue", {})
+            details = [
+                {"label": "Series", "value": ci_match.get("series", "") if ci_match else ""},
+                {"label": "Match", "value": ci_match.get("description", "") if ci_match else ""},
+                {"label": "Venue", "value": venue_info.get("fullName", venue_info.get("shortName", ""))},
+                {"label": "City", "value": venue_info.get("address", {}).get("city", "")},
+                {"label": "Status", "value": ci_match.get("status", "") if ci_match else ""}
+            ]
+            officials = game_info.get("officials", [])
+            for off in officials:
+                details.append({
+                    "label": off.get("position", {}).get("displayName", "Official").title(),
+                    "value": off.get("displayName", "")
+                })
+            teams_list = []
+            if ci_match:
+                if ci_match.get("team1"):
+                    teams_list.append(ci_match["team1"])
+                if ci_match.get("team2"):
+                    teams_list.append(ci_match["team2"])
+            data = {"details": details, "teams": teams_list}
+        elif tab == "squad":
+            rosters = espn_summary.get("rosters", [])
+            squads = []
+            for ros in rosters:
+                t_name = ros.get("team", {}).get("displayName", "Team")
+                players = [{"name": p.get("displayName", "")} for p in ros.get("roster", [])]
+                squads.append({"teamName": t_name, "players": players})
+            data = {"squads": squads}
+        else:
+            data = {"message": f"{tab.title()} data is not available for this match."}
+    except Exception as e:
+        logger.warning("Error fetching Cricinfo summary: %s", e)
+        data = {"innings": []}
+    return data
+
+
 def sync_allrounder_streams() -> dict[str, list[dict[str, Any]]]:
     global LAST_AUTO_SYNC_TIME
     try:
@@ -717,6 +933,12 @@ def sync_allrounder_streams() -> dict[str, list[dict[str, Any]]]:
         try:
             up_html = fetch(PAGES["upcoming"], 10)
             cb_matches.extend(extract_matches(up_html))
+        except Exception:
+            pass
+        try:
+            for ci_m in fetch_cricinfo_matches():
+                if ci_m.get("_category") in ("live", "upcoming"):
+                    cb_matches.append(ci_m)
         except Exception:
             pass
 
@@ -794,54 +1016,69 @@ def sync_allrounder_streams() -> dict[str, list[dict[str, Any]]]:
             logger.warning("AutoStreamSync FanCode error: %s", e)
 
         # 2. Willow streams from allrounderlive
+        if time.time() > _WILLOW_COOLDOWN_UNTIL:
+            try:
+                req = urllib.request.Request(
+                    "https://willow-api.sayanwork-studioo.workers.dev/",
+                    headers=headers
+                )
+                with urllib.request.urlopen(req, timeout=12) as r:
+                    willow_data = json.loads(r.read().decode("utf-8"))
+                for w in willow_data.get("Matches", []):
+                    w_status = str(w.get("status", "")).upper()
+                    is_live = "LIVE" in w_status or w.get("isLive")
+                    has_stream = bool(
+                        w.get("stream_url_alpha") or w.get("stream_url_bravo") or
+                        w.get("streamUrl") or w.get("hls") or
+                        w.get("playbackUrl") or w.get("drm_key") or
+                        w.get("channel_id") or w.get("tvgId")
+                    )
+                    if not is_live and not has_stream:
+                        continue
+
+                    safe_id = (
+                        w.get("title") or w.get("tvgId") or
+                        w.get("tvgName") or w.get("match_id") or ""
+                    )
+                    if not safe_id:
+                        continue
+                    title = w.get("title") or safe_id
+                    encoded_id = urllib.parse.quote(str(safe_id))
+                    player_url = f"https://allrounderlive.in/willow-player?id={encoded_id}"
+
+                    for cb in cb_list:
+                        if _match_stream_to_cb(title, cb):
+                            mid = str(cb["id"])
+                            matched_servers.setdefault(mid, [])
+                            if not any(s.get("source") == "willow" for s in matched_servers[mid]):
+                                matched_servers[mid].append({
+                                    "id": f"auto_w_{mid}_{len(matched_servers[mid])}",
+                                    "title": f"Server {len(matched_servers[mid]) + 1}",
+                                    "serverLabel": f"Server {len(matched_servers[mid]) + 1}",
+                                    "category": f"__cricket_watch__:{mid}",
+                                    "media_type": "link",
+                                    "media_url": player_url,
+                                    "source": "willow",
+                                    "published": True,
+                                    "sort_order": len(matched_servers[mid])
+                                })
+                            break
+            except urllib.error.HTTPError as he:
+                if he.code == 429:
+                    _WILLOW_COOLDOWN_UNTIL = time.time() + 90
+                logger.warning("AutoStreamSync Willow HTTP error: %s", he)
+            except Exception as e:
+                logger.warning("AutoStreamSync Willow error: %s", e)
+
+        # Delete/prune servers for any matches that have completed
         try:
-            req = urllib.request.Request(
-                "https://willow-api.sayanwork-studioo.workers.dev/",
-                headers=headers
-            )
-            with urllib.request.urlopen(req, timeout=12) as r:
-                willow_data = json.loads(r.read().decode("utf-8"))
-            for w in willow_data.get("Matches", []):
-                w_status = str(w.get("status", "")).upper()
-                is_live = "LIVE" in w_status or w.get("isLive")
-                has_stream = bool(
-                    w.get("stream_url_alpha") or w.get("stream_url_bravo") or
-                    w.get("streamUrl") or w.get("hls") or
-                    w.get("playbackUrl") or w.get("drm_key") or
-                    w.get("channel_id") or w.get("tvgId")
-                )
-                if not is_live and not has_stream:
-                    continue
-
-                safe_id = (
-                    w.get("title") or w.get("tvgId") or
-                    w.get("tvgName") or w.get("match_id") or ""
-                )
-                if not safe_id:
-                    continue
-                title = w.get("title") or safe_id
-                encoded_id = urllib.parse.quote(str(safe_id))
-                player_url = f"https://allrounderlive.in/willow-player?id={encoded_id}"
-
-                for cb in cb_list:
-                    if _match_stream_to_cb(title, cb):
-                        mid = str(cb["id"])
-                        matched_servers.setdefault(mid, [])
-                        if not any(s.get("source") == "willow" for s in matched_servers[mid]):
-                            matched_servers[mid].append({
-                                "id": f"auto_w_{mid}_{len(matched_servers[mid])}",
-                                "title": f"Server {len(matched_servers[mid]) + 1}",
-                                "serverLabel": f"Server {len(matched_servers[mid]) + 1}",
-                                "category": f"__cricket_watch__:{mid}",
-                                "media_type": "link",
-                                "media_url": player_url,
-                                "source": "willow",
-                                "published": True,
-                                "sort_order": len(matched_servers[mid])
-                            })
-                        break
-        except Exception as e:
-            logger.warning("AutoStreamSync Willow error: %s", e)
+            rec_html = fetch(PAGES["recent"], 10)
+            for rm in extract_matches(rec_html):
+                rm_id = str(rm.get("id"))
+                if rm_id in matched_servers:
+                    del matched_servers[rm_id]
+        except Exception:
+            pass
 
         with AUTO_SERVERS_LOCK:
             if matched_servers:
@@ -933,6 +1170,27 @@ def get_matches(category: str):
             for match in raw_matches
             if classify_match(match) == category
         ]
+
+        # Cricinfo Fallback Integration:
+        # First priority is Cricbuzz. Matches present in Cricinfo but missed by Cricbuzz are added below.
+        try:
+            ci_all = fetch_cricinfo_matches()
+            for ci_m in ci_all:
+                if ci_m.get("_category") == category:
+                    t1_name = ci_m.get("team1", {}).get("teamName", "")
+                    t2_name = ci_m.get("team2", {}).get("teamName", "")
+                    already_in_cb = False
+                    for existing in matches:
+                        ex_t1 = existing.get("team1", {}).get("teamName", "")
+                        ex_t2 = existing.get("team2", {}).get("teamName", "")
+                        if (_team_token_match(t1_name, ex_t1) and _team_token_match(t2_name, ex_t2)) or \
+                           (_team_token_match(t1_name, ex_t2) and _team_token_match(t2_name, ex_t1)):
+                            already_in_cb = True
+                            break
+                    if not already_in_cb:
+                        matches.append(ci_m)
+        except Exception as ci_err:
+            logger.warning("Cricinfo fallback merge error: %s", ci_err)
 
         with AUTO_SERVERS_LOCK:
             for match in matches:
@@ -1201,32 +1459,73 @@ def get_series(
 
 
 @app.get("/api/match/{match_id}")
-def get_match(match_id: int):
+def get_match(match_id: str):
 
     try:
+        mid_str = str(match_id).strip()
 
-        html = fetch(PAGES["live"], MATCH_CACHE_TTL)
-        matches = extract_matches(html)
-
-        # Also search upcoming if not found in live
-        if not any(m["id"] == match_id for m in matches):
+        # 1. Search in Cricbuzz categories (live, recent, upcoming)
+        for cat in ("live", "recent", "upcoming"):
             try:
-                up_html = fetch(PAGES["upcoming"], MATCH_CACHE_TTL)
-                matches.extend(extract_matches(up_html))
+                html = fetch(PAGES[cat], MATCH_CACHE_TTL)
+                for match in extract_matches(html):
+                    if str(match.get("id")) == mid_str:
+                        with AUTO_SERVERS_LOCK:
+                            if mid_str in AUTO_MATCH_SERVERS:
+                                match["auto_servers"] = AUTO_MATCH_SERVERS[mid_str]
+                        return {
+                            "success": True,
+                            "match": match
+                        }
             except Exception:
                 pass
 
-        for match in matches:
-
-            if match["id"] == match_id:
+        # 2. Search Cricinfo fallback matches
+        for ci_m in fetch_cricinfo_matches():
+            if str(ci_m.get("id")) == mid_str or str(ci_m.get("id")) == f"ci_{mid_str}":
                 with AUTO_SERVERS_LOCK:
-                    mid_str = str(match["id"])
-                    if mid_str in AUTO_MATCH_SERVERS:
-                        match["auto_servers"] = AUTO_MATCH_SERVERS[mid_str]
+                    cid = str(ci_m.get("id"))
+                    if cid in AUTO_MATCH_SERVERS:
+                        ci_m["auto_servers"] = AUTO_MATCH_SERVERS[cid]
                 return {
                     "success": True,
-                    "match": match
+                    "match": ci_m
                 }
+
+        # 3. If numeric Cricbuzz match ID, fetch match facts page
+        if mid_str.isdigit():
+            try:
+                facts_html = fetch(f"/cricket-match-facts/{mid_str}", MATCH_CACHE_TTL)
+                for match in extract_matches(facts_html):
+                    if str(match.get("id")) == mid_str:
+                        with AUTO_SERVERS_LOCK:
+                            if mid_str in AUTO_MATCH_SERVERS:
+                                match["auto_servers"] = AUTO_MATCH_SERVERS[mid_str]
+                        return {
+                            "success": True,
+                            "match": match
+                        }
+                info_data = normalized_info(facts_html, mid_str)
+                if info_data and info_data.get("details"):
+                    constructed = {
+                        "id": int(mid_str),
+                        "series": next((d["value"] for d in info_data["details"] if d.get("label") == "Series"), "Cricket Match"),
+                        "description": next((d["value"] for d in info_data["details"] if d.get("label") == "Match"), "Match"),
+                        "state": next((d["value"] for d in info_data["details"] if d.get("label") == "State"), "Live"),
+                        "status": next((d["value"] for d in info_data["details"] if d.get("label") == "Status"), "Live"),
+                        "venue": {"ground": next((d["value"] for d in info_data["details"] if d.get("label") == "Venue"), "")},
+                        "team1": info_data["teams"][0] if len(info_data.get("teams", [])) > 0 else {"teamName": "Team 1"},
+                        "team2": info_data["teams"][1] if len(info_data.get("teams", [])) > 1 else {"teamName": "Team 2"}
+                    }
+                    with AUTO_SERVERS_LOCK:
+                        if mid_str in AUTO_MATCH_SERVERS:
+                            constructed["auto_servers"] = AUTO_MATCH_SERVERS[mid_str]
+                    return {
+                        "success": True,
+                        "match": constructed
+                    }
+            except Exception:
+                pass
 
         raise HTTPException(404, "Match not found")
 
@@ -1238,7 +1537,17 @@ def get_match(match_id: int):
 
 
 @app.get("/api/match/{match_id}/{tab}")
-def match_tab(match_id: int, tab: str):
+def match_tab(match_id: str, tab: str):
+
+    if str(match_id).startswith("ci_"):
+        data = get_cricinfo_tab_data(match_id, tab)
+        ci_match = next((m for m in fetch_cricinfo_matches() if str(m.get("id")) == str(match_id)), None)
+        return {
+            "success": True,
+            "matchId": match_id,
+            "data": data,
+            "matches": [ci_match] if ci_match else []
+        }
 
     paths = {
         "scorecard": f"/live-cricket-scorecard/{match_id}",
@@ -1348,7 +1657,7 @@ def detailed_news(path: str):
 
 
 @app.get("/api/v3/match/{match_id}/{tab}")
-def normalized_match(match_id: int, tab: str):
+def normalized_match(match_id: str, tab: str):
 
     if tab not in (
         "scorecard",
@@ -1356,6 +1665,13 @@ def normalized_match(match_id: int, tab: str):
         "info"
     ):
         raise HTTPException(400, "Invalid tab")
+
+    if str(match_id).startswith("ci_"):
+        return {
+            "success": True,
+            "matchId": match_id,
+            "data": get_cricinfo_tab_data(match_id, tab)
+        }
 
     paths = {
         "scorecard": f"/live-cricket-scorecard/{match_id}",
@@ -1518,7 +1834,7 @@ def get_team(
 
 
 @app.get("/api/v4/match/{match_id}/{tab}")
-def v4_match(match_id: int, tab: str):
+def v4_match(match_id: str, tab: str):
 
     if tab not in (
         "commentary",
@@ -1530,6 +1846,13 @@ def v4_match(match_id: int, tab: str):
         "news"
     ):
         raise HTTPException(400, "Invalid tab")
+
+    if str(match_id).startswith("ci_"):
+        return {
+            "success": True,
+            "matchId": match_id,
+            "data": get_cricinfo_tab_data(match_id, tab)
+        }
 
     try:
         if tab == "commentary":

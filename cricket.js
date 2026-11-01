@@ -1120,15 +1120,31 @@
   }
 
   function formatMatchScoreDisplay(score, isCb = false) {
-    if (!score || !Object.keys(score).length) return isCb ? "Yet to bat" : "LIVE";
-    return Object.values(score).map(innings => {
+    if (!score) return isCb ? "Yet to bat" : "LIVE";
+    if (typeof score === "string" && score.trim()) return score.trim();
+    if (score.summary && typeof score.summary === "string" && score.summary.trim()) return score.summary.trim();
+    if (!Object.keys(score).length) return isCb ? "Yet to bat" : "LIVE";
+    const parts = Object.values(score).map(innings => {
+      if (!innings) return null;
+      if (typeof innings === "string" && innings.trim()) return innings.trim();
+      if (innings.summary && typeof innings.summary === "string" && innings.summary.trim()) return innings.summary.trim();
+      if (innings.runs == null && innings.wickets == null && innings.overs == null) return null;
       const runs = innings.runs ?? 0;
       const wkts = innings.wickets;
       const ov = innings.overs;
-      const wktsStr = (wkts != null && wkts !== 10) ? `/${wkts}` : "";
-      const ovStr = ov != null ? ` (${ov} ov)` : "";
+      const wktsStr = (wkts != null && wkts !== 10) ? `/${wkts}` : (wkts === 10 ? "/10" : "");
+      const ovStr = ov != null ? ` (${ov})` : "";
       return `${runs}${wktsStr}${ovStr}`;
-    }).join(" & ") || (isCb ? "Yet to bat" : "LIVE");
+    }).filter(Boolean);
+    return parts.join(" & ") || (isCb ? "Yet to bat" : "LIVE");
+  }
+
+  function fetchWithTimeout(url, timeoutMs = 3000) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    return fetch(url, { signal: controller.signal, cache: "no-store" })
+      .then(r => { clearTimeout(timer); return r.json(); })
+      .catch(() => null);
   }
 
   let lastClientSyncTime = 0;
@@ -1141,11 +1157,11 @@
     clientSyncInProgress = true;
 
     try {
-      // Fetch FanCode, Willow, and backend auto-servers ALL IN PARALLEL (0ms waterfall)
+      // Fetch FanCode, Willow, and backend auto-servers ALL IN PARALLEL with strict timeouts
       const [fcRes, wRes, beRes] = await Promise.allSettled([
-        fetch("https://sportlink-fancode10.pages.dev/fan.json", { cache: "no-store" }).then(r => r.json()),
-        fetch("https://willow-api.sayanwork-studioo.workers.dev/", { cache: "no-store" }).then(r => r.json()),
-        fetch(`${apiBase}/api/auto-servers`, { cache: "no-store" }).then(r => r.json()).catch(() => null)
+        fetchWithTimeout("https://sportlink-fancode10.pages.dev/fan.json", 3500),
+        fetchWithTimeout("https://willow-api.sayanwork-studioo.workers.dev/", 2200),
+        fetchWithTimeout(`${apiBase}/api/auto-servers`, 3000)
       ]);
 
       if (beRes.status === "fulfilled" && beRes.value?.servers && Object.keys(beRes.value.servers).length > 0) {
@@ -1355,6 +1371,7 @@
 
       try {
         localStorage.setItem("cricfreex_auto_servers", JSON.stringify(state.autoServers));
+        localStorage.setItem("cricfreex_cached_extra_streams", JSON.stringify(extraStreams));
       } catch (e) {}
 
       lastClientSyncTime = now;
@@ -1425,11 +1442,7 @@
     const teams = element("div", "cricket-match-teams");
     [match.team1, match.team2].forEach((team, index) => {
       const score = match.score?.[index === 0 ? "team1Score" : "team2Score"];
-      const scoreText = score && Object.keys(score).length
-        ? Object.values(score).map(innings =>
-          `${innings.runs ?? 0}/${innings.wickets ?? 0} (${innings.overs ?? 0})`
-        ).join(" & ")
-        : "Yet to bat";
+      const scoreText = formatMatchScoreDisplay(score, true);
       const row = element("div", "cricket-team-row");
       row.append(
         renderTeamSpan(team, match.series),
@@ -2084,6 +2097,29 @@
     recent: null,
     upcoming: null
   };
+  try {
+    const _cachedL = localStorage.getItem("cricfreex_cached_live_matches");
+    if (_cachedL) {
+      const _parsed = JSON.parse(_cachedL);
+      if (Array.isArray(_parsed) && _parsed.length) {
+        _matchDataCache.live = _parsed;
+        if (!state.allKnownMatches) state.allKnownMatches = {};
+        _parsed.forEach(m => { if (m?.id) state.allKnownMatches[String(m.id)] = m; });
+      }
+    }
+    const _cachedExt = localStorage.getItem("cricfreex_cached_extra_streams");
+    if (_cachedExt) {
+      const _parsedExt = JSON.parse(_cachedExt);
+      if (Array.isArray(_parsedExt) && _parsedExt.length) {
+        state.extraLiveStreams = _parsedExt;
+        _parsedExt.forEach(ex => {
+          if (ex?.id && ex.auto_servers?.length) {
+            state.autoServers[ex.id] = ex.auto_servers;
+          }
+        });
+      }
+    }
+  } catch (e) {}
   let _preloadingStarted = false;
 
   function preloadMatchData() {
@@ -2599,6 +2635,58 @@
 
   const _scorecardCache = new Map();
 
+  function updateMatchHeaderDOM(match) {
+    if (!match) return;
+    if (state.selectedMatch && String(state.selectedMatch.id) === String(match.id)) {
+      Object.assign(state.selectedMatch, match);
+    }
+    const content = root.querySelector(".cricket-content");
+    if (!content) return;
+
+    // 1. Update Heading (Team 1 vs Team 2 with logos)
+    const heading = content.querySelector(".cricket-section-heading");
+    if (heading && (match.team1?.teamName || match.team1?.teamSName || typeof match.team1 === "string")) {
+      heading.innerHTML = "";
+      heading.append(
+        renderTeamSpan(match.team1, match.series),
+        element("span", "cricket-vs-text", "vs"),
+        renderTeamSpan(match.team2, match.series)
+      );
+    }
+
+    // 2. Update Status Banner (Equation / Results)
+    const normStatus = normalizeMatchStatus(match.status || match.state || "", match);
+    let banner = content.querySelector(".cricket-match-status-banner");
+    if (normStatus && !/^match details$/i.test(normStatus)) {
+      if (!banner && heading) {
+        banner = element("div", "cricket-match-status-banner");
+        banner.style.cssText = "margin: 6px 0 14px; padding: 10px 16px; background: linear-gradient(135deg, rgba(32,223,123,0.14), rgba(16,185,129,0.06)); border: 1px solid rgba(32,223,123,0.35); border-radius: 8px; color: #a7f3d0; font-size: 15px; font-weight: 600; display: inline-flex; align-items: center; gap: 8px;";
+        heading.insertAdjacentElement("afterend", banner);
+      }
+      if (banner) {
+        banner.innerHTML = `<span style="font-size:18px;">📢</span> <span>${normStatus}</span>`;
+      }
+    }
+
+    // 3. Update Series & Match Description Meta
+    const seriesMeta = content.querySelector(".cricket-match-series-meta");
+    const metaText = [match.series, match.description].filter(Boolean).join(" · ");
+    if (seriesMeta && metaText) {
+      seriesMeta.textContent = metaText;
+    }
+
+    // 4. Update Venue
+    const venueMeta = content.querySelector(".cricket-match-venue-meta");
+    const venue = [
+      match.venue?.ground,
+      match.venue?.city
+    ].filter(Boolean).join(", ");
+    if (venueMeta && venue) {
+      venueMeta.textContent = `Venue: ${venue}`;
+    }
+  }
+  const renderMatchHeading = updateMatchHeaderDOM;
+
   async function openMatch(match, returnPage, initialTab = "scorecard", updateUrl = true) {
     state.selectedMatch = match;
     state.scorecardInning = 0;
@@ -2711,7 +2799,7 @@
 
     content.appendChild(element(
       "p",
-      "cricket-match-meta",
+      "cricket-match-meta cricket-match-series-meta",
       [match.series, match.description].filter(Boolean).join(" · ")
     ));
 
@@ -2721,7 +2809,7 @@
     ].filter(Boolean).join(", ");
     content.appendChild(element(
       "p",
-      "cricket-match-meta",
+      "cricket-match-meta cricket-match-venue-meta",
       `Venue: ${venue || "Not available"}`
     ));
 
@@ -2766,6 +2854,26 @@
       if (requestId !== state.request || state.selectedMatch !== match) return;
       const data = result.data || {};
       _scorecardCache.set(cacheKey, data);
+
+      if (result) {
+        if (result.matches && Array.isArray(result.matches)) {
+          const found = result.matches.find(m => String(m.id) === String(match.id)) || result.matches[0];
+          if (found) {
+            Object.assign(match, found);
+            updateMatchHeaderDOM(match);
+          }
+        }
+        if (result.match) {
+          Object.assign(match, result.match);
+          updateMatchHeaderDOM(match);
+        }
+        if (data.teams && Array.isArray(data.teams) && data.teams.length >= 2 && (!match.team1 || !match.team1.teamName)) {
+          match.team1 = data.teams[0];
+          match.team2 = data.teams[1];
+          updateMatchHeaderDOM(match);
+        }
+      }
+
       const target = root.querySelector(".cricket-match-data");
       if (target) {
         target.classList.remove("is-loading");
@@ -3561,24 +3669,37 @@
       || _matchDataCache.recent?.find(m => String(m.id) === String(matchId))
       || _matchDataCache.upcoming?.find(m => String(m.id) === String(matchId));
 
-    if (!match) {
-      match = {
-        id: matchId,
-        series: "Cricket Match",
-        description: "Live Match",
-        state: "Live",
-        isLiveStream: true
-      };
-      // Fetch in background to enrich match object without blocking
-      request("/api/matches/live").then(res => {
-        if (res && Array.isArray(res.matches)) {
-          const found = res.matches.find(m => String(m.id) === String(matchId));
-          if (found && state.selectedMatch && String(state.selectedMatch.id) === String(matchId)) {
-            Object.assign(state.selectedMatch, found);
-            renderMatchHeading(state.selectedMatch);
-          }
+    if (!match || !match.team1 || !match.team1.teamName) {
+      if (!match) {
+        match = {
+          id: matchId,
+          series: "Cricket Match",
+          description: "Live Match",
+          state: "Live",
+          isLiveStream: true
+        };
+      }
+      // Fetch specific match object immediately in parallel
+      request(`/api/match/${matchId}`).then(res => {
+        if (res && res.match) {
+          Object.assign(match, res.match);
+          if (!state.allKnownMatches) state.allKnownMatches = {};
+          state.allKnownMatches[String(matchId)] = match;
+          updateMatchHeaderDOM(match);
+          renderMatchViewServers(match);
         }
-      }).catch(() => {});
+      }).catch(() => {
+        request("/api/matches/live").then(res => {
+          if (res && Array.isArray(res.matches)) {
+            const found = res.matches.find(m => String(m.id) === String(matchId));
+            if (found) {
+              Object.assign(match, found);
+              updateMatchHeaderDOM(match);
+              renderMatchViewServers(match);
+            }
+          }
+        }).catch(() => {});
+      });
     }
 
     // Parallel sync stream servers immediately
@@ -3653,6 +3774,24 @@
         document.getElementById("suggestionSection")?.scrollIntoView({ behavior: "smooth", block: "center" });
         document.getElementById("suggestionInput")?.focus();
       }, 350);
+      return;
+    }
+
+    const isReload = (function() {
+      try {
+        const nav = performance.getEntriesByType && performance.getEntriesByType("navigation")[0];
+        if (nav && nav.type === "reload") return true;
+        if (performance.navigation && performance.navigation.type === 1) return true;
+      } catch (e) {}
+      return false;
+    })();
+
+    if (isReload) {
+      state.selectedMatch = null;
+      closeCricketPlayer(false);
+      const cleanPath = location.pathname.replace(/\/index\.html$/i, "") || "/";
+      try { history.replaceState(null, "", cleanPath); } catch (e) {}
+      selectPage("live", false);
       return;
     }
 
@@ -3750,11 +3889,7 @@
           const scoreEls = card.querySelectorAll(".cricket-team-score");
           [match.team1, match.team2].forEach((team, index) => {
             const score = match.score?.[index === 0 ? "team1Score" : "team2Score"];
-            const scoreText = score && Object.keys(score).length
-              ? Object.values(score).map(innings =>
-                `${innings.runs ?? 0}/${innings.wickets ?? 0} (${innings.overs ?? 0})`
-              ).join(" & ")
-              : "Yet to bat";
+            const scoreText = formatMatchScoreDisplay(score, true);
             if (scoreEls[index]) {
               scoreEls[index].textContent = scoreText;
             }

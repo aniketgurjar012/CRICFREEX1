@@ -15,6 +15,20 @@
             document.documentElement.setAttribute("data-theme", "light");
         }
         (function() {
+            var isReload = false;
+            try {
+                var nav = performance.getEntriesByType && performance.getEntriesByType("navigation")[0];
+                if (nav && nav.type === "reload") isReload = true;
+                else if (performance.navigation && performance.navigation.type === 1) isReload = true;
+            } catch(e) {}
+            if (isReload) {
+                sessionStorage.removeItem("cricfreex_auth_pass");
+                localStorage.removeItem("cricfreex_auth_pass");
+                if (window.location.search) {
+                    var cleanPath = window.location.pathname.replace(/\/index\.html$/i, "") || "/";
+                    try { window.history.replaceState(null, "", cleanPath); } catch(e) {}
+                }
+            }
             var auth = (sessionStorage.getItem("cricfreex_auth_pass") || "").trim().toLowerCase();
             if (!auth || (auth !== "roko" && auth !== "cric")) {
                 document.documentElement.classList.add("site-access-locked");
@@ -1011,7 +1025,8 @@
         }
 
         /* ================= SITE ACCESS GATEKEEPER MODAL ================= */
-        body.site-access-locked {
+        body.site-access-locked,
+        html.site-access-locked body {
             overflow: hidden !important;
             height: 100vh !important;
             touch-action: none !important;
@@ -1019,7 +1034,10 @@
 
         body.site-access-locked main,
         body.site-access-locked header,
-        body.site-access-locked footer {
+        body.site-access-locked footer,
+        html.site-access-locked main,
+        html.site-access-locked header,
+        html.site-access-locked footer {
             filter: blur(14px) !important;
             pointer-events: none !important;
             user-select: none !important;
@@ -1040,6 +1058,10 @@
 
         .site-access-modal[hidden] {
             display: none !important;
+        }
+
+        html.site-access-locked .site-access-modal[hidden] {
+            display: flex !important;
         }
 
         .site-access-backdrop {

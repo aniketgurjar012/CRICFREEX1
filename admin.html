@@ -219,21 +219,8 @@ if(localStorage.getItem("cricfreex_theme")==="light"){
 <label>Display ID<input id="publicId" maxlength="100"></label>
 <label>Section<select id="contentSection" required></select></label>
 <label>Category<input id="contentCategory" placeholder="Star Sports / Sony Sports / Other"></label>
-<label>Content Type<select id="contentKind"><option value="channel">Channel / Standalone</option><option value="series">Show / Series</option><option value="episode">Episode</option></select></label>
-<label>Parent Show<select id="parentId"><option value="">None</option></select></label>
-<label>Media Type
-<select id="mediaType">
-<option value="iframe">Embed / Iframe</option>
-<option value="video">Direct Video (MP4 / WebM)</option>
-<option value="hls">HLS Stream (.m3u8)</option>
-<option value="link">External Stream / Download Link</option>
-</select>
-</label>
-<label>Episode Number<input id="episodeNumber" type="number" min="1"></label>
 <label class="wide">Media URL<input id="mediaUrl" type="url" placeholder="https://..."></label>
 <label>Order<input id="sortOrder" type="number" value="0"></label>
-<label>Published<select id="published"><option value="true">Published</option><option value="false">Draft</option></select></label>
-<label class="wide upload">Video Upload<input id="videoUpload" type="file" accept="video/mp4,video/webm"></label>
 <div class="editor-actions"><button type="button" class="danger hidden" id="deleteContent">Delete</button><button class="primary" id="saveContent">Save Content</button></div>
 </form>
 </section>
