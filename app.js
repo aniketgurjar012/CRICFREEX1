@@ -19,6 +19,12 @@ const db = window.supabase.createClient(
   C.SUPABASE_ANON_KEY
 );
 window.cricfreexDb = db;
+try {
+  const cachedContent = sessionStorage.getItem("cricfreex_cached_content");
+  if (cachedContent) {
+    window.CRICFREEX_CONTENT = JSON.parse(cachedContent);
+  }
+} catch (e) {}
 
 const $ = id => document.getElementById(id);
 
@@ -135,6 +141,9 @@ async function cleanupFinishedWatchLinks() {
 
     content = content.filter(item => !idsToDelete.includes(item.id));
     window.CRICFREEX_CONTENT = content;
+    try {
+      sessionStorage.setItem("cricfreex_cached_content", JSON.stringify(content));
+    } catch (e) {}
     window.dispatchEvent(
       new CustomEvent(
         "cricfreex:content-updated",
@@ -270,6 +279,9 @@ async function load() {
     sections = b.data || [];
     content = c.data || [];
     window.CRICFREEX_CONTENT = content;
+    try {
+      sessionStorage.setItem("cricfreex_cached_content", JSON.stringify(content));
+    } catch (e) {}
     window.dispatchEvent(
       new CustomEvent(
         "cricfreex:content-updated",
@@ -1416,16 +1428,6 @@ function openChannelsView(update = true) {
 }
 
 function restoreURL() {
-  const isNewSession = !sessionStorage.getItem("cricfreex_app_session_active");
-  sessionStorage.setItem("cricfreex_app_session_active", "1");
-  if (isNewSession) {
-    const checkParams = new URLSearchParams(location.search);
-    if (checkParams.has("match") || checkParams.has("tab") || checkParams.has("server")) {
-      const path = location.pathname.toLowerCase().endsWith("/index.html") ? "/" : (location.pathname || "/");
-      history.replaceState({}, "", path);
-    }
-  }
-
   const p = new URLSearchParams(location.search);
   const view = p.get("view");
   const tab = p.get("tab");
@@ -2142,12 +2144,15 @@ function initSiteAccessGate() {
       submitBtn.disabled = true;
       submitBtn.innerHTML = '<span>Access Granted!</span>';
 
-      setTimeout(() => {
-        hideGate();
-        clearError();
-        submitBtn.disabled = false;
-        submitBtn.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg><span>Unlock Live Stream</span>';
-      }, 650);
+      hideGate();
+      clearError();
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg><span>Unlock Live Stream</span>';
+
+      if (window.CricketCenter?.restoreRoute) {
+        window.CricketCenter.restoreRoute(false);
+      }
+      window.dispatchEvent(new CustomEvent("cricfreex:unlocked"));
     } else {
       showError("Invalid password. Please get today's password from our Telegram channel and try again.");
       if (card) {

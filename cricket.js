@@ -162,7 +162,14 @@
       team: "all",
       opponent: "all"
     },
-    autoServers: {}
+    autoServers: (function() {
+      try {
+        const s = sessionStorage.getItem("cricfreex_auto_servers");
+        return s ? JSON.parse(s) : {};
+      } catch (e) {
+        return {};
+      }
+    })()
   };
   const watchLinkPrefix = "__cricket_watch__:";
   let watchLinks = (window.CRICFREEX_CONTENT || []).filter(item =>
@@ -1060,6 +1067,12 @@
 
     if (state.page === "match" && state.selectedMatch) {
       renderMatchViewServers(state.selectedMatch);
+      if (!state.activeWatch || String(state.activeWatch.match?.id) !== String(state.selectedMatch.id)) {
+        const p = new URLSearchParams(location.search);
+        const sParam = p.get("server");
+        const sIdx = sParam ? Math.max(0, parseInt(sParam, 10) - 1) : 0;
+        startMatchServer(state.selectedMatch, sIdx, false);
+      }
     }
   }
 
@@ -1124,59 +1137,28 @@
   async function syncAllrounderClient(force = false) {
     const now = Date.now();
     if (clientSyncInProgress) return;
-    if (!force && now - lastClientSyncTime < 40000) return;
+    if (!force && now - lastClientSyncTime < 25000) return;
     clientSyncInProgress = true;
 
     try {
-      // 1. Try backend /api/auto-servers
-      try {
-        const beRes = await fetch(`${apiBase}/api/auto-servers`, { cache: "no-store" });
-        if (beRes.ok) {
-          const beData = await beRes.json();
-          if (beData && beData.servers && Object.keys(beData.servers).length > 0) {
-            Object.entries(beData.servers).forEach(([mid, sList]) => {
-              state.autoServers[mid] = sList;
-            });
-            updateDomMatchServers();
-          }
-        }
-      } catch (e) {}
+      // Fetch FanCode, Willow, and backend auto-servers ALL IN PARALLEL (0ms waterfall)
+      const [fcRes, wRes, beRes] = await Promise.allSettled([
+        fetch("https://sportlink-fancode10.pages.dev/fan.json", { cache: "no-store" }).then(r => r.json()),
+        fetch("https://willow-api.sayanwork-studioo.workers.dev/", { cache: "no-store" }).then(r => r.json()),
+        fetch(`${apiBase}/api/auto-servers`, { cache: "no-store" }).then(r => r.json()).catch(() => null)
+      ]);
 
-      // Maintain state.allKnownMatches (Live, Recent, Upcoming)
+      if (beRes.status === "fulfilled" && beRes.value?.servers && Object.keys(beRes.value.servers).length > 0) {
+        Object.entries(beRes.value.servers).forEach(([mid, sList]) => {
+          state.autoServers[mid] = sList;
+        });
+      }
+
+      // Maintain state.allKnownMatches
       if (!state.allKnownMatches) state.allKnownMatches = {};
       (state.matches || []).forEach(m => {
         if (m && m.id) state.allKnownMatches[String(m.id)] = m;
       });
-
-      // Ensure we have loaded recent and upcoming matches into state.allKnownMatches
-      if (!state._allKnownMatchesLoaded || (now - (state._lastKnownFetch || 0) > 60000)) {
-        state._lastKnownFetch = now;
-        try {
-          const [recRes, upRes, liveRes] = await Promise.allSettled([
-            request("/api/matches/recent"),
-            request("/api/matches/upcoming"),
-            request("/api/matches/live")
-          ]);
-          [recRes, upRes, liveRes].forEach(res => {
-            if (res.status === "fulfilled" && Array.isArray(res.value?.matches)) {
-              res.value.matches.forEach(m => {
-                if (m && m.id) {
-                  state.allKnownMatches[String(m.id)] = Object.assign(state.allKnownMatches[String(m.id)] || {}, m);
-                }
-              });
-            }
-          });
-          state._allKnownMatchesLoaded = true;
-        } catch (e) {
-          console.warn("Known matches load error:", e);
-        }
-      }
-
-      // 2. Direct client-side fetch from FanCode & Willow (both have CORS enabled)
-      const [fcRes, wRes] = await Promise.allSettled([
-        fetch("https://sportlink-fancode10.pages.dev/fan.json").then(r => r.json()),
-        fetch("https://willow-api.sayanwork-studioo.workers.dev/").then(r => r.json())
-      ]);
 
       const candidateMatches = Object.values(state.allKnownMatches);
       if (!candidateMatches.length) candidateMatches.push(...(state.matches || []));
@@ -1371,6 +1353,10 @@
       Object.entries(newAutoServers).forEach(([mid, sList]) => {
         state.autoServers[mid] = sList;
       });
+
+      try {
+        sessionStorage.setItem("cricfreex_auto_servers", JSON.stringify(state.autoServers));
+      } catch (e) {}
 
       lastClientSyncTime = now;
       updateDomMatchServers();
@@ -2094,13 +2080,17 @@
     if (_preloadingStarted) return;
     _preloadingStarted = true;
 
+    // Start stream sync immediately in parallel (0ms wait)
+    syncAllrounderClient(true);
+
     request("/api/matches/live").then(res => {
       if (res && Array.isArray(res.matches)) {
-        _matchDataCache.live = res.matches;
+        const liveOnly = res.matches.filter(m => !isCompletedMatch(m));
+        _matchDataCache.live = liveOnly;
         if (!state.allKnownMatches) state.allKnownMatches = {};
-        res.matches.forEach(m => { if (m?.id) state.allKnownMatches[String(m.id)] = m; });
-        if (state.page === "live" && (!state.matches || !state.matches.length)) {
-          state.matches = res.matches;
+        liveOnly.forEach(m => { if (m?.id) state.allKnownMatches[String(m.id)] = m; });
+        if (state.page === "live") {
+          state.matches = liveOnly;
           renderMatchList(
             state.matches,
             match => openMatch(match, "live", "scorecard", true),
@@ -2108,7 +2098,6 @@
           );
         }
       }
-      syncAllrounderClient(true);
     }).catch(() => {});
 
     request("/api/matches/recent").then(res => {
@@ -3560,45 +3549,48 @@
       || _matchDataCache.upcoming?.find(m => String(m.id) === String(matchId));
 
     if (!match) {
-      try {
-        const [liveRes, upRes, recRes] = await Promise.allSettled([
-          request("/api/matches/live"),
-          request("/api/matches/upcoming"),
-          request("/api/matches/recent")
-        ]);
-        [liveRes, upRes, recRes].forEach(res => {
-          if (res.status === "fulfilled" && Array.isArray(res.value?.matches)) {
-            res.value.matches.forEach(m => {
-              if (m?.id) {
-                if (!state.allKnownMatches) state.allKnownMatches = {};
-                state.allKnownMatches[String(m.id)] = m;
-              }
-            });
+      match = {
+        id: matchId,
+        series: "Cricket Match",
+        description: "Live Match",
+        state: "Live",
+        isLiveStream: true
+      };
+      // Fetch in background to enrich match object without blocking
+      request("/api/matches/live").then(res => {
+        if (res && Array.isArray(res.matches)) {
+          const found = res.matches.find(m => String(m.id) === String(matchId));
+          if (found && state.selectedMatch && String(state.selectedMatch.id) === String(matchId)) {
+            Object.assign(state.selectedMatch, found);
+            renderMatchHeading(state.selectedMatch);
           }
-        });
-        match = state.allKnownMatches?.[String(matchId)];
-      } catch (e) {}
+        }
+      }).catch(() => {});
     }
 
-    if (!match) {
-      match = { id: matchId, series: "Cricket Match", description: "Live Match", state: "Live" };
-    }
-
-    // Sync stream servers in background so page load is never blocked
-    syncAllrounderClient().then(() => {
+    // Parallel sync stream servers immediately
+    syncAllrounderClient(true).then(() => {
       if (state.selectedMatch && String(state.selectedMatch.id) === String(matchId)) {
         renderMatchViewServers(state.selectedMatch);
       }
     }).catch(() => {});
 
+    // Open match view INSTANTLY (0ms)
     await openMatch(match, "live", tab || "scorecard", updateUrl);
 
+    // Start target server as soon as ready
     const targetIdx = (serverNum && !isNaN(serverNum) && serverNum > 0) ? (serverNum - 1) : 0;
     const started = startMatchServer(match, targetIdx, updateUrl);
     if (!started) {
-      setTimeout(() => {
-        startMatchServer(match, targetIdx, updateUrl);
-      }, 400);
+      [50, 150, 300, 600, 1000, 1800].forEach(d => {
+        setTimeout(() => {
+          if (state.selectedMatch && String(state.selectedMatch.id) === String(matchId)) {
+            if (!state.activeWatch || String(state.activeWatch.match?.id) !== String(matchId)) {
+              startMatchServer(state.selectedMatch, targetIdx, updateUrl);
+            }
+          }
+        }, d);
+      });
     }
   }
 
@@ -3822,7 +3814,7 @@
     );
     if (
       !root.hidden &&
-      state.page === "live" &&
+      (state.page === "live" || state.page === "match") &&
       !document.hidden
     ) {
       updateDomMatchServers();
@@ -3835,6 +3827,10 @@
 
   window.addEventListener("cricfreex:stop-cricket-stream", () => {
     closeCricketPlayer(true);
+  });
+
+  window.addEventListener("cricfreex:unlocked", () => {
+    restoreRoute(false);
   });
 
   function enforceCricketFullscreen() {
