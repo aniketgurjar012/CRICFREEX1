@@ -20,7 +20,7 @@ const db = window.supabase.createClient(
 );
 window.cricfreexDb = db;
 try {
-  const cachedContent = sessionStorage.getItem("cricfreex_cached_content");
+  const cachedContent = localStorage.getItem("cricfreex_cached_content");
   if (cachedContent) {
     window.CRICFREEX_CONTENT = JSON.parse(cachedContent);
   }
@@ -142,7 +142,7 @@ async function cleanupFinishedWatchLinks() {
     content = content.filter(item => !idsToDelete.includes(item.id));
     window.CRICFREEX_CONTENT = content;
     try {
-      sessionStorage.setItem("cricfreex_cached_content", JSON.stringify(content));
+      localStorage.setItem("cricfreex_cached_content", JSON.stringify(content));
     } catch (e) {}
     window.dispatchEvent(
       new CustomEvent(
@@ -280,7 +280,7 @@ async function load() {
     content = c.data || [];
     window.CRICFREEX_CONTENT = content;
     try {
-      sessionStorage.setItem("cricfreex_cached_content", JSON.stringify(content));
+      localStorage.setItem("cricfreex_cached_content", JSON.stringify(content));
     } catch (e) {}
     window.dispatchEvent(
       new CustomEvent(

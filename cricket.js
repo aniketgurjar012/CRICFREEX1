@@ -164,7 +164,7 @@
     },
     autoServers: (function() {
       try {
-        const s = sessionStorage.getItem("cricfreex_auto_servers");
+        const s = localStorage.getItem("cricfreex_auto_servers");
         return s ? JSON.parse(s) : {};
       } catch (e) {
         return {};
@@ -1355,7 +1355,7 @@
       });
 
       try {
-        sessionStorage.setItem("cricfreex_auto_servers", JSON.stringify(state.autoServers));
+        localStorage.setItem("cricfreex_auto_servers", JSON.stringify(state.autoServers));
       } catch (e) {}
 
       lastClientSyncTime = now;
@@ -2087,6 +2087,9 @@
       if (res && Array.isArray(res.matches)) {
         const liveOnly = res.matches.filter(m => !isCompletedMatch(m));
         _matchDataCache.live = liveOnly;
+        try {
+          localStorage.setItem("cricfreex_cached_live_matches", JSON.stringify(liveOnly));
+        } catch (e) {}
         if (!state.allKnownMatches) state.allKnownMatches = {};
         liveOnly.forEach(m => { if (m?.id) state.allKnownMatches[String(m.id)] = m; });
         if (state.page === "live") {

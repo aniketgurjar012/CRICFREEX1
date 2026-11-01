@@ -469,6 +469,358 @@ async function loadCricketMatches(category){
   }
 }
 
+
+/* =========================================================
+   ALLROUNDER AUTO-SYNC DIRECTLY TO SUPABASE DATABASE
+========================================================= */
+
+const ALIAS_GROUPS = [
+  ["india", "ind", "indians"],
+  ["pakistan", "pak"],
+  ["australia", "aus", "aussies"],
+  ["south africa", "sa", "rsa", "proteas"],
+  ["new zealand", "nz", "black caps", "blackcaps"],
+  ["england", "eng"],
+  ["west indies", "wi", "windies"],
+  ["sri lanka", "sl"],
+  ["bangladesh", "ban", "bd", "tigers"],
+  ["afghanistan", "afg"],
+  ["ireland", "ire"],
+  ["zimbabwe", "zim"],
+  ["netherlands", "ned", "dutch", "holland"],
+  ["scotland", "sco"],
+  ["united arab emirates", "uae", "u a e", "emirates"],
+  ["papua new guinea", "png"],
+  ["nepal", "nep"],
+  ["oman", "oma", "omn"],
+  ["namibia", "nam"],
+  ["canada", "can"],
+  ["united states", "usa", "us", "united states of america"],
+  ["kenya", "ken"],
+  ["hong kong", "hk", "hkg", "hong kong china"],
+  ["jersey", "jer"],
+  ["qatar", "qat"],
+  ["uganda", "uga"],
+  ["kuwait", "kuw"],
+  ["bahrain", "bah"],
+  ["saudi arabia", "ksa"],
+  ["italy", "ita"],
+  ["germany", "ger"],
+  ["tasmania", "tas", "tasmanian tigers"],
+  ["new south wales", "nsw", "nsw blues", "blues"],
+  ["victoria", "vic"],
+  ["queensland", "qld", "queensland bulls", "bulls"],
+  ["western australia", "wa", "western australia xi"],
+  ["south australia", "sa", "redbacks"],
+  ["sydney sixers", "sixers"],
+  ["sydney thunder", "thunder"],
+  ["perth scorchers", "scorchers"],
+  ["brisbane heat", "heat"],
+  ["melbourne stars", "stars"],
+  ["melbourne renegades", "renegades"],
+  ["adelaide strikers", "strikers"],
+  ["hobart hurricanes", "hurricanes"],
+  ["eastern storm", "storm"],
+  ["south western districts", "swd"],
+  ["western province", "wp"],
+  ["warriors"],
+  ["titans"],
+  ["dolphins"],
+  ["knights"],
+  ["lions"],
+  ["biratnagar kings", "biratnagar"],
+  ["sudur paschim royals", "sudurpaschim royals", "sudur paschim", "sudurpaschim", "spr"],
+  ["janakpur bolts", "janakpur"],
+  ["pokhara avengers", "pokhara"],
+  ["kathmandu gurkhas", "kathmandu"],
+  ["chitwan rhinos", "chitwan"],
+  ["lumbini lions", "lumbini"],
+  ["karnali yaks", "karnali"],
+  ["emirates blues", "emirates blue", "emb"],
+  ["sharjah", "sha"],
+  ["dubai", "dub"],
+  ["fujairah", "fuj"],
+  ["ajman", "ajm"],
+  ["abu dhabi", "abd"]
+];
+
+const STREAM_ALIASES = {};
+ALIAS_GROUPS.forEach(group => {
+  group.forEach(term => {
+    const key = cleanStreamStr(term);
+    if (!key) return;
+    if (!STREAM_ALIASES[key]) STREAM_ALIASES[key] = [];
+    group.forEach(other => {
+      const oKey = cleanStreamStr(other);
+      if (oKey && !STREAM_ALIASES[key].includes(oKey)) {
+        STREAM_ALIASES[key].push(oKey);
+      }
+    });
+  });
+});
+
+function cleanStreamStr(text) {
+  if (!text) return "";
+  return String(text).toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function isStreamWomenMatch(obj) {
+  const s = typeof obj === "string" ? obj : [obj.team1?.teamName, obj.team2?.teamName, obj.series, obj.description].join(" ");
+  return /\b(women|womens|wbbl)\b/i.test(s) || /-w\b/i.test(s) || /W$/.test(obj.team1?.teamSName || "") || /W$/.test(obj.team2?.teamSName || "");
+}
+
+function isStreamATeam(name) {
+  return /\b[a-z0-9-]+\s+a\b/i.test(String(name || ""));
+}
+
+function teamMatchesStream(team, streamStr) {
+  if (!team) return false;
+  const name = cleanStreamStr(team.teamName);
+  const sname = cleanStreamStr(team.teamSName);
+  const terms = new Set();
+  if (name) {
+    terms.add(name);
+    const stripped = name.split(" ").filter(w => !["women", "team", "men"].includes(w)).join(" ");
+    if (stripped) terms.add(stripped);
+    name.split(" ").forEach(w => {
+      if (w.length >= 5 && !["cricket", "club", "team", "kings", "royals", "super", "giants", "riders", "challengers", "knights", "stars", "titans"].includes(w)) {
+        terms.add(w);
+      }
+    });
+  }
+  if (sname && sname.length >= 2) {
+    terms.add(sname);
+    if (sname.endsWith("w") && sname.length > 2) terms.add(sname.slice(0, -1));
+  }
+  [name, sname].forEach(key => {
+    if (STREAM_ALIASES[key]) {
+      STREAM_ALIASES[key].forEach(a => terms.add(cleanStreamStr(a)));
+    }
+  });
+
+  const noSpaceStream = streamStr.replace(/\s+/g, "");
+
+  for (const term of terms) {
+    if (!term || term.length < 2) continue;
+    if (term.length <= 3) {
+      const rx = new RegExp(`(^|\\s)${term}(\\s|$)`, "i");
+      if (rx.test(streamStr)) return true;
+      continue;
+    }
+    if (streamStr.includes(term)) return true;
+    const noSpaceTerm = term.replace(/\s+/g, "");
+    if (noSpaceTerm.length >= 4 && noSpaceStream.includes(noSpaceTerm)) return true;
+  }
+  return false;
+}
+
+function matchStreamToCb(streamTitle, cb) {
+  if (!streamTitle || !cb) return false;
+  const cleanTitle = cleanStreamStr(streamTitle);
+  const streamIsWomen = isStreamWomenMatch(streamTitle);
+  const cbIsWomen = isStreamWomenMatch(cb);
+  if (streamIsWomen !== cbIsWomen) return false;
+
+  const t1 = cb.team1;
+  const t2 = cb.team2;
+
+  const streamIsT1A = isStreamATeam(streamTitle) && teamMatchesStream(t1, cleanTitle);
+  const streamIsT2A = isStreamATeam(streamTitle) && teamMatchesStream(t2, cleanTitle);
+  const cbIsT1A = isStreamATeam(t1?.teamName);
+  const cbIsT2A = isStreamATeam(t2?.teamName);
+  if (cbIsT1A !== streamIsT1A && (cbIsT1A || streamIsT1A)) return false;
+  if (cbIsT2A !== streamIsT2A && (cbIsT2A || streamIsT2A)) return false;
+
+  const m1 = teamMatchesStream(t1, cleanTitle);
+  const m2 = teamMatchesStream(t2, cleanTitle);
+
+  if (m1 && m2) return true;
+
+  if (m1 || m2) {
+    const seriesClean = cleanStreamStr(cb.series || "");
+    const descClean = cleanStreamStr(cb.description || "");
+    const words = streamTitle.split(/[\s\-_/:]+/).map(w => cleanStreamStr(w)).filter(w => w.length >= 4);
+    for (const w of words) {
+      if (seriesClean.includes(w) || descClean.includes(w)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+let isAutoSyncingToDatabase = false;
+
+async function syncAllrounderToDatabase(manual = false) {
+  if (isAutoSyncingToDatabase) return;
+  isAutoSyncingToDatabase = true;
+
+  const btn = $("autoSyncAllrounderBtn");
+  const statusEl = $("autoSyncStatus");
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "⏳ Syncing to Database...";
+  }
+
+  try {
+    // 1. Ensure we have live & upcoming Cricbuzz matches
+    let candidateMatches = [...(watchMatches.live || []), ...(watchMatches.upcoming || [])];
+    if (!candidateMatches.length) {
+      try {
+        const [liveRes, upRes] = await Promise.allSettled([
+          fetch(`${CRICKET_API_BASE}/api/matches/live`).then(r => r.json()),
+          fetch(`${CRICKET_API_BASE}/api/matches/upcoming`).then(r => r.json())
+        ]);
+        if (liveRes.status === "fulfilled" && Array.isArray(liveRes.value?.matches)) {
+          candidateMatches.push(...liveRes.value.matches);
+        }
+        if (upRes.status === "fulfilled" && Array.isArray(upRes.value?.matches)) {
+          candidateMatches.push(...upRes.value.matches);
+        }
+      } catch (e) {}
+    }
+
+    // 2. Fetch FanCode & Willow streams in parallel
+    const [fcRes, wRes] = await Promise.allSettled([
+      fetch("https://sportlink-fancode10.pages.dev/fan.json").then(r => r.json()),
+      fetch("https://willow-api.sayanwork-studioo.workers.dev/").then(r => r.json())
+    ]);
+
+    const liveStreamsToInsert = [];
+
+    // FanCode streams
+    if (fcRes.status === "fulfilled" && Array.isArray(fcRes.value?.matches)) {
+      for (const fc of fcRes.value.matches) {
+        const cat = String(fc.category || "").toLowerCase();
+        if (cat !== "cricket") continue;
+        const status = String(fc.status || "").toUpperCase();
+        const isLive = status.includes("LIVE") || fc.isLive === true;
+        if (!isLive) continue;
+
+        let streamUrl = "";
+        const autoStreams = fc.auto_streams || {};
+        for (const lang of Object.keys(autoStreams)) {
+          const s = autoStreams[lang]?.streams || {};
+          streamUrl = s["1080p"] || s["720p"] || s["540p"] || "";
+          if (streamUrl) break;
+        }
+        if (!streamUrl) streamUrl = fc.streams?.primary || "";
+        if (!streamUrl) continue;
+
+        const title = fc.title || "";
+        const matchId = String(fc.match_id || "");
+        const playerUrl = `https://allrounderlive.in/fc-play?url=${encodeURIComponent(streamUrl)}&title=${encodeURIComponent(title)}&match_id=${encodeURIComponent(matchId)}`;
+
+        for (const cb of candidateMatches) {
+          if (matchStreamToCb(title, cb)) {
+            liveStreamsToInsert.push({
+              matchId: String(cb.id),
+              source: "fancode",
+              playerUrl,
+              title
+            });
+            break;
+          }
+        }
+      }
+    }
+
+    // Willow streams
+    if (wRes.status === "fulfilled" && Array.isArray(wRes.value?.Matches)) {
+      for (const w of wRes.value.Matches) {
+        const status = String(w.status || "").toUpperCase();
+        const isLive = status.includes("LIVE") || w.isLive === true;
+        if (!isLive) continue;
+
+        const safeId = w.title || w.tvgId || w.match_id || "";
+        if (!safeId) continue;
+        const title = w.title || safeId;
+        const playerUrl = `https://allrounderlive.in/willow-player?id=${encodeURIComponent(safeId)}`;
+
+        for (const cb of candidateMatches) {
+          if (matchStreamToCb(title, cb)) {
+            liveStreamsToInsert.push({
+              matchId: String(cb.id),
+              source: "willow",
+              playerUrl,
+              title
+            });
+            break;
+          }
+        }
+      }
+    }
+
+    const defaultSectionSlug = sections.find(x => x.slug === "sports")?.slug
+      || sections[0]?.slug
+      || "sports";
+
+    let insertedCount = 0;
+
+    for (const item of liveStreamsToInsert) {
+      const matchCat = `${CRICKET_WATCH_LINK_PREFIX}${item.matchId}`;
+      const existing = content.filter(c => isCricketWatchLink(c) && cricketWatchMatchId(c) === item.matchId);
+      const urlExists = existing.some(c => c.media_url === item.playerUrl);
+      if (urlExists) continue;
+
+      const sNum = existing.length + 1;
+      const payload = {
+        title: `Server ${sNum}`,
+        public_id: `auto_${item.source}_${item.matchId}_${sNum}`,
+        section_slug: defaultSectionSlug,
+        category: matchCat,
+        kind: "channel",
+        parent_id: null,
+        media_type: "link",
+        media_url: item.playerUrl,
+        image_url: null,
+        episode_number: null,
+        sort_order: sNum,
+        published: true,
+        updated_at: new Date().toISOString()
+      };
+
+      const { data, error } = await db.from("content").insert(payload).select();
+      if (!error && data && data.length) {
+        content.push(data[0]);
+        insertedCount++;
+      }
+    }
+
+    // 3. Clean up any completed watch links
+    await cleanupFinishedWatchLinks();
+
+    const msg = insertedCount > 0
+      ? `✅ Successfully synced ${insertedCount} new stream server(s) directly to Supabase database!`
+      : `✅ All live allrounder streams are already synced in Supabase database. (Active: ${liveStreamsToInsert.length} streams)`;
+
+    if (statusEl) {
+      statusEl.textContent = msg;
+      statusEl.classList.remove("hidden");
+      statusEl.style.display = "block";
+    }
+
+    if (manual) {
+      setWatchLinkStatus(msg);
+      loadSelectedMatchLinks();
+    }
+  } catch (err) {
+    console.warn("syncAllrounderToDatabase error:", err);
+    if (statusEl) {
+      statusEl.textContent = `Auto-sync warning: ${err.message}`;
+      statusEl.classList.remove("hidden");
+      statusEl.style.display = "block";
+    }
+  } finally {
+    isAutoSyncingToDatabase = false;
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "⚡ Sync Allrounder to Database";
+    }
+  }
+}
+
 async function cleanupFinishedWatchLinks(){
   const watchItems=content.filter(isCricketWatchLink);
   if(!watchItems.length)return;
@@ -706,6 +1058,10 @@ $("addWatchLink").addEventListener("click",()=>{
   addWatchLinkRow();
   updateWatchShareableLinks($("watchMatch").value);
 });
+
+  $("autoSyncAllrounderBtn")?.addEventListener("click", () => {
+    syncAllrounderToDatabase(true);
+  });
 
 $("refreshWatchMatches").addEventListener("click",()=>{
   loadCricketMatches($("watchMatchCategory").value);
