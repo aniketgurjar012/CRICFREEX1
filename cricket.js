@@ -1350,9 +1350,8 @@
         }
       });
 
-      Object.entries(newAutoServers).forEach(([mid, sList]) => {
-        state.autoServers[mid] = sList;
-      });
+      // Auto-update streams: if a stream went away, it gets purged; if new, it gets added
+      state.autoServers = newAutoServers;
 
       try {
         localStorage.setItem("cricfreex_auto_servers", JSON.stringify(state.autoServers));
@@ -1366,6 +1365,17 @@
 
       if (state.page === "live") {
         if (!state.matches) state.matches = [];
+        const activeExtraIds = new Set(extraStreams.map(ex => String(ex.id)));
+
+        // Remove synthetic/extra streams that are no longer active
+        state.matches = state.matches.filter(m => {
+          if (m.isSynthetic || String(m.id).startsWith("ex_")) {
+            return activeExtraIds.has(String(m.id));
+          }
+          return !isCompletedMatch(m);
+        });
+
+        // Add newly appeared live streams
         const seenIds = new Set(state.matches.map(m => String(m.id)));
         extraStreams.forEach(ex => {
           if (!isCompletedMatch(ex) && !seenIds.has(String(ex.id))) {
@@ -1373,7 +1383,7 @@
             seenIds.add(String(ex.id));
           }
         });
-        state.matches = state.matches.filter(m => !isCompletedMatch(m));
+
         renderMatchList(
           state.matches,
           m => openMatch(m, "live", "scorecard", true),
@@ -3870,24 +3880,33 @@
   preloadMatchData();
   restoreRoute(false);
 
-  // Background polling every 35s to refresh live matches and streams seamlessly in-place
+  // Fully automated background sync running every 30s (runs on live and match views)
   setInterval(() => {
     if (document.hidden) return;
-    if (state.page === "live") {
-      request("/api/matches/live").then(res => {
-        if (res && Array.isArray(res.matches)) {
-          const liveOnly = res.matches.filter(m => !isCompletedMatch(m));
-          _matchDataCache.live = liveOnly;
-          liveOnly.forEach(m => {
-            if (m?.id) {
-              if (!state.allKnownMatches) state.allKnownMatches = {};
-              state.allKnownMatches[String(m.id)] = m;
-            }
-          });
+
+    // 1. Sync live matches from Cricbuzz
+    request("/api/matches/live").then(res => {
+      if (res && Array.isArray(res.matches)) {
+        const liveOnly = res.matches.filter(m => !isCompletedMatch(m));
+        _matchDataCache.live = liveOnly;
+        try {
+          localStorage.setItem("cricfreex_cached_live_matches", JSON.stringify(liveOnly));
+        } catch (e) {}
+        liveOnly.forEach(m => {
+          if (m?.id) {
+            if (!state.allKnownMatches) state.allKnownMatches = {};
+            state.allKnownMatches[String(m.id)] = m;
+          }
+        });
+        if (state.page === "live") {
           state.matches = liveOnly;
-          syncAllrounderClient(true);
         }
-      }).catch(() => {});
-    }
-  }, 35000);
+      }
+      // 2. Always sync allrounder streams (FanCode & Willow) seamlessly
+      syncAllrounderClient(true);
+    }).catch(() => {
+      // Even if Cricbuzz API is slow, still sync allrounder streams!
+      syncAllrounderClient(true);
+    });
+  }, 30000);
 })();

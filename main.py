@@ -861,7 +861,7 @@ def _auto_sync_background_loop():
             sync_allrounder_streams()
         except Exception as e:
             logger.error("Background stream sync error: %s", e)
-        time.sleep(60)
+        time.sleep(30)
 
 
 _sync_thread = threading.Thread(
