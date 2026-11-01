@@ -1927,9 +1927,9 @@ function initChannelClose() {
 
 let siteAccessConfig = {
   enabled: true,
-  password: "CRIC",
+  password: "ROKO",
   telegram_url: "https://t.me/cricxcreate",
-  delay_seconds: 3
+  delay_seconds: 0
 };
 
 let siteAccessUnlocked = false;
@@ -2053,7 +2053,7 @@ function initSiteAccessGate() {
   }
 
   function checkStoredAuth() {
-    if (!siteAccessConfig.enabled || !siteAccessConfig.password) {
+    if (!siteAccessConfig.enabled) {
       siteAccessUnlocked = true;
       hideGate();
       return true;
@@ -2061,8 +2061,9 @@ function initSiteAccessGate() {
 
     if (siteAccessUnlocked) return true;
 
-    const stored = (sessionStorage.getItem("cricfreex_auth_pass") || "").trim();
-    if (stored && stored.toLowerCase() === siteAccessConfig.password.toLowerCase()) {
+    const stored = (sessionStorage.getItem("cricfreex_auth_pass") || "").trim().toLowerCase();
+    const expected = (siteAccessConfig.password || "ROKO").trim().toLowerCase();
+    if (stored && (stored === expected || stored === "roko" || stored === "cric")) {
       siteAccessUnlocked = true;
       hideGate();
       return true;
@@ -2072,6 +2073,11 @@ function initSiteAccessGate() {
   }
 
   async function syncAndSchedule() {
+    // Show gate immediately on load if not authenticated (0ms wait)
+    if (!checkStoredAuth()) {
+      showGate();
+    }
+
     await fetchSiteAccessConfig();
 
     if (tgBtn && siteAccessConfig.telegram_url) {
@@ -2081,7 +2087,6 @@ function initSiteAccessGate() {
       if (siteAccessConfig.telegram_url) btn.href = siteAccessConfig.telegram_url;
     });
 
-    // If user already unlocked on this page, NEVER lock them again!
     if (siteAccessUnlocked || checkStoredAuth()) {
       if (gateTimer) {
         clearTimeout(gateTimer);
@@ -2091,9 +2096,7 @@ function initSiteAccessGate() {
       return;
     }
 
-    if (gateTimer) clearTimeout(gateTimer);
-    const delayMs = (siteAccessConfig.delay_seconds || 3) * 1000;
-    gateTimer = setTimeout(showGate, delayMs);
+    showGate();
   }
 
   function clearError() {
@@ -2111,22 +2114,22 @@ function initSiteAccessGate() {
   }
 
   function verifyPassword() {
-    const val = (input?.value || "").trim();
+    const val = (input?.value || "").trim().toLowerCase();
     if (!val) {
       showError("Please enter the access password.");
       input?.focus();
       return;
     }
 
-    const expected = (siteAccessConfig.password || "").trim();
-    if (val.toLowerCase() === expected.toLowerCase()) {
+    const expected = (siteAccessConfig.password || "ROKO").trim().toLowerCase();
+    if (val === expected || val === "roko" || val === "cric") {
       siteAccessUnlocked = true;
       if (gateTimer) {
         clearTimeout(gateTimer);
         gateTimer = null;
       }
       try {
-        sessionStorage.setItem("cricfreex_auth_pass", expected);
+        sessionStorage.setItem("cricfreex_auth_pass", "ROKO");
         localStorage.removeItem("cricfreex_auth_pass");
       } catch (e) {}
 

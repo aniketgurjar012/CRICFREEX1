@@ -1,6 +1,6 @@
 {
   "enabled": true,
-  "password": "CRIC",
+  "password": "ROKO",
   "telegram_url": "https://t.me/cricxcreate",
-  "delay_seconds": 3
+  "delay_seconds": 0
 }
