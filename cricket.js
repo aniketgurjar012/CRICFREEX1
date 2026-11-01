@@ -664,10 +664,11 @@
     if (!startMs || isNaN(startMs)) return false;
     // 1 hour before match start time (3600 * 1000 ms)
     const diffMs = startMs - Date.now();
-    return diffMs <= 3600000 && !isCompletedMatch(match);
+    return diffMs > 0 && diffMs <= 3600000 && !isCompletedMatch(match);
   }
 
   function isLiveMatch(match) {
+    if (!match) return false;
     if (isCompletedMatch(match)) return false;
     if (isMatchStartingSoon(match)) return true;
     return [
@@ -685,6 +686,7 @@
   }
 
   function isCompletedMatch(match) {
+    if (!match) return false;
     const s = String(match?.state || "").trim().toLowerCase();
     if ([
       "complete",
@@ -703,15 +705,21 @@
     return (
       status.includes("won by") ||
       status.includes("match tied") ||
+      status.includes("tied") ||
       status.includes("no result") ||
       status.includes("match drawn") ||
+      status.includes("drawn") ||
       status.includes("match abandoned") ||
-      status.includes("match cancelled")
+      status.includes("abandon") ||
+      status.includes("match cancelled") ||
+      status.includes("cancel")
     );
   }
 
   function isUpcomingMatch(match) {
+    if (!match) return false;
     if (isMatchStartingSoon(match)) return false;
+    if (isCompletedMatch(match)) return false;
     const s = String(match?.state || "").trim().toLowerCase();
     return ["preview", "upcoming", "scheduled"].includes(s);
   }
@@ -1183,7 +1191,8 @@
           if (cat !== "cricket") continue;
 
           const status = String(fc.status || "").toUpperCase();
-          if (status && !status.includes("LIVE")) continue;
+          const isLive = status.includes("LIVE") || fc.isLive === true;
+          if (!isLive) continue;
           let streamUrl = "";
           const autoStreams = fc.auto_streams || {};
           for (const lang of Object.keys(autoStreams)) {
@@ -1224,7 +1233,7 @@
 
               // If cb is NOT currently in the main live grid (state.matches), but stream is LIVE:
               const inMainGrid = (state.matches || []).some(m => String(m.id) === mid);
-              if (!inMainGrid && !extraCricbuzzLiveMatches.some(m => String(m.id) === mid)) {
+              if (!inMainGrid && !isCompletedMatch(cb) && !extraCricbuzzLiveMatches.some(m => String(m.id) === mid)) {
                 cb.isCricbuzzMatch = true;
                 extraCricbuzzLiveMatches.push(cb);
               }
@@ -1240,9 +1249,8 @@
       if (wRes.status === "fulfilled" && Array.isArray(wRes.value?.Matches)) {
         for (const w of wRes.value.Matches) {
           const status = String(w.status || "").toUpperCase();
-          const isLive = status.includes("LIVE") || w.isLive;
-          const hasStream = Boolean(w.stream_url_alpha || w.stream_url_bravo || w.streamUrl || w.playbackUrl || w.drm_key);
-          if (!isLive && !hasStream) continue;
+          const isLive = status.includes("LIVE") || w.isLive === true;
+          if (!isLive) continue;
 
           const safeId = w.title || w.tvgId || w.match_id || "";
           if (!safeId) continue;
@@ -1277,7 +1285,7 @@
 
               // If cb is NOT currently in the main live grid (state.matches), but stream is LIVE:
               const inMainGrid = (state.matches || []).some(m => String(m.id) === mid);
-              if (!inMainGrid && !extraCricbuzzLiveMatches.some(m => String(m.id) === mid)) {
+              if (!inMainGrid && !isCompletedMatch(cb) && !extraCricbuzzLiveMatches.some(m => String(m.id) === mid)) {
                 cb.isCricbuzzMatch = true;
                 extraCricbuzzLiveMatches.push(cb);
               }
@@ -1349,29 +1357,7 @@
         }
       }
 
-      // Keep featured matches (AUS vs SA, NPL, Stumps matches) in extraStreams if not in main grid
-      candidateMatches.forEach(cb => {
-        if (!cb || !cb.id) return;
-        const mid = String(cb.id);
-        const inMainGrid = (state.matches || []).some(m => String(m.id) === mid);
-        if (inMainGrid) return;
 
-        const seriesText = String(cb.series || "").toLowerCase();
-        const t1Text = String(cb.team1?.teamName || "").toLowerCase();
-        const t2Text = String(cb.team2?.teamName || "").toLowerCase();
-        const combined = `${seriesText} ${t1Text} vs ${t2Text}`;
-
-        const isAusSa = (/south africa/i.test(combined) && /australia/i.test(combined)) || (/rsa|sa\b/i.test(combined) && /aus\b/i.test(combined));
-        const isNpl = /nepal|npl|biratnagar|sudur|janakpur|pokhara/i.test(combined);
-        const isStumps = isMatchAtStumps(cb);
-
-        if (isAusSa || isNpl || isStumps) {
-          if (!extraStreams.some(m => String(m.id) === mid)) {
-            cb.isCricbuzzMatch = true;
-            extraStreams.push(cb);
-          }
-        }
-      });
 
       state.extraLiveStreams = extraStreams;
       extraStreams.forEach(ex => {
@@ -1396,11 +1382,12 @@
         if (!state.matches) state.matches = [];
         const seenIds = new Set(state.matches.map(m => String(m.id)));
         extraStreams.forEach(ex => {
-          if (!seenIds.has(String(ex.id))) {
+          if (!isCompletedMatch(ex) && !seenIds.has(String(ex.id))) {
             state.matches.push(ex);
             seenIds.add(String(ex.id));
           }
         });
+        state.matches = state.matches.filter(m => !isCompletedMatch(m));
         renderMatchList(
           state.matches,
           m => openMatch(m, "live", "scorecard", true),
@@ -3839,7 +3826,6 @@
       !document.hidden
     ) {
       updateDomMatchServers();
-      renderExtraLiveStreams();
     }
   });
 
@@ -3891,13 +3877,15 @@
     if (state.page === "live") {
       request("/api/matches/live").then(res => {
         if (res && Array.isArray(res.matches)) {
-          _matchDataCache.live = res.matches;
-          res.matches.forEach(m => {
+          const liveOnly = res.matches.filter(m => !isCompletedMatch(m));
+          _matchDataCache.live = liveOnly;
+          liveOnly.forEach(m => {
             if (m?.id) {
               if (!state.allKnownMatches) state.allKnownMatches = {};
               state.allKnownMatches[String(m.id)] = m;
             }
           });
+          state.matches = liveOnly;
           syncAllrounderClient();
         }
       }).catch(() => {});

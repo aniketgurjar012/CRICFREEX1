@@ -305,6 +305,7 @@ def extract_matches(html):
 
 def classify_match(match):
     state = " ".join(str(match.get("state") or "").lower().split())
+    status = str(match.get("status") or "").lower()
 
     if state in {
         "complete",
@@ -316,17 +317,18 @@ def classify_match(match):
         "no result",
         "drawn",
         "forfeit",
-    }:
+    } or any(w in status for w in ("won by", "match tied", "match drawn", "drawn", "no result", "match abandoned", "match cancelled")):
         return "recent"
 
-    # Check if upcoming match starts within 1 hour (3600 seconds) -> promote to live
+    # Check if upcoming match starts within 1 hour (0 to 3600 seconds) -> promote to live
     start_date = match.get("startDate")
     if start_date:
         try:
             val = float(start_date)
             start_sec = val / 1000.0 if val > 1e11 else val
             now_sec = time.time()
-            if (start_sec - now_sec) <= 3600:
+            diff_sec = start_sec - now_sec
+            if 0 < diff_sec <= 3600:
                 return "live"
         except (ValueError, TypeError):
             pass
@@ -910,6 +912,17 @@ def get_matches(category: str):
                 up_matches = extract_matches(up_html)
                 seen_ids = {m.get("id") for m in raw_matches}
                 for m in up_matches:
+                    if m.get("id") not in seen_ids:
+                        raw_matches.append(m)
+            except Exception:
+                pass
+        elif category == "recent":
+            # Also extract from live page so recently finished matches appear in recent
+            try:
+                live_html = fetch(PAGES["live"], MATCH_CACHE_TTL)
+                live_matches = extract_matches(live_html)
+                seen_ids = {m.get("id") for m in raw_matches}
+                for m in live_matches:
                     if m.get("id") not in seen_ids:
                         raw_matches.append(m)
             except Exception:
