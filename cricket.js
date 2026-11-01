@@ -3886,7 +3886,7 @@
             }
           });
           state.matches = liveOnly;
-          syncAllrounderClient();
+          syncAllrounderClient(true);
         }
       }).catch(() => {});
     }
