@@ -4,6 +4,7 @@ import time
 import threading
 import uuid
 from datetime import datetime, timezone, timedelta
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Optional, Any
 import urllib.request
@@ -968,13 +969,30 @@ def _match_stream_to_cb(stream_title: str, cb_match: dict[str, Any]) -> bool:
     return _team_matches_stream(t1, clean_stream) and _team_matches_stream(t2, clean_stream)
 
 
+GENERIC_MASCOTS = {
+    "team", "cricket", "club", "npl", "mens", "women", "womens", "the", "xi",
+    "kings", "royals", "lions", "titans", "warriors", "super", "knights",
+    "riders", "falcons", "patriots", "giants", "stars", "heat", "sixers",
+    "thunder", "strikers", "hurricanes", "renegades", "scorchers", "eagles",
+    "rhinos", "tuskers", "rocks", "division", "region", "patrons", "blues", "whites"
+}
+
+
 def _clean_team_tokens(name: str) -> set[str]:
     cleaned = re.sub(r'[^a-zA-Z0-9\s]', ' ', str(name or "")).lower()
-    stop = {"team", "cricket", "club", "npl", "mens", "women", "womens", "the", "xi"}
-    return {w for w in cleaned.split() if len(w) > 2 and w not in stop}
+    return {w for w in cleaned.split() if len(w) > 2 and w not in GENERIC_MASCOTS}
 
 
 def _team_token_match(name1: str, name2: str) -> bool:
+    k1 = normalize_team_key(name1)
+    k2 = normalize_team_key(name2)
+    if k1 and k2:
+        if k1 == k2:
+            return True
+        if k1 in _KNOWN_TEAM_ALIASES and _KNOWN_TEAM_ALIASES[k1] == k2:
+            return True
+        if k2 in _KNOWN_TEAM_ALIASES and _KNOWN_TEAM_ALIASES[k2] == k1:
+            return True
     t1 = _clean_team_tokens(name1)
     t2 = _clean_team_tokens(name2)
     if not t1 or not t2:
@@ -1016,152 +1034,167 @@ def fetch_cricinfo_matches() -> list[dict[str, Any]]:
     ci_matches = []
     seen_ci_ids = set()
 
-    now_utc = datetime.now(timezone.utc)
+    IST = timezone(timedelta(hours=5, minutes=30))
+    now_ist = datetime.now(IST)
+    today_start_ist = datetime(now_ist.year, now_ist.month, now_ist.day, 0, 0, 0, tzinfo=IST)
+    end_tomorrow_ist = today_start_ist + timedelta(days=2) - timedelta(microseconds=1)
+    end_tomorrow_ms = int(end_tomorrow_ist.timestamp() * 1000)
+
     urls = [
         "https://site.web.api.espn.com/apis/v2/scoreboard/header?sport=cricket",
-        f"https://site.web.api.espn.com/apis/v2/scoreboard/header?sport=cricket&dates={(now_utc - timedelta(days=1)).strftime('%Y%m%d')}",
-        f"https://site.web.api.espn.com/apis/v2/scoreboard/header?sport=cricket&dates={now_utc.strftime('%Y%m%d')}",
-        f"https://site.web.api.espn.com/apis/v2/scoreboard/header?sport=cricket&dates={(now_utc + timedelta(days=1)).strftime('%Y%m%d')}",
-        f"https://site.web.api.espn.com/apis/v2/scoreboard/header?sport=cricket&dates={(now_utc + timedelta(days=2)).strftime('%Y%m%d')}",
-        f"https://site.web.api.espn.com/apis/v2/scoreboard/header?sport=cricket&dates={(now_utc + timedelta(days=3)).strftime('%Y%m%d')}",
+        f"https://site.web.api.espn.com/apis/v2/scoreboard/header?sport=cricket&dates={(now_ist - timedelta(days=2)).strftime('%Y%m%d')}",
+        f"https://site.web.api.espn.com/apis/v2/scoreboard/header?sport=cricket&dates={(now_ist - timedelta(days=1)).strftime('%Y%m%d')}",
+        f"https://site.web.api.espn.com/apis/v2/scoreboard/header?sport=cricket&dates={now_ist.strftime('%Y%m%d')}",
+        f"https://site.web.api.espn.com/apis/v2/scoreboard/header?sport=cricket&dates={(now_ist + timedelta(days=1)).strftime('%Y%m%d')}",
+        f"https://site.web.api.espn.com/apis/v2/scoreboard/header?sport=cricket&dates={(now_ist + timedelta(days=2)).strftime('%Y%m%d')}",
     ]
 
-    for url in urls:
+    def _fetch_scoreboard(u: str):
         try:
-            r = session.get(url, timeout=5)
-            if r.status_code != 200:
-                continue
-            data = r.json()
+            r = session.get(u, timeout=5, headers=headers)
+            if r.status_code == 200:
+                return r.json()
+        except Exception as e:
+            logger.warning("Error fetching Cricinfo scoreboard (%s): %s", u, e)
+        return None
 
-            for sport in data.get("sports", []):
-                for league in sport.get("leagues", []):
-                    league_name = league.get("name", "Cricket")
-                    league_id = str(league.get("id", ""))
-                    for ev in league.get("events", []):
-                        try:
-                            cid = str(ev.get("id"))
-                            if cid in seen_ci_ids:
-                                continue
-                            seen_ci_ids.add(cid)
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        json_results = list(pool.map(_fetch_scoreboard, urls))
 
-                            comps = ev.get("competitors", [])
-                            if len(comps) < 2:
-                                continue
-                            c1, c2 = comps[0], comps[1]
+    for data in json_results:
+        if not data:
+            continue
 
-                            status_obj = ev.get("fullStatus", {})
-                            state_val = str(status_obj.get("type", {}).get("state", "")).lower()
-                            summary_val = str(ev.get("summary", "")).lower()
-                            detail_val = str(status_obj.get("type", {}).get("detail", "")).lower()
+        for sport in data.get("sports", []):
+            for league in sport.get("leagues", []):
+                league_name = league.get("name", "Cricket")
+                league_id = str(league.get("id", ""))
+                for ev in league.get("events", []):
+                    try:
+                        cid = str(ev.get("id"))
+                        if cid in seen_ci_ids:
+                            continue
+                        seen_ci_ids.add(cid)
 
-                            # Parse start date & timestamp
-                            start_date_ms = None
-                            ev_date = ev.get("date")
-                            if ev_date:
-                                try:
-                                    dt_parsed = datetime.fromisoformat(str(ev_date).replace("Z", "+00:00"))
-                                    start_date_ms = int(dt_parsed.timestamp() * 1000)
-                                except Exception:
-                                    pass
+                        comps = ev.get("competitors", [])
+                        if len(comps) < 2:
+                            continue
+                        c1, c2 = comps[0], comps[1]
 
-                            now_sec = time.time()
-                            start_sec = (start_date_ms / 1000.0) if start_date_ms else None
-                            diff_sec = (start_sec - now_sec) if start_sec else 999999
+                        status_obj = ev.get("fullStatus", {})
+                        state_val = str(status_obj.get("type", {}).get("state", "")).lower()
+                        summary_val = str(ev.get("summary", "")).lower()
+                        detail_val = str(status_obj.get("type", {}).get("detail", "")).lower()
 
-                            if state_val == "post" or any(w in summary_val for w in ("result", "won", "drawn", "tied", "abandoned")):
-                                state_str = "Complete"
-                                cat = "recent"
-                            elif state_val == "in" or "live" in detail_val or any(w in summary_val for w in ("stumps", "tea", "lunch", "in progress", "lead", "trail", "need")) or (diff_sec <= 3600):
-                                state_str = "Live"
-                                cat = "live"
-                            else:
+                        # Parse start date & timestamp
+                        start_date_ms = None
+                        ev_date = ev.get("date")
+                        if ev_date:
+                            try:
+                                dt_parsed = datetime.fromisoformat(str(ev_date).replace("Z", "+00:00"))
+                                start_date_ms = int(dt_parsed.timestamp() * 1000)
+                            except Exception:
+                                pass
+
+                        now_sec = time.time()
+                        start_sec = (start_date_ms / 1000.0) if start_date_ms else None
+                        diff_sec = (start_sec - now_sec) if start_sec else 999999
+
+                        if state_val == "post" or any(w in summary_val for w in ("result", "won", "drawn", "tied", "abandoned")):
+                            state_str = "Complete"
+                            cat = "recent"
+                        elif state_val == "in" or "live" in detail_val or any(w in summary_val for w in ("stumps", "tea", "lunch", "in progress", "lead", "trail", "need")) or (diff_sec <= 3600 and diff_sec > -86400 * 5):
+                            state_str = "Live"
+                            cat = "live"
+                        else:
+                            # Strict 2-day Upcoming window in IST (Today + Tomorrow only)
+                            # Rolls over automatically at midnight (12:00 AM IST)
+                            if start_date_ms and start_date_ms <= end_tomorrow_ms:
                                 state_str = "Upcoming"
                                 cat = "upcoming"
-
-                            location = ev.get("location") or ""
-                            venue_dict = {"ground": location, "city": ""}
-                            if "," in location:
-                                parts = [p.strip() for p in location.split(",")]
-                                venue_dict = {"ground": parts[0], "city": ", ".join(parts[1:])}
-
-                            is_outside = is_venue_outside_india(venue_dict, f"{league_name} {ev.get('name', '')}")
-
-                            if cat == "upcoming" and start_date_ms:
-                                long_status = f"Match starts at {format_ist_gmt_datetime(start_date_ms, is_outside)}"
                             else:
-                                long_status = status_obj.get("longSummary") or ev.get("summary") or state_str
+                                continue
 
-                            c1_name = c1.get("displayName") or c1.get("name") or "Team 1"
-                            c2_name = c2.get("displayName") or c2.get("name") or "Team 2"
+                        location = ev.get("location") or ""
+                        venue_dict = {"ground": location, "city": ""}
+                        if "," in location:
+                            parts = [p.strip() for p in location.split(",")]
+                            venue_dict = {"ground": parts[0], "city": ", ".join(parts[1:])}
 
-                            # Dynamically record latest competitor logos from Cricinfo
-                            with CRICINFO_LOGOS_LOCK:
-                                for c_comp, c_raw in ((c1, c1_name), (c2, c2_name)):
-                                    if c_comp.get("logo"):
-                                        c_logo_u = c_comp["logo"]
-                                        c_abbr_u = c_comp.get("abbreviation") or ""
-                                        c_clean_u = clean_team_name(c_raw)
-                                        k_norm = normalize_team_key(c_raw)
-                                        entry = {
-                                            "logo": c_logo_u,
-                                            "sname": c_abbr_u,
-                                            "name": c_clean_u
-                                        }
-                                        DYNAMIC_CRICINFO_LOGOS[k_norm] = entry
-                                        base_u = re.sub(r'\b(women|womens|division|region|whites|blues)\b', '', c_clean_u, flags=re.I).strip()
-                                        k_base = normalize_team_key(base_u)
-                                        if k_base and k_base not in DYNAMIC_CRICINFO_LOGOS:
-                                            DYNAMIC_CRICINFO_LOGOS[k_base] = entry
+                        is_outside = is_venue_outside_india(venue_dict, f"{league_name} {ev.get('name', '')}")
 
-                            c1_score_str = str(c1.get("score") or "").strip()
-                            c2_score_str = str(c2.get("score") or "").strip()
+                        if cat == "upcoming" and start_date_ms:
+                            long_status = f"Match starts at {format_ist_gmt_datetime(start_date_ms, is_outside)}"
+                        else:
+                            long_status = status_obj.get("longSummary") or ev.get("summary") or state_str
 
-                            t1_obj = {
-                                "teamName": clean_team_name(c1_name),
-                                "teamSName": c1.get("abbreviation") or c1_name[:4].upper(),
-                                "logo": c1.get("logo") or "",
-                                "cricinfoLogo": c1.get("logo") or "",
-                                "imageId": c1.get("logo") or None
-                            }
-                            t2_obj = {
-                                "teamName": clean_team_name(c2_name),
-                                "teamSName": c2.get("abbreviation") or c2_name[:4].upper(),
-                                "logo": c2.get("logo") or "",
-                                "cricinfoLogo": c2.get("logo") or "",
-                                "imageId": c2.get("logo") or None
-                            }
-                            attach_cricinfo_logo(t1_obj)
-                            attach_cricinfo_logo(t2_obj)
+                        c1_name = c1.get("displayName") or c1.get("name") or "Team 1"
+                        c2_name = c2.get("displayName") or c2.get("name") or "Team 2"
 
-                            match_obj = {
-                                "id": f"ci_{cid}",
-                                "series": league_name,
-                                "seriesId": league_id,
-                                "description": ev.get("description") or ev.get("name") or "Cricket Match",
-                                "state": state_str,
-                                "status": long_status,
-                                "startDate": start_date_ms,
-                                "venue": venue_dict,
-                                "team1": t1_obj,
-                                "team2": t2_obj,
-                                "score": {
-                                    "team1Score": _parse_cricinfo_score(c1_score_str),
-                                    "team2Score": _parse_cricinfo_score(c2_score_str)
-                                },
-                                "_category": cat,
-                                "source": "cricinfo"
-                            }
-                            ci_matches.append(match_obj)
-                        except Exception as ev_err:
-                            logger.warning("Error parsing Cricinfo event: %s", ev_err)
-        except Exception as e:
-            logger.warning("Error fetching Cricinfo scoreboard (%s): %s", url, e)
+                        # Dynamically record latest competitor logos from Cricinfo
+                        with CRICINFO_LOGOS_LOCK:
+                            for c_comp, c_raw in ((c1, c1_name), (c2, c2_name)):
+                                if c_comp.get("logo"):
+                                    c_logo_u = c_comp["logo"]
+                                    c_abbr_u = c_comp.get("abbreviation") or ""
+                                    c_clean_u = clean_team_name(c_raw)
+                                    k_norm = normalize_team_key(c_raw)
+                                    entry = {
+                                        "logo": c_logo_u,
+                                        "sname": c_abbr_u,
+                                        "name": c_clean_u
+                                    }
+                                    DYNAMIC_CRICINFO_LOGOS[k_norm] = entry
+                                    base_u = re.sub(r'\b(women|womens|division|region|whites|blues)\b', '', c_clean_u, flags=re.I).strip()
+                                    k_base = normalize_team_key(base_u)
+                                    if k_base and k_base not in DYNAMIC_CRICINFO_LOGOS:
+                                        DYNAMIC_CRICINFO_LOGOS[k_base] = entry
+
+                        c1_score_str = str(c1.get("score") or "").strip()
+                        c2_score_str = str(c2.get("score") or "").strip()
+
+                        t1_obj = {
+                            "teamName": clean_team_name(c1_name),
+                            "teamSName": c1.get("abbreviation") or c1_name[:4].upper(),
+                            "logo": c1.get("logo") or "",
+                            "cricinfoLogo": c1.get("logo") or "",
+                            "imageId": c1.get("logo") or None
+                        }
+                        t2_obj = {
+                            "teamName": clean_team_name(c2_name),
+                            "teamSName": c2.get("abbreviation") or c2_name[:4].upper(),
+                            "logo": c2.get("logo") or "",
+                            "cricinfoLogo": c2.get("logo") or "",
+                            "imageId": c2.get("logo") or None
+                        }
+                        attach_cricinfo_logo(t1_obj)
+                        attach_cricinfo_logo(t2_obj)
+
+                        match_obj = {
+                            "id": f"ci_{cid}",
+                            "series": league_name,
+                            "seriesId": league_id,
+                            "description": ev.get("description") or ev.get("name") or "Cricket Match",
+                            "state": state_str,
+                            "status": long_status,
+                            "startDate": start_date_ms,
+                            "venue": venue_dict,
+                            "team1": t1_obj,
+                            "team2": t2_obj,
+                            "score": {
+                                "team1Score": _parse_cricinfo_score(c1_score_str),
+                                "team2Score": _parse_cricinfo_score(c2_score_str)
+                            },
+                            "_category": cat,
+                            "source": "cricinfo"
+                        }
+                        ci_matches.append(match_obj)
+                    except Exception as ev_err:
+                        logger.warning("Error parsing Cricinfo event: %s", ev_err)
 
     if ci_matches:
         _CRICINFO_CACHE["time"] = now
         _CRICINFO_CACHE["matches"] = ci_matches
-
-    return _CRICINFO_CACHE.get("matches", [])
 
     return _CRICINFO_CACHE.get("matches", [])
 
@@ -1722,12 +1755,47 @@ def get_matches(category: str):
             if classify_match(match) == category
         ]
 
+        IST = timezone(timedelta(hours=5, minutes=30))
+        now_ist = datetime.now(IST)
+        today_start_ist = datetime(now_ist.year, now_ist.month, now_ist.day, 0, 0, 0, tzinfo=IST)
+        end_tomorrow_ist = today_start_ist + timedelta(days=2) - timedelta(microseconds=1)
+        end_tomorrow_ms = int(end_tomorrow_ist.timestamp() * 1000)
+
+        # Enforce strict 2-day Upcoming window in IST (Today + Tomorrow only)
+        # Rolls over automatically at midnight (12:00 AM IST)
+        if category == "upcoming":
+            valid_upcoming = []
+            for m in matches:
+                sd = m.get("startDate")
+                if not sd:
+                    continue
+                try:
+                    s_val = float(sd)
+                    s_ms = s_val if s_val > 1e11 else s_val * 1000.0
+                    if s_ms <= end_tomorrow_ms:
+                        valid_upcoming.append(m)
+                except (ValueError, TypeError):
+                    pass
+            matches = valid_upcoming
+
         # Cricinfo Fallback Integration:
         # First priority is Cricbuzz. Matches present in Cricinfo but missed by Cricbuzz are added below.
         try:
             ci_all = fetch_cricinfo_matches()
             for ci_m in ci_all:
                 if ci_m.get("_category") == category:
+                    if category == "upcoming":
+                        ci_sd = ci_m.get("startDate")
+                        if not ci_sd:
+                            continue
+                        try:
+                            ci_s_val = float(ci_sd)
+                            ci_s_ms = ci_s_val if ci_s_val > 1e11 else ci_s_val * 1000.0
+                            if ci_s_ms > end_tomorrow_ms:
+                                continue
+                        except Exception:
+                            continue
+
                     t1_name = ci_m.get("team1", {}).get("teamName", "")
                     t2_name = ci_m.get("team2", {}).get("teamName", "")
                     already_in_cb = False
@@ -1742,6 +1810,10 @@ def get_matches(category: str):
                         matches.append(ci_m)
         except Exception as ci_err:
             logger.warning("Cricinfo fallback merge error: %s", ci_err)
+
+        if category == "upcoming":
+            # Chronological sort so closest upcoming match appears first
+            matches.sort(key=lambda m: float(m.get("startDate") or 0))
 
         # Unmatched Allrounder live streams included in Live section
         if category == "live":

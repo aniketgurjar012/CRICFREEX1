@@ -1256,12 +1256,24 @@
     );
   }
 
+  function isMatchIn2DayUpcomingWindow(match) {
+    if (!match?.startDate) return false;
+    let startMs = Number(match.startDate);
+    if (!startMs || isNaN(startMs)) return false;
+    if (startMs < 1e11) startMs *= 1000;
+    const istOffsetMs = 5.5 * 60 * 60 * 1000;
+    const istNow = new Date(Date.now() + istOffsetMs);
+    const istTodayStartUtcMs = Date.UTC(istNow.getUTCFullYear(), istNow.getUTCMonth(), istNow.getUTCDate()) - istOffsetMs;
+    const istTomorrowEndUtcMs = istTodayStartUtcMs + (2 * 24 * 60 * 60 * 1000) - 1;
+    return startMs <= istTomorrowEndUtcMs;
+  }
+
   function isUpcomingMatch(match) {
     if (!match) return false;
     if (isCompletedMatch(match)) return false;
     if (isLiveMatch(match)) return false;
     if (isMatchStartingSoon(match)) return false;
-    return true;
+    return isMatchIn2DayUpcomingWindow(match);
   }
 
   function shouldAllowWatchLinks(match) {
@@ -2658,7 +2670,7 @@
     if (_cachedUp) {
       const _parsedUp = JSON.parse(_cachedUp);
       if (Array.isArray(_parsedUp) && _parsedUp.length) {
-        _matchDataCache.upcoming = _parsedUp;
+        _matchDataCache.upcoming = _parsedUp.filter(m => isMatchIn2DayUpcomingWindow(m));
       }
     }
     const _cachedRec = localStorage.getItem("cricfreex_cached_recent_matches");
@@ -2735,13 +2747,14 @@
 
     request("/api/matches/upcoming").then(res => {
       if (res && Array.isArray(res.matches)) {
-        _matchDataCache.upcoming = res.matches;
+        const upcomingOnly = res.matches.filter(m => isMatchIn2DayUpcomingWindow(m));
+        _matchDataCache.upcoming = upcomingOnly;
         try {
-          localStorage.setItem("cricfreex_cached_upcoming_matches", JSON.stringify(res.matches));
+          localStorage.setItem("cricfreex_cached_upcoming_matches", JSON.stringify(upcomingOnly));
           localStorage.setItem("cricfreex_all_matches", JSON.stringify(state.allKnownMatches || {}));
         } catch (e) {}
         if (!state.allKnownMatches) state.allKnownMatches = {};
-        res.matches.forEach(m => { if (m?.id) state.allKnownMatches[String(m.id)] = m; });
+        upcomingOnly.forEach(m => { if (m?.id) state.allKnownMatches[String(m.id)] = m; });
       }
     }).catch(() => {});
   }
@@ -2772,6 +2785,10 @@
       const result = await request(`/api/matches/${category}`);
       if (requestId !== state.request) return;
       matches = result.matches || [];
+      if (category === "upcoming") {
+        matches = matches.filter(m => isMatchIn2DayUpcomingWindow(m));
+        matches.sort((a, b) => (Number(a.startDate || 0) - Number(b.startDate || 0)));
+      }
       _matchDataCache[category] = matches;
       state.matches = matches;
       try {
