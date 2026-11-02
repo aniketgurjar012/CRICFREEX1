@@ -1,0 +1,767 @@
+{
+  "Sylhet Division": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/718.png",
+    "sname": "SYL",
+    "id": "718"
+  },
+  "Khulna Division": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/700.png",
+    "sname": "KHU",
+    "id": "700"
+  },
+  "Mymensingh Division": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/683.png",
+    "sname": "MYMS",
+    "id": "683"
+  },
+  "Chattogram Division": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/679.png",
+    "sname": "CHATT",
+    "id": "679"
+  },
+  "Dhaka Division": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/682.png",
+    "sname": "DHA",
+    "id": "682"
+  },
+  "Rajshahi Division": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/711.png",
+    "sname": "RAJ",
+    "id": "711"
+  },
+  "Rangpur Division": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/536705.png",
+    "sname": "RAN",
+    "id": "536705"
+  },
+  "Barishal Division": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/662.png",
+    "sname": "BAR",
+    "id": "662"
+  },
+  "New Zealand A": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/2540.png",
+    "sname": "NZ-A",
+    "id": "2540"
+  },
+  "India A": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1781.png",
+    "sname": "IND-A",
+    "id": "1781"
+  },
+  "Sikkim": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/2085.png",
+    "sname": "SIKM",
+    "id": "2085"
+  },
+  "Nagaland": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1156781.png",
+    "sname": "NAGA",
+    "id": "1156781"
+  },
+  "Jharkhand": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1156778.png",
+    "sname": "JHK",
+    "id": "1156778"
+  },
+  "Delhi": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1668.png",
+    "sname": "DELHI",
+    "id": "1668"
+  },
+  "Odisha": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1988.png",
+    "sname": "ODSA",
+    "id": "1988"
+  },
+  "Services": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/2119.png",
+    "sname": "SVCS",
+    "id": "2119"
+  },
+  "Baroda": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1559.png",
+    "sname": "BRODA",
+    "id": "1559"
+  },
+  "Jammu & Kashmir": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1828.png",
+    "sname": "J & K",
+    "id": "1828"
+  },
+  "Chandigarh": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1641.png",
+    "sname": "CHD",
+    "id": "1641"
+  },
+  "Himachal Pradesh": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1752.png",
+    "sname": "HP",
+    "id": "1752"
+  },
+  "Chhattisgarh": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/427424.png",
+    "sname": "CGR",
+    "id": "427424"
+  },
+  "Andhra": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1541.png",
+    "sname": "AP",
+    "id": "1541"
+  },
+  "Hyderabad (India)": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1764.png",
+    "sname": "HYD",
+    "id": "1764"
+  },
+  "Punjab": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/2012.png",
+    "sname": "PNJB",
+    "id": "2012"
+  },
+  "Karnataka": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1872.png",
+    "sname": "KNTKA",
+    "id": "1872"
+  },
+  "Tripura": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/2149.png",
+    "sname": "TPURA",
+    "id": "2149"
+  },
+  "Kerala": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1861.png",
+    "sname": "KER",
+    "id": "1861"
+  },
+  "Bengal": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1572.png",
+    "sname": "BENG",
+    "id": "1572"
+  },
+  "Madhya Pradesh": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1941.png",
+    "sname": "MP",
+    "id": "1941"
+  },
+  "Bihar": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1585.png",
+    "sname": "BIHAR",
+    "id": "1585"
+  },
+  "Maharashtra": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1905.png",
+    "sname": "MAHA",
+    "id": "1905"
+  },
+  "Gujarat": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1729.png",
+    "sname": "GUJ",
+    "id": "1729"
+  },
+  "Manipur": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1943.png",
+    "sname": "MNPR",
+    "id": "1943"
+  },
+  "Arunachal Pradesh": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1156779.png",
+    "sname": "ARP",
+    "id": "1156779"
+  },
+  "Mizoram": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1156780.png",
+    "sname": "MIZO",
+    "id": "1156780"
+  },
+  "Meghalaya": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1156783.png",
+    "sname": "MEGHA",
+    "id": "1156783"
+  },
+  "Mumbai": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1603.png",
+    "sname": "MUM",
+    "id": "1603"
+  },
+  "Haryana": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1757.png",
+    "sname": "HRYNA",
+    "id": "1757"
+  },
+  "Puducherry": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1156782.png",
+    "sname": "PONDI",
+    "id": "1156782"
+  },
+  "Uttar Pradesh": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/2161.png",
+    "sname": "UP",
+    "id": "2161"
+  },
+  "Saurashtra": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/2070.png",
+    "sname": "SAU",
+    "id": "2070"
+  },
+  "Assam": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1550.png",
+    "sname": "ASSAM",
+    "id": "1550"
+  },
+  "Tamil Nadu": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/2133.png",
+    "sname": "TN",
+    "id": "2133"
+  },
+  "Railways": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1823.png",
+    "sname": "RLYS",
+    "id": "1823"
+  },
+  "Uttarakhand": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1156784.png",
+    "sname": "UTK",
+    "id": "1156784"
+  },
+  "Rajasthan": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/2037.png",
+    "sname": "RAJ",
+    "id": "2037"
+  },
+  "Vidarbha": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/2179.png",
+    "sname": "VIDAR",
+    "id": "2179"
+  },
+  "Goa": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1717.png",
+    "sname": "GOA",
+    "id": "1717"
+  },
+  "Lumbini Lions (NPL)": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1462638.png",
+    "sname": "LUL",
+    "id": "1462638"
+  },
+  "Sudur Paschim Royals (NPL)": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1462636.png",
+    "sname": "SPR",
+    "id": "1462636"
+  },
+  "Montreal Warriors": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1559950.png",
+    "sname": "MOW",
+    "id": "1559950"
+  },
+  "Toronto Kings": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1559948.png",
+    "sname": "TOK",
+    "id": "1559948"
+  },
+  "Mississauga Skyhawks": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1559949.png",
+    "sname": "MIS",
+    "id": "1559949"
+  },
+  "Netherlands": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/15.png",
+    "sname": "NED",
+    "id": "15"
+  },
+  "Oman": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/37.png",
+    "sname": "OMA",
+    "id": "37"
+  },
+  "Biratnagar Kings (NPL)": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1462631.png",
+    "sname": "BIK",
+    "id": "1462631"
+  },
+  "Chitwan Rhinos (NPL)": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1462633.png",
+    "sname": "CHR",
+    "id": "1462633"
+  },
+  "Janakpur Bolts (NPL)": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1462595.png",
+    "sname": "JAB",
+    "id": "1462595"
+  },
+  "Karnali Yaks (NPL)": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1462635.png",
+    "sname": "KAY",
+    "id": "1462635"
+  },
+  "State Bank of Pakistan": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/3110.png",
+    "sname": "SBP",
+    "id": "3110"
+  },
+  "Papua New Guinea": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/20.png",
+    "sname": "PNG",
+    "id": "20"
+  },
+  "Qatar": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/136.png",
+    "sname": "QAT",
+    "id": "136"
+  },
+  "Jersey": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/218211.png",
+    "sname": "JER",
+    "id": "218211"
+  },
+  "Kuwait": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/38.png",
+    "sname": "KUW",
+    "id": "38"
+  },
+  "Namibia": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/28.png",
+    "sname": "NAM",
+    "id": "28"
+  },
+  "Ireland": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/29.png",
+    "sname": "IRE",
+    "id": "29"
+  },
+  "Oman Under-19s": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/2611.png",
+    "sname": "Omn19",
+    "id": "2611"
+  },
+  "Afghanistan Under-19s": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/228132.png",
+    "sname": "AFG19",
+    "id": "228132"
+  },
+  "New Zealand": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/5.png",
+    "sname": "NZ",
+    "id": "5"
+  },
+  "India": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/6.png",
+    "sname": "IND",
+    "id": "6"
+  },
+  "Pakistan": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/7.png",
+    "sname": "PAK",
+    "id": "7"
+  },
+  "Sri Lanka": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/8.png",
+    "sname": "SL",
+    "id": "8"
+  },
+  "Afghanistan": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/40.png",
+    "sname": "AFG",
+    "id": "40"
+  },
+  "Zimbabwe": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/9.png",
+    "sname": "ZIM",
+    "id": "9"
+  },
+  "South Africa": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/3.png",
+    "sname": "SA",
+    "id": "3"
+  },
+  "Australia": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/2.png",
+    "sname": "AUS",
+    "id": "2"
+  },
+  "Auckland": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/2459.png",
+    "sname": "AUCK",
+    "id": "2459"
+  },
+  "Canterbury": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/2469.png",
+    "sname": "CANT",
+    "id": "2469"
+  },
+  "Central Districts": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/2482.png",
+    "sname": "CD",
+    "id": "2482"
+  },
+  "Northern Districts": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/2516.png",
+    "sname": "ND",
+    "id": "2516"
+  },
+  "Bangladesh": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/25.png",
+    "sname": "BAN",
+    "id": "25"
+  },
+  "West Indies": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/4.png",
+    "sname": "WI",
+    "id": "4"
+  },
+  "Pokhara Avengers (NPL)": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1462637.png",
+    "sname": "POA",
+    "id": "1462637"
+  },
+  "South Australia": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/520.png",
+    "sname": "SOA",
+    "id": "520"
+  },
+  "Western Australia": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/602.png",
+    "sname": "WA",
+    "id": "602"
+  },
+  "Vancouver Guardians": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1559951.png",
+    "sname": "VAG",
+    "id": "1559951"
+  },
+  "Denmark": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/13.png",
+    "sname": "DEN",
+    "id": "13"
+  },
+  "Kenya": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/26.png",
+    "sname": "KENYA",
+    "id": "26"
+  },
+  "Lions": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/3249.png",
+    "sname": "LIONS",
+    "id": "3249"
+  },
+  "Easterns": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/3203.png",
+    "sname": "EASTN",
+    "id": "3203"
+  },
+  "India Women": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1812.png",
+    "sname": "IND-W",
+    "id": "1812"
+  },
+  "Zimbabwe Women": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/271866.png",
+    "sname": "ZIM-W",
+    "id": "271866"
+  },
+  "Wellington": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/2600.png",
+    "sname": "WELL",
+    "id": "2600"
+  },
+  "Otago": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/2570.png",
+    "sname": "OTAGO",
+    "id": "2570"
+  },
+  "Kathmandu Gorkhas (NPL)": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1462632.png",
+    "sname": "KAG",
+    "id": "1462632"
+  },
+  "England": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1.png",
+    "sname": "ENG",
+    "id": "1"
+  },
+  "United Arab Emirates": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/27.png",
+    "sname": "UAE",
+    "id": "27"
+  },
+  "Melbourne Renegades Women": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/896407.png",
+    "sname": "MR-W",
+    "id": "896407"
+  },
+  "Sydney Thunder Women": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/896401.png",
+    "sname": "ST-W",
+    "id": "896401"
+  },
+  "Melbourne Stars Women": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/896399.png",
+    "sname": "MS-W",
+    "id": "896399"
+  },
+  "Hobart Hurricanes Women": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/896433.png",
+    "sname": "HH-W",
+    "id": "896433"
+  },
+  "South Western Districts": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/3337.png",
+    "sname": "SWD",
+    "id": "3337"
+  },
+  "Titans": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/3340.png",
+    "sname": "TITNS",
+    "id": "3340"
+  },
+  "Tasmania": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/560.png",
+    "sname": "TAS",
+    "id": "560"
+  },
+  "New South Wales": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/387.png",
+    "sname": "NSW",
+    "id": "387"
+  },
+  "Hong Kong": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/19.png",
+    "sname": "HKG",
+    "id": "19"
+  },
+  "Scotland": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/30.png",
+    "sname": "SCOT",
+    "id": "30"
+  },
+  "Brisbane Heat Women": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/896397.png",
+    "sname": "BH-W",
+    "id": "896397"
+  },
+  "Sydney Sixers Women": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/896403.png",
+    "sname": "SS-W",
+    "id": "896403"
+  },
+  "Mid West Rhinos": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/424006.png",
+    "sname": "RHINO",
+    "id": "424006"
+  },
+  "Mountaineers": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/424008.png",
+    "sname": "MOUNT",
+    "id": "424008"
+  },
+  "Mashonaland Eagles": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/424005.png",
+    "sname": "EAGLE",
+    "id": "424005"
+  },
+  "Matabeleland Tuskers": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/424001.png",
+    "sname": "TUSK",
+    "id": "424001"
+  },
+  "Queensland": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/459.png",
+    "sname": "QLD",
+    "id": "459"
+  },
+  "Victoria": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/584.png",
+    "sname": "VIC",
+    "id": "584"
+  },
+  "Adelaide Strikers Women": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/896431.png",
+    "sname": "AS-W",
+    "id": "896431"
+  },
+  "Perth Scorchers Women": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/896405.png",
+    "sname": "PS-W",
+    "id": "896405"
+  },
+  "Warriors": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/3353.png",
+    "sname": "WAR",
+    "id": "3353"
+  },
+  "Western Province": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/3357.png",
+    "sname": "WPR",
+    "id": "3357"
+  },
+  "Dolphins": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/3199.png",
+    "sname": "DOLPH",
+    "id": "3199"
+  },
+  "Boland": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/3161.png",
+    "sname": "BOL",
+    "id": "3161"
+  },
+  "West Indies A": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/3800.png",
+    "sname": "WI-A",
+    "id": "3800"
+  },
+  "England Lions": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/952.png",
+    "sname": "LIONS",
+    "id": "952"
+  },
+  "Faisalabad Region": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/2706.png",
+    "sname": "FSLB",
+    "id": "2706"
+  },
+  "Peshawar Region Blues": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1561013.png",
+    "sname": "PRB",
+    "id": "1561013"
+  },
+  "Islamabad Region": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/382591.png",
+    "sname": "ISB",
+    "id": "382591"
+  },
+  "Multan Region": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/2905.png",
+    "sname": "MUL",
+    "id": "2905"
+  },
+  "Karachi Region Blues": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/2788.png",
+    "sname": "KRBLS",
+    "id": "2788"
+  },
+  "Sialkot Region Blues": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1561012.png",
+    "sname": "SRB",
+    "id": "1561012"
+  },
+  "Lahore Region Whites": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/2858.png",
+    "sname": "LAHW",
+    "id": "2858"
+  },
+  "Federally Administered Tribal Areas": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/3001.png",
+    "sname": "FATA",
+    "id": "3001"
+  },
+  "Bangladesh Under-19s": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/672.png",
+    "sname": "BAN19",
+    "id": "672"
+  },
+  "Malaysia Under-19s": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/2309.png",
+    "sname": "MAL19",
+    "id": "2309"
+  },
+  "Sri Lanka Under-19s": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/3617.png",
+    "sname": "SL19",
+    "id": "3617"
+  },
+  "India Under-19s": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1803.png",
+    "sname": "IND19",
+    "id": "1803"
+  },
+  "Nepal Under-19s": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/2320.png",
+    "sname": "NEP19",
+    "id": "2320"
+  },
+  "Pakistan Under-19s": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/2964.png",
+    "sname": "PAK19",
+    "id": "2964"
+  },
+  "United Arab Emirates Under-19s": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/3675.png",
+    "sname": "UAE19",
+    "id": "3675"
+  },
+  "Southern Rocks": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/424007.png",
+    "sname": "ROCKS",
+    "id": "424007"
+  },
+  "Zimbabwe A": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/3858.png",
+    "sname": "ZIM-A",
+    "id": "3858"
+  },
+  "Ireland A": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/2223.png",
+    "sname": "IRE-A",
+    "id": "2223"
+  },
+  "Uganda Women": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/3667.png",
+    "sname": "UGA-W",
+    "id": "3667"
+  },
+  "Namibia Women": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/545928.png",
+    "sname": "NAM-W",
+    "id": "545928"
+  },
+  "Rwanda Women": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/383829.png",
+    "sname": "RWA-W",
+    "id": "383829"
+  },
+  "United States of America Women": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/405379.png",
+    "sname": "USA-W",
+    "id": "405379"
+  },
+  "Dolphins Women": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1334886.png",
+    "sname": "DOL-W",
+    "id": "1334886"
+  },
+  "Lions Women": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1334890.png",
+    "sname": "LIO-W",
+    "id": "1334890"
+  },
+  "Titans Women": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1334887.png",
+    "sname": "TTN-W",
+    "id": "1334887"
+  },
+  "Hong Kong Cricket Club": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1512.png",
+    "sname": "HKGCC",
+    "id": "1512"
+  },
+  "Pakistan Association of Hong Kong": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/918647.png",
+    "sname": "PAHKG",
+    "id": "918647"
+  },
+  "Kowloon Cricket Club": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/1521.png",
+    "sname": "KOW",
+    "id": "1521"
+  },
+  "Diasqua Little Sai Wan Cricket Club": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/918645.png",
+    "sname": "DLSWC",
+    "id": "918645"
+  },
+  "Boland Women": {
+    "logo": "https://a.espncdn.com/i/teamlogos/cricket/500/3162.png",
+    "sname": "BolWm",
+    "id": "3162"
+  }
+}

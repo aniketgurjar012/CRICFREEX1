@@ -228,6 +228,179 @@ def normalize_status_string(status, start_date=None, venue=None, match_text=""):
     return status
 
 
+# =========================================================
+# CRICINFO UNIVERSAL TEAM LOGOS & SHORT NAMES
+# =========================================================
+CRICINFO_LOGOS_LOCK = threading.Lock()
+DYNAMIC_CRICINFO_LOGOS: dict[str, dict[str, Any]] = {}
+CRICINFO_CORE_LOGOS: dict[str, dict[str, Any]] = {}
+
+
+def clean_team_name(name: str) -> str:
+    if not name:
+        return ""
+    cleaned = re.sub(r'\s*\([^)]*\)', '', str(name)).strip()
+    return cleaned or str(name).strip()
+
+
+def normalize_team_key(name: str) -> str:
+    cleaned = clean_team_name(name).lower()
+    return re.sub(r'[^a-z0-9]', '', cleaned)
+
+
+_INTL_TEAM_IDS: dict[str, tuple[int, str]] = {
+    "india": (6, "IND"),
+    "ind": (6, "IND"),
+    "australia": (2, "AUS"),
+    "aus": (2, "AUS"),
+    "england": (1, "ENG"),
+    "eng": (1, "ENG"),
+    "south africa": (3, "SA"),
+    "rsa": (3, "SA"),
+    "sa": (3, "SA"),
+    "pakistan": (7, "PAK"),
+    "pak": (7, "PAK"),
+    "new zealand": (5, "NZ"),
+    "nz": (5, "NZ"),
+    "sri lanka": (8, "SL"),
+    "sl": (8, "SL"),
+    "west indies": (4, "WI"),
+    "wi": (4, "WI"),
+    "bangladesh": (25, "BAN"),
+    "ban": (25, "BAN"),
+    "afghanistan": (40, "AFG"),
+    "afg": (40, "AFG"),
+    "zimbabwe": (9, "ZIM"),
+    "zim": (9, "ZIM"),
+    "ireland": (29, "IRE"),
+    "ire": (29, "IRE"),
+    "netherlands": (15, "NED"),
+    "ned": (15, "NED"),
+    "scotland": (30, "SCO"),
+    "sco": (30, "SCO"),
+    "nepal": (33, "NEP"),
+    "nep": (33, "NEP"),
+    "united states": (11, "USA"),
+    "usa": (11, "USA"),
+    "united arab emirates": (27, "UAE"),
+    "uae": (27, "UAE"),
+    "oman": (37, "OMA"),
+    "oma": (37, "OMA"),
+    "namibia": (28, "NAM"),
+    "nam": (28, "NAM"),
+    "canada": (12, "CAN"),
+    "can": (12, "CAN"),
+    "papua new guinea": (20, "PNG"),
+    "png": (20, "PNG"),
+    "hong kong": (19, "HK"),
+    "hk": (19, "HK"),
+    "kenya": (26, "KEN"),
+    "ken": (26, "KEN"),
+    "uganda": (24, "UGA"),
+    "uga": (24, "UGA"),
+    "kuwait": (38, "KUW"),
+    "kuw": (38, "KUW"),
+    "qatar": (136, "QAT"),
+    "qat": (136, "QAT"),
+    "jersey": (218211, "JER"),
+    "denmark": (13, "DEN"),
+    "italy": (31, "ITA"),
+    "malaysia": (36, "MAS"),
+    "singapore": (22, "SIN"),
+}
+
+
+def _init_cricinfo_logos():
+    with CRICINFO_LOGOS_LOCK:
+        for name_key, (tid, sname) in _INTL_TEAM_IDS.items():
+            CRICINFO_CORE_LOGOS[name_key] = {
+                "logo": f"https://a.espncdn.com/i/teamlogos/cricket/500/{tid}.png",
+                "sname": sname,
+                "name": name_key.title()
+            }
+        cache_path = PROJECT_DIR / "cricinfo_teams_cache.json"
+        if cache_path.exists():
+            try:
+                with open(cache_path, encoding="utf-8") as f:
+                    data = json.load(f)
+                    for raw_name, info in data.items():
+                        c_name = clean_team_name(raw_name)
+                        k = normalize_team_key(raw_name)
+                        if k and info.get("logo"):
+                            CRICINFO_CORE_LOGOS[k] = {
+                                "logo": info["logo"],
+                                "sname": info.get("sname") or "",
+                                "name": c_name
+                            }
+                            if c_name.lower() != k:
+                                CRICINFO_CORE_LOGOS[c_name.lower()] = {
+                                    "logo": info["logo"],
+                                    "sname": info.get("sname") or "",
+                                    "name": c_name
+                                }
+                            if info.get("sname"):
+                                CRICINFO_CORE_LOGOS[info["sname"].lower()] = {
+                                    "logo": info["logo"],
+                                    "sname": info["sname"],
+                                    "name": c_name
+                                }
+            except Exception as e:
+                logger.warning("Error preloading cricinfo_teams_cache.json: %s", e)
+
+
+_init_cricinfo_logos()
+
+
+def get_team_cricinfo_info(team_name: str, team_sname: str = "") -> dict[str, Any] | None:
+    if not team_name:
+        return None
+    k1 = normalize_team_key(team_name)
+    k2 = normalize_team_key(team_sname) if team_sname else ""
+
+    with CRICINFO_LOGOS_LOCK:
+        if k1 in DYNAMIC_CRICINFO_LOGOS:
+            return DYNAMIC_CRICINFO_LOGOS[k1]
+        if k2 and k2 in DYNAMIC_CRICINFO_LOGOS:
+            return DYNAMIC_CRICINFO_LOGOS[k2]
+
+        if k1 in CRICINFO_CORE_LOGOS:
+            return CRICINFO_CORE_LOGOS[k1]
+        if k2 and k2 in CRICINFO_CORE_LOGOS:
+            return CRICINFO_CORE_LOGOS[k2]
+
+        if len(k1) >= 4:
+            for ck, cinfo in CRICINFO_CORE_LOGOS.items():
+                if len(ck) >= 4 and (k1 in ck or ck in k1):
+                    return cinfo
+
+    return None
+
+
+def attach_cricinfo_logo(team_dict: dict[str, Any] | None) -> None:
+    if not isinstance(team_dict, dict):
+        return
+
+    img_id = team_dict.get("imageId")
+    if img_id and not str(img_id).startswith("http"):
+        team_dict["cricbuzzLogo"] = f"https://static.cricbuzz.com/a/img/v1/i1/c{img_id}/i.jpg"
+
+    raw_name = team_dict.get("teamName") or ""
+    raw_sname = team_dict.get("teamSName") or ""
+    cleaned_name = clean_team_name(raw_name)
+
+    ci_info = get_team_cricinfo_info(raw_name, raw_sname)
+    if ci_info and ci_info.get("logo"):
+        team_dict["logo"] = ci_info["logo"]
+        team_dict["cricinfoLogo"] = ci_info["logo"]
+        if not raw_sname or raw_sname == raw_name:
+            if ci_info.get("sname"):
+                team_dict["teamSName"] = ci_info["sname"]
+    elif team_dict.get("cricbuzzLogo"):
+        team_dict["logo"] = team_dict["cricbuzzLogo"]
+
+    team_dict["teamName"] = cleaned_name or raw_name
+
+
 def extract_matches(html):
 
     payloads = decode_next(html)
@@ -268,6 +441,11 @@ def extract_matches(html):
                         f"{info.get('seriesName', '')} {info.get('matchDesc', '')}"
                     )
 
+                    t1_dict = dict(info.get("team1", {}))
+                    t2_dict = dict(info.get("team2", {}))
+                    attach_cricinfo_logo(t1_dict)
+                    attach_cricinfo_logo(t2_dict)
+
                     item = {
                         "id": mid,
                         "series": info.get("seriesName", ""),
@@ -277,8 +455,8 @@ def extract_matches(html):
                         "state": info.get("state", ""),
                         "status": clean_status,
                         "startDate": info.get("startDate"),
-                        "team1": info.get("team1", {}),
-                        "team2": info.get("team2", {}),
+                        "team1": t1_dict,
+                        "team2": t2_dict,
                         "venue": info.get("venueInfo", {}),
                         "score": obj.get("matchScore", {}),
                         "battingTeam": info.get("currBatTeamId")
@@ -859,8 +1037,42 @@ def fetch_cricinfo_matches() -> list[dict[str, Any]]:
                             c1_name = c1.get("displayName") or c1.get("name") or "Team 1"
                             c2_name = c2.get("displayName") or c2.get("name") or "Team 2"
 
+                            # Dynamically record latest competitor logos from Cricinfo
+                            with CRICINFO_LOGOS_LOCK:
+                                if c1.get("logo"):
+                                    k1 = normalize_team_key(c1_name)
+                                    DYNAMIC_CRICINFO_LOGOS[k1] = {
+                                        "logo": c1["logo"],
+                                        "sname": c1.get("abbreviation") or "",
+                                        "name": clean_team_name(c1_name)
+                                    }
+                                if c2.get("logo"):
+                                    k2 = normalize_team_key(c2_name)
+                                    DYNAMIC_CRICINFO_LOGOS[k2] = {
+                                        "logo": c2["logo"],
+                                        "sname": c2.get("abbreviation") or "",
+                                        "name": clean_team_name(c2_name)
+                                    }
+
                             c1_score_str = str(c1.get("score") or "").strip()
                             c2_score_str = str(c2.get("score") or "").strip()
+
+                            t1_obj = {
+                                "teamName": clean_team_name(c1_name),
+                                "teamSName": c1.get("abbreviation") or c1_name[:4].upper(),
+                                "logo": c1.get("logo") or "",
+                                "cricinfoLogo": c1.get("logo") or "",
+                                "imageId": c1.get("logo") or None
+                            }
+                            t2_obj = {
+                                "teamName": clean_team_name(c2_name),
+                                "teamSName": c2.get("abbreviation") or c2_name[:4].upper(),
+                                "logo": c2.get("logo") or "",
+                                "cricinfoLogo": c2.get("logo") or "",
+                                "imageId": c2.get("logo") or None
+                            }
+                            attach_cricinfo_logo(t1_obj)
+                            attach_cricinfo_logo(t2_obj)
 
                             match_obj = {
                                 "id": f"ci_{cid}",
@@ -871,18 +1083,8 @@ def fetch_cricinfo_matches() -> list[dict[str, Any]]:
                                 "status": long_status,
                                 "startDate": start_date_ms,
                                 "venue": venue_dict,
-                                "team1": {
-                                    "teamName": c1_name,
-                                    "teamSName": c1.get("abbreviation") or c1_name[:4].upper(),
-                                    "logo": c1.get("logo") or "",
-                                    "imageId": c1.get("logo") or None
-                                },
-                                "team2": {
-                                    "teamName": c2_name,
-                                    "teamSName": c2.get("abbreviation") or c2_name[:4].upper(),
-                                    "logo": c2.get("logo") or "",
-                                    "imageId": c2.get("logo") or None
-                                },
+                                "team1": t1_obj,
+                                "team2": t2_obj,
                                 "score": {
                                     "team1Score": _parse_cricinfo_score(c1_score_str),
                                     "team2Score": _parse_cricinfo_score(c2_score_str)
@@ -1195,17 +1397,21 @@ def sync_allrounder_streams() -> dict[str, list[dict[str, Any]]]:
                         "published": True,
                         "sort_order": 0
                     })
-                    teams = [part.strip() for part in re.split(r'\s+vs\s+|\s+v\s+', title, flags=re.I)]
+                    teams = [clean_team_name(part.strip()) for part in re.split(r'\s+vs\s+|\s+v\s+', title, flags=re.I)]
                     t1_n = teams[0] if len(teams) > 0 and teams[0] else "Team 1"
                     t2_n = teams[1] if len(teams) > 1 and teams[1] else "Team 2"
+                    t1_obj = {"teamName": t1_n, "teamSName": t1_n[:4].upper()}
+                    t2_obj = {"teamName": t2_n, "teamSName": t2_n[:4].upper()}
+                    attach_cricinfo_logo(t1_obj)
+                    attach_cricinfo_logo(t2_obj)
                     new_extra_matches[ex_id] = {
                         "id": ex_id,
                         "series": "Live Streaming",
                         "description": title,
                         "state": "Live",
                         "status": "Live Streaming",
-                        "team1": {"teamName": t1_n, "teamSName": t1_n[:4].upper()},
-                        "team2": {"teamName": t2_n, "teamSName": t2_n[:4].upper()},
+                        "team1": t1_obj,
+                        "team2": t2_obj,
                         "venue": {"ground": "Live Stream"},
                         "score": {},
                         "isSynthetic": True,
@@ -1280,17 +1486,21 @@ def sync_allrounder_streams() -> dict[str, list[dict[str, Any]]]:
                                 "published": True,
                                 "sort_order": 0
                             })
-                            w_teams = [part.strip() for part in re.split(r'\s+vs\s+|\s+v\s+', title, flags=re.I)]
+                            w_teams = [clean_team_name(part.strip()) for part in re.split(r'\s+vs\s+|\s+v\s+', title, flags=re.I)]
                             wt1_n = w_teams[0] if len(w_teams) > 0 and w_teams[0] else "Team 1"
                             wt2_n = w_teams[1] if len(w_teams) > 1 and w_teams[1] else "Team 2"
+                            wt1_obj = {"teamName": wt1_n, "teamSName": wt1_n[:4].upper()}
+                            wt2_obj = {"teamName": wt2_n, "teamSName": wt2_n[:4].upper()}
+                            attach_cricinfo_logo(wt1_obj)
+                            attach_cricinfo_logo(wt2_obj)
                             new_extra_matches[ex_w_id] = {
                                 "id": ex_w_id,
                                 "series": "Live Streaming",
                                 "description": title,
                                 "state": "Live",
                                 "status": "Live Streaming",
-                                "team1": {"teamName": wt1_n, "teamSName": wt1_n[:4].upper()},
-                                "team2": {"teamName": wt2_n, "teamSName": wt2_n[:4].upper()},
+                                "team1": wt1_obj,
+                                "team2": wt2_obj,
                                 "venue": {"ground": "Live Stream"},
                                 "score": {},
                                 "isSynthetic": True,
@@ -1374,6 +1584,17 @@ def force_refresh_auto_servers():
         "servers": result,
         "last_sync": LAST_AUTO_SYNC_TIME
     }
+
+
+@app.get("/api/team-logos")
+def get_team_logos():
+    merged: dict[str, Any] = {}
+    with CRICINFO_LOGOS_LOCK:
+        for k, v in CRICINFO_CORE_LOGOS.items():
+            merged[k] = v
+        for k, v in DYNAMIC_CRICINFO_LOGOS.items():
+            merged[k] = v
+    return {"success": True, "count": len(merged), "logos": merged}
 
 
 @app.get("/api/matches/{category}")
@@ -1823,9 +2044,11 @@ def get_match(match_id: str):
                         "state": next((d["value"] for d in info_data["details"] if d.get("label") == "State"), "Live"),
                         "status": next((d["value"] for d in info_data["details"] if d.get("label") == "Status"), "Live"),
                         "venue": {"ground": next((d["value"] for d in info_data["details"] if d.get("label") == "Venue"), "")},
-                        "team1": info_data["teams"][0] if len(info_data.get("teams", [])) > 0 else {"teamName": "Team 1"},
-                        "team2": info_data["teams"][1] if len(info_data.get("teams", [])) > 1 else {"teamName": "Team 2"}
+                        "team1": dict(info_data["teams"][0]) if len(info_data.get("teams", [])) > 0 else {"teamName": "Team 1"},
+                        "team2": dict(info_data["teams"][1]) if len(info_data.get("teams", [])) > 1 else {"teamName": "Team 2"}
                     }
+                    attach_cricinfo_logo(constructed["team1"])
+                    attach_cricinfo_logo(constructed["team2"])
                     with AUTO_SERVERS_LOCK:
                         if mid_str in AUTO_MATCH_SERVERS:
                             constructed["auto_servers"] = AUTO_MATCH_SERVERS[mid_str]
