@@ -100,6 +100,8 @@
 
   function normalizeMatchStatus(status, match) {
     if (!status || typeof status !== "string") return status || "";
+    if (/\bIST\b/.test(status)) return status; // Already formatted with IST by backend
+
     const isOutside = isMatchOutsideIndia(match);
 
     if (match?.startDate && /starts\s+at/i.test(status)) {
@@ -667,29 +669,31 @@
 
   function isMatchStartingSoon(match) {
     if (!match?.startDate) return false;
-    const startMs = Number(match.startDate);
+    let startMs = Number(match.startDate);
     if (!startMs || isNaN(startMs)) return false;
-    // 1 hour before match start time (3600 * 1000 ms)
+    if (startMs < 1e11) startMs *= 1000;
     const diffMs = startMs - Date.now();
-    return diffMs > 0 && diffMs <= 3600000 && !isCompletedMatch(match);
+    // 1 hour before scheduled start time (diffMs <= 3600000) OR start time already passed (diffMs <= 0)
+    // Matches remain in live section until completed!
+    return diffMs <= 3600000 && !isCompletedMatch(match);
   }
 
   function isLiveMatch(match) {
     if (!match) return false;
     if (isCompletedMatch(match)) return false;
     if (isMatchStartingSoon(match)) return true;
-    return [
-      "in progress",
-      "live",
-      "toss",
-      "stumps",
-      "lunch",
-      "tea",
-      "innings break",
-      "drinks",
-      "rain delay",
-      "delayed"
-    ].includes(String(match.state || "").trim().toLowerCase());
+    const stateStr = String(match.state || "").trim().toLowerCase();
+    const statusStr = String(match.status || "").trim().toLowerCase();
+    const liveStates = [
+      "in progress", "live", "toss", "stumps", "lunch", "tea", "innings break",
+      "break", "drinks", "rain delay", "delayed", "bad light", "badlight",
+      "session", "day 1", "day 2", "day 3", "day 4", "day 5"
+    ];
+    if (liveStates.some(s => stateStr.includes(s))) return true;
+    const liveKeywords = [
+      "opt to", "trail by", "lead by", "need ", "require ", "target", "chasing", "innings"
+    ];
+    return liveKeywords.some(k => statusStr.includes(k));
   }
 
   function isCompletedMatch(match) {
@@ -704,7 +708,8 @@
       "canceled",
       "no result",
       "drawn",
-      "forfeit"
+      "forfeit",
+      "result"
     ].includes(s)) {
       return true;
     }
@@ -725,10 +730,10 @@
 
   function isUpcomingMatch(match) {
     if (!match) return false;
-    if (isMatchStartingSoon(match)) return false;
     if (isCompletedMatch(match)) return false;
-    const s = String(match?.state || "").trim().toLowerCase();
-    return ["preview", "upcoming", "scheduled"].includes(s);
+    if (isLiveMatch(match)) return false;
+    if (isMatchStartingSoon(match)) return false;
+    return true;
   }
 
   function shouldAllowWatchLinks(match) {
@@ -1121,17 +1126,31 @@
 
   function formatMatchScoreDisplay(score, isCb = false) {
     if (!score) return isCb ? "Yet to bat" : "LIVE";
-    if (typeof score === "string" && score.trim()) return score.trim();
-    if (score.summary && typeof score.summary === "string" && score.summary.trim()) return score.summary.trim();
+    if (typeof score === "string") {
+      const s = score.trim();
+      if (!s || s === "0/0" || s === "0/0 (0)" || s === "0") return isCb ? "Yet to bat" : "LIVE";
+      return s;
+    }
+    if (score.summary && typeof score.summary === "string" && score.summary.trim()) {
+      const s = score.summary.trim();
+      if (s && s !== "0/0" && s !== "0/0 (0)" && s !== "0") return s;
+    }
     if (!Object.keys(score).length) return isCb ? "Yet to bat" : "LIVE";
     const parts = Object.values(score).map(innings => {
       if (!innings) return null;
-      if (typeof innings === "string" && innings.trim()) return innings.trim();
-      if (innings.summary && typeof innings.summary === "string" && innings.summary.trim()) return innings.summary.trim();
+      if (typeof innings === "string") {
+        const s = innings.trim();
+        return (s && s !== "0/0" && s !== "0/0 (0)" && s !== "0") ? s : null;
+      }
+      if (innings.summary && typeof innings.summary === "string") {
+        const s = innings.summary.trim();
+        return (s && s !== "0/0" && s !== "0/0 (0)" && s !== "0") ? s : null;
+      }
       if (innings.runs == null && innings.wickets == null && innings.overs == null) return null;
       const runs = innings.runs ?? 0;
       const wkts = innings.wickets;
       const ov = innings.overs;
+      if (runs === 0 && (wkts === 0 || wkts == null) && (ov === 0 || ov == null)) return null;
       const wktsStr = (wkts != null && wkts !== 10) ? `/${wkts}` : (wkts === 10 ? "/10" : "");
       const ovStr = ov != null ? ` (${ov})` : "";
       return `${runs}${wktsStr}${ovStr}`;
@@ -2103,10 +2122,32 @@
       const _parsed = JSON.parse(_cachedL);
       if (Array.isArray(_parsed) && _parsed.length) {
         _matchDataCache.live = _parsed;
-        if (!state.allKnownMatches) state.allKnownMatches = {};
-        _parsed.forEach(m => { if (m?.id) state.allKnownMatches[String(m.id)] = m; });
       }
     }
+    const _cachedUp = localStorage.getItem("cricfreex_cached_upcoming_matches");
+    if (_cachedUp) {
+      const _parsedUp = JSON.parse(_cachedUp);
+      if (Array.isArray(_parsedUp) && _parsedUp.length) {
+        _matchDataCache.upcoming = _parsedUp;
+      }
+    }
+    const _cachedRec = localStorage.getItem("cricfreex_cached_recent_matches");
+    if (_cachedRec) {
+      const _parsedRec = JSON.parse(_cachedRec);
+      if (Array.isArray(_parsedRec) && _parsedRec.length) {
+        _matchDataCache.recent = _parsedRec;
+      }
+    }
+    const _cachedAll = localStorage.getItem("cricfreex_all_matches");
+    if (_cachedAll) {
+      state.allKnownMatches = JSON.parse(_cachedAll) || {};
+    }
+    if (!state.allKnownMatches) state.allKnownMatches = {};
+    Object.values(_matchDataCache).forEach(arr => {
+      if (Array.isArray(arr)) {
+        arr.forEach(m => { if (m?.id) state.allKnownMatches[String(m.id)] = m; });
+      }
+    });
     const _cachedExt = localStorage.getItem("cricfreex_cached_extra_streams");
     if (_cachedExt) {
       const _parsedExt = JSON.parse(_cachedExt);
@@ -2135,6 +2176,7 @@
         _matchDataCache.live = liveOnly;
         try {
           localStorage.setItem("cricfreex_cached_live_matches", JSON.stringify(liveOnly));
+          localStorage.setItem("cricfreex_all_matches", JSON.stringify(state.allKnownMatches || {}));
         } catch (e) {}
         if (!state.allKnownMatches) state.allKnownMatches = {};
         liveOnly.forEach(m => { if (m?.id) state.allKnownMatches[String(m.id)] = m; });
@@ -2152,6 +2194,10 @@
     request("/api/matches/recent").then(res => {
       if (res && Array.isArray(res.matches)) {
         _matchDataCache.recent = res.matches;
+        try {
+          localStorage.setItem("cricfreex_cached_recent_matches", JSON.stringify(res.matches));
+          localStorage.setItem("cricfreex_all_matches", JSON.stringify(state.allKnownMatches || {}));
+        } catch (e) {}
         if (!state.allKnownMatches) state.allKnownMatches = {};
         res.matches.forEach(m => { if (m?.id) state.allKnownMatches[String(m.id)] = m; });
       }
@@ -2160,6 +2206,10 @@
     request("/api/matches/upcoming").then(res => {
       if (res && Array.isArray(res.matches)) {
         _matchDataCache.upcoming = res.matches;
+        try {
+          localStorage.setItem("cricfreex_cached_upcoming_matches", JSON.stringify(res.matches));
+          localStorage.setItem("cricfreex_all_matches", JSON.stringify(state.allKnownMatches || {}));
+        } catch (e) {}
         if (!state.allKnownMatches) state.allKnownMatches = {};
         res.matches.forEach(m => { if (m?.id) state.allKnownMatches[String(m.id)] = m; });
       }
@@ -2194,6 +2244,10 @@
       matches = result.matches || [];
       _matchDataCache[category] = matches;
       state.matches = matches;
+      try {
+        localStorage.setItem(`cricfreex_cached_${category}_matches`, JSON.stringify(matches));
+        localStorage.setItem("cricfreex_all_matches", JSON.stringify(state.allKnownMatches || {}));
+      } catch (e) {}
       matches.forEach(m => {
         if (m.auto_servers?.length) {
           state.autoServers[String(m.id)] = m.auto_servers;
@@ -3673,10 +3727,13 @@
       if (!match) {
         match = {
           id: matchId,
-          series: "Cricket Match",
-          description: "Live Match",
+          series: "Live Cricket",
+          description: "Match",
           state: "Live",
-          isLiveStream: true
+          status: "Loading match details...",
+          isLiveStream: true,
+          team1: { teamName: "Loading..." },
+          team2: { teamName: "Loading..." }
         };
       }
       // Fetch specific match object immediately in parallel
@@ -3729,6 +3786,29 @@
   }
 
   async function restoreRoute(push = false) {
+    const isReload = (function() {
+      try {
+        const nav = performance.getEntriesByType && performance.getEntriesByType("navigation")[0];
+        if (nav && nav.type === "reload") return true;
+        if (performance.navigation && performance.navigation.type === 1) return true;
+      } catch (e) {}
+      return false;
+    })();
+
+    if (isReload) {
+      state.selectedMatch = null;
+      state.activeWatch = null;
+      closeCricketPlayer(false);
+      try {
+        sessionStorage.removeItem("cricfreex_auth_pass");
+        sessionStorage.removeItem("cricfreex_session_active");
+      } catch (e) {}
+      const cleanPath = location.pathname.replace(/\/index\.html$/i, "") || "/";
+      try { history.replaceState(null, "", cleanPath); } catch (e) {}
+      selectPage("live", false);
+      return;
+    }
+
     const params = new URLSearchParams(location.search);
     const hash = location.hash;
 
@@ -3774,24 +3854,6 @@
         document.getElementById("suggestionSection")?.scrollIntoView({ behavior: "smooth", block: "center" });
         document.getElementById("suggestionInput")?.focus();
       }, 350);
-      return;
-    }
-
-    const isReload = (function() {
-      try {
-        const nav = performance.getEntriesByType && performance.getEntriesByType("navigation")[0];
-        if (nav && nav.type === "reload") return true;
-        if (performance.navigation && performance.navigation.type === 1) return true;
-      } catch (e) {}
-      return false;
-    })();
-
-    if (isReload) {
-      state.selectedMatch = null;
-      closeCricketPlayer(false);
-      const cleanPath = location.pathname.replace(/\/index\.html$/i, "") || "/";
-      try { history.replaceState(null, "", cleanPath); } catch (e) {}
-      selectPage("live", false);
       return;
     }
 

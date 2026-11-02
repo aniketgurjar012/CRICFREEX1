@@ -15,6 +15,36 @@
             document.documentElement.setAttribute("data-theme", "light");
         }
         (function() {
+            // Anti-DevTools & Anti-Inspect Security
+            document.addEventListener("contextmenu", function(e) {
+                e.preventDefault();
+                return false;
+            }, true);
+            document.addEventListener("keydown", function(e) {
+                if (e.key === "F12" || e.keyCode === 123) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    return false;
+                }
+                if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "I" || e.key === "i" || e.key === "J" || e.key === "j" || e.key === "C" || e.key === "c")) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    return false;
+                }
+                if ((e.ctrlKey || e.metaKey) && (e.key === "U" || e.key === "u")) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    return false;
+                }
+            }, true);
+            if (location.hostname !== "localhost" && location.hostname !== "127.0.0.1") {
+                try {
+                    console.log = function() {};
+                    console.debug = function() {};
+                    console.info = function() {};
+                } catch(e) {}
+            }
+
             var isReload = false;
             try {
                 var nav = performance.getEntriesByType && performance.getEntriesByType("navigation")[0];
@@ -24,13 +54,13 @@
             if (isReload) {
                 sessionStorage.removeItem("cricfreex_auth_pass");
                 localStorage.removeItem("cricfreex_auth_pass");
-                if (window.location.search) {
+                if (window.location.search || window.location.hash) {
                     var cleanPath = window.location.pathname.replace(/\/index\.html$/i, "") || "/";
                     try { window.history.replaceState(null, "", cleanPath); } catch(e) {}
                 }
             }
-            var auth = (sessionStorage.getItem("cricfreex_auth_pass") || "").trim().toLowerCase();
-            if (!auth || (auth !== "roko" && auth !== "cric")) {
+            var auth = (sessionStorage.getItem("cricfreex_auth_pass") || "").trim();
+            if (!auth) {
                 document.documentElement.classList.add("site-access-locked");
             }
         })();

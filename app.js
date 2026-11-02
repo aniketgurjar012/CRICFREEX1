@@ -2065,9 +2065,9 @@ function initSiteAccessGate() {
 
     if (siteAccessUnlocked) return true;
 
-    const stored = (sessionStorage.getItem("cricfreex_auth_pass") || "").trim().toLowerCase();
-    const expected = (siteAccessConfig.password || "ROKO").trim().toLowerCase();
-    if (stored && (stored === expected || stored === "roko" || stored === "cric")) {
+    const stored = (sessionStorage.getItem("cricfreex_auth_pass") || "").trim();
+    const expected = (siteAccessConfig.password || "").trim();
+    if (expected && stored && stored.toLowerCase() === expected.toLowerCase()) {
       siteAccessUnlocked = true;
       hideGate();
       return true;
@@ -2125,15 +2125,15 @@ function initSiteAccessGate() {
       return;
     }
 
-    const expected = (siteAccessConfig.password || "ROKO").trim().toLowerCase();
-    if (val === expected || val === "roko" || val === "cric") {
+    const expected = (siteAccessConfig.password || "").trim();
+    if (expected && val.toLowerCase() === expected.toLowerCase()) {
       siteAccessUnlocked = true;
       if (gateTimer) {
         clearTimeout(gateTimer);
         gateTimer = null;
       }
       try {
-        sessionStorage.setItem("cricfreex_auth_pass", "ROKO");
+        sessionStorage.setItem("cricfreex_auth_pass", val);
         localStorage.removeItem("cricfreex_auth_pass");
       } catch (e) {}
 

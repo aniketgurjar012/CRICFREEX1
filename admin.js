@@ -303,14 +303,6 @@ async function loadAll(){
     cleanupFinishedWatchLinks();
     loadSuggestions();
     loadPasswordGate();
-    syncAllrounderToDatabase(false);
-    if (!window._adminAutoSyncInterval) {
-      window._adminAutoSyncInterval = setInterval(() => {
-        if (!document.hidden) {
-          syncAllrounderToDatabase(false);
-        }
-      }, 30000);
-    }
 
   }catch(error){
     console.error(error);
@@ -1068,10 +1060,6 @@ $("addWatchLink").addEventListener("click",()=>{
   addWatchLinkRow();
   updateWatchShareableLinks($("watchMatch").value);
 });
-
-  $("autoSyncAllrounderBtn")?.addEventListener("click", () => {
-    syncAllrounderToDatabase(true);
-  });
 
 $("refreshWatchMatches").addEventListener("click",()=>{
   loadCricketMatches($("watchMatchCategory").value);
