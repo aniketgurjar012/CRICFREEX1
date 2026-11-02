@@ -1051,9 +1051,15 @@ def fetch_cricinfo_matches() -> list[dict[str, Any]]:
 
     def _fetch_scoreboard(u: str):
         try:
-            r = session.get(u, timeout=5, headers=headers)
+            r = session.get(u, timeout=3, headers=headers)
             if r.status_code == 200:
                 return r.json()
+        except Exception:
+            pass
+        try:
+            req = urllib.request.Request(u, headers=headers)
+            with urllib.request.urlopen(req, timeout=3) as res:
+                return json.loads(res.read().decode("utf-8"))
         except Exception as e:
             logger.warning("Error fetching Cricinfo scoreboard (%s): %s", u, e)
         return None
@@ -1701,24 +1707,8 @@ def get_matches(category: str):
         raw_matches = extract_matches(html)
 
         if category == "upcoming":
-            # Cricbuzz full schedule categories: international, league, domestic, women
-            sched_paths = [
-                "/cricket-schedule/upcoming-series/international",
-                "/cricket-schedule/upcoming-series/league",
-                "/cricket-schedule/upcoming-series/domestic",
-                "/cricket-schedule/upcoming-series/women"
-            ]
-            seen_ids = {m.get("id") for m in raw_matches}
-            for sp in sched_paths:
-                try:
-                    s_html = fetch(sp, 60)
-                    for sm in extract_matches(s_html):
-                        sm_id = sm.get("id")
-                        if sm_id and sm_id not in seen_ids:
-                            seen_ids.add(sm_id)
-                            raw_matches.append(sm)
-                except Exception:
-                    pass
+            # Primary Cricbuzz upcoming page contains all today/tomorrow matches
+            pass
         elif category == "live":
             # Also extract upcoming matches and schedules so matches starting within 1 hour or start time passed appear in live section
             seen_ids = {m.get("id") for m in raw_matches}
