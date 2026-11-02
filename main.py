@@ -245,7 +245,25 @@ def clean_team_name(name: str) -> str:
 
 def normalize_team_key(name: str) -> str:
     cleaned = clean_team_name(name).lower()
+    cleaned = re.sub(r'\band\b', '', cleaned)
     return re.sub(r'[^a-z0-9]', '', cleaned)
+
+
+_KNOWN_TEAM_ALIASES: dict[str, str] = {
+    "centralstags": "centraldistricts",
+    "aucklandaces": "auckland",
+    "canterburykings": "canterbury",
+    "northernbrave": "northerndistricts",
+    "northernknights": "northerndistricts",
+    "otagovolts": "otago",
+    "wellingtonfirebirds": "wellington",
+    "jammukashmir": "jammukashmir",
+    "jammuandkashmir": "jammukashmir",
+    "jk": "jammukashmir",
+    "jandk": "jammukashmir",
+    "hyderabadindia": "hyderabad",
+    "hyderabad": "hyderabad",
+}
 
 
 _INTL_TEAM_IDS: dict[str, tuple[int, str]] = {
@@ -327,18 +345,28 @@ def _init_cricinfo_logos():
                         c_name = clean_team_name(raw_name)
                         k = normalize_team_key(raw_name)
                         if k and info.get("logo"):
-                            CRICINFO_CORE_LOGOS[k] = {
-                                "logo": info["logo"],
-                                "sname": info.get("sname") or "",
-                                "name": c_name
-                            }
-                            if c_name.lower() != k:
+                            if k not in CRICINFO_CORE_LOGOS:
+                                CRICINFO_CORE_LOGOS[k] = {
+                                    "logo": info["logo"],
+                                    "sname": info.get("sname") or "",
+                                    "name": c_name
+                                }
+                            # Register base key without women/division/region
+                            base = re.sub(r'\b(women|womens|division|region|whites|blues)\b', '', c_name, flags=re.I).strip()
+                            k_base = normalize_team_key(base)
+                            if k_base and k_base not in CRICINFO_CORE_LOGOS:
+                                CRICINFO_CORE_LOGOS[k_base] = {
+                                    "logo": info["logo"],
+                                    "sname": info.get("sname") or "",
+                                    "name": c_name
+                                }
+                            if c_name.lower() not in CRICINFO_CORE_LOGOS:
                                 CRICINFO_CORE_LOGOS[c_name.lower()] = {
                                     "logo": info["logo"],
                                     "sname": info.get("sname") or "",
                                     "name": c_name
                                 }
-                            if info.get("sname"):
+                            if info.get("sname") and info["sname"].lower() not in CRICINFO_CORE_LOGOS:
                                 CRICINFO_CORE_LOGOS[info["sname"].lower()] = {
                                     "logo": info["logo"],
                                     "sname": info["sname"],
@@ -358,17 +386,46 @@ def get_team_cricinfo_info(team_name: str, team_sname: str = "") -> dict[str, An
     k2 = normalize_team_key(team_sname) if team_sname else ""
 
     with CRICINFO_LOGOS_LOCK:
-        if k1 in DYNAMIC_CRICINFO_LOGOS:
-            return DYNAMIC_CRICINFO_LOGOS[k1]
-        if k2 and k2 in DYNAMIC_CRICINFO_LOGOS:
-            return DYNAMIC_CRICINFO_LOGOS[k2]
+        # 1. Exact match in dynamic or core
+        for k in (k1, k2):
+            if not k:
+                continue
+            if k in DYNAMIC_CRICINFO_LOGOS:
+                return DYNAMIC_CRICINFO_LOGOS[k]
+            if k in CRICINFO_CORE_LOGOS:
+                return CRICINFO_CORE_LOGOS[k]
 
-        if k1 in CRICINFO_CORE_LOGOS:
-            return CRICINFO_CORE_LOGOS[k1]
-        if k2 and k2 in CRICINFO_CORE_LOGOS:
-            return CRICINFO_CORE_LOGOS[k2]
+        # 2. Known alias match
+        for k in (k1, k2):
+            if k in _KNOWN_TEAM_ALIASES:
+                target_k = _KNOWN_TEAM_ALIASES[k]
+                if target_k in DYNAMIC_CRICINFO_LOGOS:
+                    return DYNAMIC_CRICINFO_LOGOS[target_k]
+                if target_k in CRICINFO_CORE_LOGOS:
+                    return CRICINFO_CORE_LOGOS[target_k]
 
+        # 3. Base name match (strip women, division, region, etc.)
+        base_name = re.sub(r'\b(women|womens|division|region|whites|blues)\b', '', team_name, flags=re.I).strip()
+        k_base = normalize_team_key(base_name)
+        if k_base and k_base != k1:
+            if k_base in DYNAMIC_CRICINFO_LOGOS:
+                return DYNAMIC_CRICINFO_LOGOS[k_base]
+            if k_base in CRICINFO_CORE_LOGOS:
+                return CRICINFO_CORE_LOGOS[k_base]
+
+        # 4. Suffix append attempt (e.g. try adding 'women', 'division', 'region')
+        for sfx in ("women", "division", "region"):
+            k_sfx = k_base + sfx
+            if k_sfx in DYNAMIC_CRICINFO_LOGOS:
+                return DYNAMIC_CRICINFO_LOGOS[k_sfx]
+            if k_sfx in CRICINFO_CORE_LOGOS:
+                return CRICINFO_CORE_LOGOS[k_sfx]
+
+        # 5. Partial token match
         if len(k1) >= 4:
+            for ck, cinfo in DYNAMIC_CRICINFO_LOGOS.items():
+                if len(ck) >= 4 and (k1 in ck or ck in k1):
+                    return cinfo
             for ck, cinfo in CRICINFO_CORE_LOGOS.items():
                 if len(ck) >= 4 and (k1 in ck or ck in k1):
                     return cinfo
@@ -1039,20 +1096,22 @@ def fetch_cricinfo_matches() -> list[dict[str, Any]]:
 
                             # Dynamically record latest competitor logos from Cricinfo
                             with CRICINFO_LOGOS_LOCK:
-                                if c1.get("logo"):
-                                    k1 = normalize_team_key(c1_name)
-                                    DYNAMIC_CRICINFO_LOGOS[k1] = {
-                                        "logo": c1["logo"],
-                                        "sname": c1.get("abbreviation") or "",
-                                        "name": clean_team_name(c1_name)
-                                    }
-                                if c2.get("logo"):
-                                    k2 = normalize_team_key(c2_name)
-                                    DYNAMIC_CRICINFO_LOGOS[k2] = {
-                                        "logo": c2["logo"],
-                                        "sname": c2.get("abbreviation") or "",
-                                        "name": clean_team_name(c2_name)
-                                    }
+                                for c_comp, c_raw in ((c1, c1_name), (c2, c2_name)):
+                                    if c_comp.get("logo"):
+                                        c_logo_u = c_comp["logo"]
+                                        c_abbr_u = c_comp.get("abbreviation") or ""
+                                        c_clean_u = clean_team_name(c_raw)
+                                        k_norm = normalize_team_key(c_raw)
+                                        entry = {
+                                            "logo": c_logo_u,
+                                            "sname": c_abbr_u,
+                                            "name": c_clean_u
+                                        }
+                                        DYNAMIC_CRICINFO_LOGOS[k_norm] = entry
+                                        base_u = re.sub(r'\b(women|womens|division|region|whites|blues)\b', '', c_clean_u, flags=re.I).strip()
+                                        k_base = normalize_team_key(base_u)
+                                        if k_base and k_base not in DYNAMIC_CRICINFO_LOGOS:
+                                            DYNAMIC_CRICINFO_LOGOS[k_base] = entry
 
                             c1_score_str = str(c1.get("score") or "").strip()
                             c2_score_str = str(c2.get("score") or "").strip()

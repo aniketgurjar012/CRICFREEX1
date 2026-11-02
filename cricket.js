@@ -874,19 +874,37 @@
     }, 100);
   }
 
+  const KNOWN_TEAM_ALIASES = {
+    "centralstags": "centraldistricts",
+    "aucklandaces": "auckland",
+    "canterburykings": "canterbury",
+    "northernbrave": "northerndistricts",
+    "northernknights": "northerndistricts",
+    "otagovolts": "otago",
+    "wellingtonfirebirds": "wellington",
+    "jammukashmir": "jammukashmir",
+    "jammuandkashmir": "jammukashmir",
+    "jk": "jammukashmir",
+    "jandk": "jammukashmir",
+    "hyderabadindia": "hyderabad",
+    "hyderabad": "hyderabad"
+  };
+
   function normalizeTeamLogoKey(name) {
     if (!name) return "";
-    return String(name).replace(/\s*\([^)]*\)/g, "").replace(/[^a-zA-Z0-9]/g, "").toLowerCase().trim();
+    let clean = String(name).replace(/\s*\([^)]*\)/g, "").toLowerCase().trim();
+    clean = clean.replace(/\band\b/g, "").replace(/&/g, "");
+    return clean.replace(/[^a-z0-9]/g, "").trim();
   }
 
   function getCricinfoLogoUrl(teamOrName) {
     if (!teamOrName) return null;
     if (typeof teamOrName === "object" && teamOrName) {
-      if (teamOrName.logo && /^https?:\/\//i.test(teamOrName.logo)) {
-        return teamOrName.logo;
-      }
       if (teamOrName.cricinfoLogo && /^https?:\/\//i.test(teamOrName.cricinfoLogo)) {
         return teamOrName.cricinfoLogo;
+      }
+      if (teamOrName.logo && /^https?:\/\//i.test(teamOrName.logo) && teamOrName.logo.includes("espncdn")) {
+        return teamOrName.logo;
       }
     }
     const name = typeof teamOrName === "object" && teamOrName
@@ -895,19 +913,43 @@
     const k = normalizeTeamLogoKey(name);
     if (!k) return null;
 
-    if (CRICINFO_TEAM_LOGOS[k]) {
-      const v = CRICINFO_TEAM_LOGOS[k];
-      return typeof v === "object" ? v.logo : v;
-    }
+    const resolve = (key) => {
+      if (!key) return null;
+      const v = CRICINFO_TEAM_LOGOS[key];
+      if (v) return typeof v === "object" ? v.logo : v;
+      return null;
+    };
+
+    let res = resolve(k);
+    if (res) return res;
 
     const lower = name.toLowerCase().trim();
-    if (CRICINFO_TEAM_LOGOS[lower]) {
-      const v = CRICINFO_TEAM_LOGOS[lower];
-      return typeof v === "object" ? v.logo : v;
-    }
+    res = resolve(lower);
+    if (res) return res;
 
     if (IPL_LOGOS[lower]) return IPL_LOGOS[lower];
     if (IPL_LOGOS[k]) return IPL_LOGOS[k];
+
+    if (KNOWN_TEAM_ALIASES[k]) {
+      res = resolve(KNOWN_TEAM_ALIASES[k]);
+      if (res) return res;
+    }
+
+    const baseName = name.replace(/\b(women|womens|division|region|whites|blues)\b/gi, "").trim();
+    const kBase = normalizeTeamLogoKey(baseName);
+    if (kBase && kBase !== k) {
+      res = resolve(kBase);
+      if (res) return res;
+      if (KNOWN_TEAM_ALIASES[kBase]) {
+        res = resolve(KNOWN_TEAM_ALIASES[kBase]);
+        if (res) return res;
+      }
+    }
+
+    for (const sfx of ["women", "division", "region"]) {
+      res = resolve(kBase + sfx);
+      if (res) return res;
+    }
 
     if (k.length >= 4) {
       for (const [key, val] of Object.entries(CRICINFO_TEAM_LOGOS)) {
