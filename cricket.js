@@ -1718,7 +1718,7 @@
     try {
       // Fetch FanCode, Willow, and backend auto-servers ALL IN PARALLEL with strict timeouts
       const [fcRes, wRes, beRes] = await Promise.allSettled([
-        fetchWithTimeout("https://sportlink-fancode10.pages.dev/fan.json", 3500),
+        fetchWithTimeout("https://raw.githubusercontent.com/drmlive/fancode-live-events/main/fancode.json", 3500),
         fetchWithTimeout("https://willow-api.sayanwork-studioo.workers.dev/", 2200),
         fetchWithTimeout(`${apiBase}/api/auto-servers`, 3000)
       ]);
@@ -1742,27 +1742,20 @@
       const unmatchedStreams = [];
       const extraCricbuzzLiveMatches = [];
 
-      if (fcRes.status === "fulfilled" && Array.isArray(fcRes.value?.matches)) {
-        for (const fc of fcRes.value.matches) {
-          const cat = String(fc.category || "").toLowerCase();
-          if (cat !== "cricket") continue;
-
+      if (fcRes.status === "fulfilled") {
+        const fcMatches = Array.isArray(fcRes.value) ? fcRes.value : (Array.isArray(fcRes.value?.matches) ? fcRes.value.matches : []);
+        for (const fc of fcMatches) {
           const status = String(fc.status || "").toUpperCase();
           const isLive = status.includes("LIVE") || fc.isLive === true;
           if (!isLive) continue;
-          let streamUrl = "";
-          const autoStreams = fc.auto_streams || {};
-          for (const lang of Object.keys(autoStreams)) {
-            const s = autoStreams[lang]?.streams || {};
-            streamUrl = s["1080p"] || s["720p"] || s["540p"] || "";
-            if (streamUrl) break;
-          }
-          if (!streamUrl) streamUrl = fc.streams?.primary || "";
-          if (!streamUrl) continue;
 
-          const title = fc.title || "";
-          const matchId = String(fc.match_id || "");
-          const playerUrl = `https://allrounderlive.in/fc-play?url=${encodeURIComponent(streamUrl)}&title=${encodeURIComponent(title)}&match_id=${encodeURIComponent(matchId)}`;
+          const cat = String(fc.event_category || fc.category || "").toLowerCase();
+          const rawTitle = fc.match_name || fc.title || "";
+          const matchId = String(fc.match_id || fc.id || "");
+          if (!matchId || !rawTitle) continue;
+
+          const playerUrl = `https://iosfancode.vercel.app/?watch=${encodeURIComponent(matchId)}`;
+          const title = rawTitle.replace(/\[.*?\]|\(.*?\)/g, "").trim() || rawTitle;
 
           let matched = false;
           for (const cb of candidateMatches) {

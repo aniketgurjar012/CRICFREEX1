@@ -1373,6 +1373,31 @@ def _sync_to_supabase(matched_servers: dict[str, list[dict[str, Any]]]):
                                 pass
                         except Exception:
                             pass
+
+        # 3. Delete any old Allrounder FanCode servers or ended FanCode servers
+        active_fancode_urls = {
+            s.get("media_url")
+            for servers in matched_servers.values()
+            for s in servers
+            if s.get("source") == "fancode" and s.get("media_url")
+        }
+        for r in existing_records:
+            m_url = str(r.get("media_url") or "")
+            pub_id = str(r.get("public_id") or "")
+            row_id = r.get("id")
+            # If it's an old Allrounder FanCode link (allrounderlive.in/fc-play) OR an auto_fc_ link no longer active in live feed:
+            if "allrounderlive.in/fc-play" in m_url or (pub_id.startswith("auto_fc_") and m_url not in active_fancode_urls):
+                if row_id:
+                    del_req = urllib.request.Request(
+                        f"{SUPABASE_URL}/rest/v1/content?id=eq.{row_id}",
+                        headers=headers,
+                        method="DELETE"
+                    )
+                    try:
+                        with urllib.request.urlopen(del_req, timeout=5):
+                            pass
+                    except Exception:
+                        pass
     except Exception as sup_err:
         logger.warning("Supabase auto-sync error: %s", sup_err)
 
@@ -1424,47 +1449,37 @@ def sync_allrounder_streams() -> dict[str, list[dict[str, Any]]]:
         new_extra_matches: dict[str, dict[str, Any]] = {}
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 
-        # 1. FanCode streams from allrounderlive
+        # 1. FanCode streams directly from FanCode live feed (iosfancode.vercel.app)
         try:
-            req = urllib.request.Request(
-                "https://sportlink-fancode10.pages.dev/fan.json",
-                headers=headers
-            )
+            fc_url = f"https://raw.githubusercontent.com/drmlive/fancode-live-events/main/fancode.json?t={int(time.time() * 1000)}"
+            req = urllib.request.Request(fc_url, headers=headers)
             with urllib.request.urlopen(req, timeout=8) as r:
-                fc_data = json.loads(r.read().decode("utf-8"))
-            for fc in fc_data.get("matches", []):
+                fc_raw = json.loads(r.read().decode("utf-8"))
+            fc_matches = fc_raw if isinstance(fc_raw, list) else fc_raw.get("matches", [])
+
+            for fc in fc_matches:
                 fc_status = str(fc.get("status", "")).upper()
-                if "LIVE" not in fc_status and fc_status != "":
+                if "LIVE" not in fc_status:
                     continue
 
-                stream_url = ""
-                auto_streams = fc.get("auto_streams", {})
-                for lang, lang_data in auto_streams.items():
-                    streams = lang_data.get("streams", {})
-                    stream_url = (
-                        streams.get("1080p") or
-                        streams.get("720p") or
-                        streams.get("540p") or ""
-                    )
-                    if stream_url:
-                        break
-                if not stream_url:
-                    stream_url = fc.get("streams", {}).get("primary", "")
-                if not stream_url:
+                cat = str(fc.get("event_category") or fc.get("category") or "").lower()
+                event_name = str(fc.get("event_name") or "")
+                raw_title = str(fc.get("match_name") or fc.get("title") or "")
+                match_id = str(fc.get("match_id") or fc.get("id") or "")
+                if not match_id or not raw_title:
                     continue
 
-                title = fc.get("title", "")
-                match_id = str(fc.get("match_id", ""))
-                params = urllib.parse.urlencode({
-                    "url": stream_url,
-                    "title": title,
-                    "match_id": match_id
-                })
-                player_url = f"https://allrounderlive.in/fc-play?{params}"
+                # Direct web player URL for FanCode stream
+                player_url = f"https://iosfancode.vercel.app/?watch={match_id}"
+
+                # Clean title for matching (strip [English], [Hindi], etc.)
+                clean_title = re.sub(r'\[.*?\]|\(.*?\)', '', raw_title).strip()
+                if not clean_title:
+                    clean_title = raw_title
 
                 matched = False
                 for cb in cb_list:
-                    if _match_stream_to_cb(title, cb):
+                    if _match_stream_to_cb(clean_title, cb):
                         matched = True
                         mid = str(cb["id"])
                         matched_servers.setdefault(mid, [])
@@ -1481,7 +1496,7 @@ def sync_allrounder_streams() -> dict[str, list[dict[str, Any]]]:
                         })
                         break
 
-                if not matched and str(fc.get("category", "")).lower() == "cricket":
+                if not matched and (cat == "cricket" or "cricket" in event_name.lower() or "cricket" in raw_title.lower() or "t20" in event_name.lower() or "league" in event_name.lower()):
                     ex_id = f"ex_fc_{match_id}"
                     matched_servers.setdefault(ex_id, [])
                     matched_servers[ex_id].append({
@@ -1495,7 +1510,7 @@ def sync_allrounder_streams() -> dict[str, list[dict[str, Any]]]:
                         "published": True,
                         "sort_order": 0
                     })
-                    teams = [clean_team_name(part.strip()) for part in re.split(r'\s+vs\s+|\s+v\s+', title, flags=re.I)]
+                    teams = [clean_team_name(part.strip()) for part in re.split(r'\s+vs\s+|\s+v\s+', clean_title, flags=re.I)]
                     t1_n = teams[0] if len(teams) > 0 and teams[0] else "Team 1"
                     t2_n = teams[1] if len(teams) > 1 and teams[1] else "Team 2"
                     t1_obj = {"teamName": t1_n, "teamSName": t1_n[:4].upper()}
@@ -1504,8 +1519,8 @@ def sync_allrounder_streams() -> dict[str, list[dict[str, Any]]]:
                     attach_cricinfo_logo(t2_obj)
                     new_extra_matches[ex_id] = {
                         "id": ex_id,
-                        "series": "Live Streaming",
-                        "description": title,
+                        "series": event_name or "Live Streaming",
+                        "description": clean_title,
                         "state": "Live",
                         "status": "Live Streaming",
                         "team1": t1_obj,
@@ -1516,7 +1531,7 @@ def sync_allrounder_streams() -> dict[str, list[dict[str, Any]]]:
                         "_category": "live"
                     }
         except Exception as e:
-            logger.warning("AutoStreamSync FanCode error: %s", e)
+            logger.warning("AutoStreamSync FanCode direct error: %s", e)
 
         # 2. Willow streams from allrounderlive
         if time.time() > _WILLOW_COOLDOWN_UNTIL:
