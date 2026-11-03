@@ -129,7 +129,17 @@ async function cleanupFinishedWatchLinks() {
     if (!response.ok) return;
     const result = await response.json();
     const recentMatches = Array.isArray(result.matches) ? result.matches : [];
-    const finishedMatchIds = new Set(recentMatches.map(m => String(m.id)));
+    const finishedMatchIds = new Set();
+    recentMatches.forEach(m => {
+      const s = String(m.state || "").trim().toLowerCase();
+      const st = String(m.status || "").trim().toLowerCase();
+      if ([
+        "complete", "completed", "abandon", "abandoned",
+        "cancelled", "canceled", "no result", "drawn", "forfeit"
+      ].includes(s) || st.includes("won by") || st.includes("match tied") || st.includes("no result") || st.includes("match drawn") || st.includes("match abandoned") || st.includes("match cancelled")) {
+        finishedMatchIds.add(String(m.id));
+      }
+    });
 
     const itemsToDelete = watchItems.filter(item =>
       finishedMatchIds.has(cricketWatchMatchId(item))

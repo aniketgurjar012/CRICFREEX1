@@ -1329,7 +1329,10 @@
         const res = await request("/api/matches/recent");
         recentMatches = Array.isArray(res?.matches) ? res.matches : [];
       }
-      const finishedIds = new Set((recentMatches || []).map(m => String(m.id)));
+      const finishedIds = new Set();
+      (recentMatches || []).forEach(m => {
+        if (isCompletedMatch(m)) finishedIds.add(String(m.id));
+      });
       if (state.matches && state.matches.length) {
         state.matches.forEach(m => {
           if (isCompletedMatch(m)) finishedIds.add(String(m.id));

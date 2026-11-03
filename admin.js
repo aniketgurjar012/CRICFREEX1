@@ -683,44 +683,36 @@ async function syncAllrounderToDatabase(manual = false) {
       } catch (e) {}
     }
 
-    // 2. Fetch FanCode & Willow streams in parallel
+    // 2. Fetch FanCode (direct feed) & Willow streams in parallel
     const [fcRes, wRes] = await Promise.allSettled([
-      fetch("https://sportlink-fancode10.pages.dev/fan.json").then(r => r.json()),
+      fetch("https://raw.githubusercontent.com/drmlive/fancode-live-events/main/fancode.json").then(r => r.json()),
       fetch("https://willow-api.sayanwork-studioo.workers.dev/").then(r => r.json())
     ]);
 
     const liveStreamsToInsert = [];
 
-    // FanCode streams
+    // FanCode direct streams
     if (fcRes.status === "fulfilled" && Array.isArray(fcRes.value?.matches)) {
       for (const fc of fcRes.value.matches) {
         const cat = String(fc.category || "").toLowerCase();
-        if (cat !== "cricket") continue;
+        const eventName = String(fc.event_name || "");
+        const rawTitle = String(fc.title || "");
         const status = String(fc.status || "").toUpperCase();
         const isLive = status.includes("LIVE") || fc.isLive === true;
         if (!isLive) continue;
 
-        let streamUrl = "";
-        const autoStreams = fc.auto_streams || {};
-        for (const lang of Object.keys(autoStreams)) {
-          const s = autoStreams[lang]?.streams || {};
-          streamUrl = s["1080p"] || s["720p"] || s["540p"] || "";
-          if (streamUrl) break;
-        }
-        if (!streamUrl) streamUrl = fc.streams?.primary || "";
-        if (!streamUrl) continue;
-
-        const title = fc.title || "";
         const matchId = String(fc.match_id || "");
-        const playerUrl = `https://allrounderlive.in/fc-play?url=${encodeURIComponent(streamUrl)}&title=${encodeURIComponent(title)}&match_id=${encodeURIComponent(matchId)}`;
+        if (!matchId) continue;
+        const playerUrl = `https://iosfancode.vercel.app/?watch=${encodeURIComponent(matchId)}`;
+        const cleanTitle = rawTitle.replace(/\[.*?\]|\(.*?\)/g, "").trim() || rawTitle;
 
         for (const cb of candidateMatches) {
-          if (matchStreamToCb(title, cb)) {
+          if (matchStreamToCb(cleanTitle, cb)) {
             liveStreamsToInsert.push({
               matchId: String(cb.id),
               source: "fancode",
               playerUrl,
-              title
+              title: rawTitle
             });
             break;
           }
@@ -834,7 +826,18 @@ async function cleanupFinishedWatchLinks(){
     if(!response.ok)return;
     const result=await response.json();
     const recentMatches=Array.isArray(result.matches)?result.matches:[];
-    const finishedMatchIds=new Set(recentMatches.map(m=>String(m.id)));
+    const finishedMatchIds=new Set();
+
+    recentMatches.forEach(m=>{
+      const s=String(m.state||"").trim().toLowerCase();
+      const st=String(m.status||"").trim().toLowerCase();
+      if([
+        "complete","completed","abandon","abandoned",
+        "cancelled","canceled","no result","drawn","forfeit"
+      ].includes(s) || st.includes("won by")||st.includes("match tied")||st.includes("no result")||st.includes("match drawn")||st.includes("match abandoned")||st.includes("match cancelled")){
+        finishedMatchIds.add(String(m.id));
+      }
+    });
 
     (watchMatches.live||[]).forEach(m=>{
       const s=String(m.state||"").trim().toLowerCase();
@@ -1023,7 +1026,7 @@ function updateWatchShareableLinks(matchId, records) {
   box.classList.remove("hidden");
 }
 
-function loadSelectedMatchLinks(){
+async function loadSelectedMatchLinks(){
   const matchId=$("watchMatch").value;
   selectedMatchLinks=matchId
     ?content.filter(item=>
@@ -1031,6 +1034,24 @@ function loadSelectedMatchLinks(){
       cricketWatchMatchId(item)===matchId
     )
     :[];
+
+  // If content in memory does not have servers yet, check if the match object has auto_servers or servers,
+  // or fetch directly from /api/auto-servers or Supabase!
+  if(matchId && !selectedMatchLinks.length){
+    const selectedMatch = (watchMatches.live || []).concat(watchMatches.upcoming || []).find(m => String(m.id) === matchId);
+    const autoList = selectedMatch?.servers || selectedMatch?.auto_servers || [];
+    if(autoList.length){
+      selectedMatchLinks = autoList;
+    } else {
+      try {
+        const autoRes = await fetch(`${CRICKET_API_BASE}/api/auto-servers`).then(r => r.json());
+        if(autoRes?.servers?.[matchId]){
+          selectedMatchLinks = autoRes.servers[matchId];
+        }
+      } catch(e){}
+    }
+  }
+
   $("watchLinkRows").replaceChildren();
   selectedMatchLinks.forEach(addWatchLinkRow);
   if(matchId&&!selectedMatchLinks.length){

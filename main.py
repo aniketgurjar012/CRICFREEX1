@@ -1362,6 +1362,9 @@ def _sync_to_supabase(matched_servers: dict[str, list[dict[str, Any]]]):
 
         for r_mid in recent_mids:
             if r_mid in existing_ids_by_mid:
+                # Don't delete if the stream is still actively live
+                if r_mid in matched_servers:
+                    continue
                 for row_id in existing_ids_by_mid[r_mid]:
                     if row_id:
                         del_req = urllib.request.Request(
@@ -1458,6 +1461,7 @@ def sync_allrounder_streams() -> dict[str, list[dict[str, Any]]]:
                 fc_raw = json.loads(r.read().decode("utf-8"))
             fc_matches = fc_raw if isinstance(fc_raw, list) else fc_raw.get("matches", [])
 
+            fc_live_urls = set()
             for fc in fc_matches:
                 fc_status = str(fc.get("status", "")).upper()
                 if "LIVE" not in fc_status:
@@ -1470,8 +1474,25 @@ def sync_allrounder_streams() -> dict[str, list[dict[str, Any]]]:
                 if not match_id or not raw_title:
                     continue
 
+                # Ensure only cricket events are processed (exclude football, tennis, etc.)
+                is_cricket = (
+                    cat == "cricket" or
+                    "cricket" in event_name.lower() or
+                    "cricket" in raw_title.lower() or
+                    "t20" in event_name.lower() or
+                    "t20" in raw_title.lower() or
+                    "ipl" in event_name.lower() or
+                    "bbl" in event_name.lower() or
+                    "cpl" in event_name.lower() or
+                    "psl" in event_name.lower() or
+                    "premier league" in event_name.lower() and "football" not in cat and "premier league" not in cat
+                )
+                if not is_cricket:
+                    continue
+
                 # Direct web player URL for FanCode stream
                 player_url = f"https://iosfancode.vercel.app/?watch={match_id}"
+                fc_live_urls.add(player_url)
 
                 # Clean title for matching (strip [English], [Hindi], etc.)
                 clean_title = re.sub(r'\[.*?\]|\(.*?\)', '', raw_title).strip()
@@ -1484,20 +1505,20 @@ def sync_allrounder_streams() -> dict[str, list[dict[str, Any]]]:
                         matched = True
                         mid = str(cb["id"])
                         matched_servers.setdefault(mid, [])
-                        matched_servers[mid].append({
-                            "id": f"auto_fc_{mid}_{len(matched_servers[mid])}",
-                            "title": f"Server {len(matched_servers[mid]) + 1}",
-                            "serverLabel": f"Server {len(matched_servers[mid]) + 1}",
-                            "category": f"__cricket_watch__:{mid}",
-                            "media_type": "link",
-                            "media_url": player_url,
-                            "source": "fancode",
-                            "published": True,
-                            "sort_order": len(matched_servers[mid])
-                        })
-                        break
+                        if not any(s.get("media_url") == player_url for s in matched_servers[mid]):
+                            matched_servers[mid].append({
+                                "id": f"auto_fc_{mid}_{len(matched_servers[mid])}",
+                                "title": f"Server {len(matched_servers[mid]) + 1}",
+                                "serverLabel": f"Server {len(matched_servers[mid]) + 1}",
+                                "category": f"__cricket_watch__:{mid}",
+                                "media_type": "link",
+                                "media_url": player_url,
+                                "source": "fancode",
+                                "published": True,
+                                "sort_order": len(matched_servers[mid])
+                            })
 
-                if not matched and (cat == "cricket" or "cricket" in event_name.lower() or "cricket" in raw_title.lower() or "t20" in event_name.lower() or "league" in event_name.lower()):
+                if not matched:
                     ex_id = f"ex_fc_{match_id}"
                     matched_servers.setdefault(ex_id, [])
                     matched_servers[ex_id].append({
@@ -1628,13 +1649,16 @@ def sync_allrounder_streams() -> dict[str, list[dict[str, Any]]]:
                 logger.warning("AutoStreamSync Willow error: %s", e)
 
         # Delete/prune servers for any matches that have completed
+        # But if the stream is STILL actively broadcasting on FanCode, keep it until broadcast finishes
         try:
             rec_html = fetch(PAGES["recent"], 10)
             for rm in extract_matches(rec_html):
                 if classify_match(rm) == "recent":
                     rm_id = str(rm.get("id"))
                     if rm_id in matched_servers:
-                        del matched_servers[rm_id]
+                        is_broadcasting = any(s.get("media_url") in fc_live_urls for s in matched_servers[rm_id])
+                        if not is_broadcasting:
+                            del matched_servers[rm_id]
         except Exception:
             pass
 
@@ -1834,6 +1858,7 @@ def get_matches(category: str):
                 mid_str = str(match.get("id"))
                 if mid_str in AUTO_MATCH_SERVERS:
                     match["auto_servers"] = AUTO_MATCH_SERVERS[mid_str]
+                    match["servers"] = AUTO_MATCH_SERVERS[mid_str]
 
         return {
             "success": True,
