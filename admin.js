@@ -654,6 +654,30 @@ function matchStreamToCb(streamTitle, cb) {
 
 let isAutoSyncingToDatabase = false;
 
+function isCricketStreamAdmin(title = "", category = "", eventName = "") {
+  const combined = `${title} ${category} ${eventName}`.toLowerCase();
+  const nonCricket = [
+    "football", "soccer", "futsal", "basketball", "nba", "tennis", "atp", "wta",
+    "hockey", "fih", "badminton", "bwf", "volleyball", "table tennis", "golf",
+    "baseball", "mlb", "rugby", "motorsport", "formula 1", "formula one", "f1",
+    "motogp", "wrestling", "wwe", "mma", "ufc", "boxing", "kabaddi", "handball",
+    "athletics", "swimming", "snooker", "darts", "cycling", "skiing", "judo",
+    "karate", "taekwondo", "polo", "chess", "euroleague", "la liga", "serie a",
+    "bundesliga", "ligue 1", "champions league", "europa league", "carabao cup",
+    "copa del rey", "isl", "fa cup", "durand cup"
+  ];
+  if (nonCricket.some(w => combined.includes(w))) return false;
+  if (category === "cricket" || category === "cricket-match") return true;
+  const cricketIndicators = [
+    "cricket", "t20", "t10", "odi", "test match", "test", "ipl", "bbl", "cpl", "psl",
+    "bpl", "lpl", "wpl", "ilt20", "sa20", "mlc", "hundred", "super smash", "ranji",
+    "syed mushtaq", "vijay hazare", "dulip", "irani", "deodhar", "sheffield", "county",
+    "blast", "npl", "nepal premier", "icc", "asia cup", "world cup", "trophy", "shield",
+    "stumps", "innings", "under-19", "u19", "women"
+  ];
+  return cricketIndicators.some(w => combined.includes(w));
+}
+
 async function syncAllrounderToDatabase(manual = false) {
   if (isAutoSyncingToDatabase) return;
   isAutoSyncingToDatabase = true;
@@ -694,15 +718,16 @@ async function syncAllrounderToDatabase(manual = false) {
     // FanCode direct streams
     if (fcRes.status === "fulfilled" && Array.isArray(fcRes.value?.matches)) {
       for (const fc of fcRes.value.matches) {
-        const cat = String(fc.category || "").toLowerCase();
+        const cat = String(fc.event_category || fc.category || "").toLowerCase();
         const eventName = String(fc.event_name || "");
-        const rawTitle = String(fc.title || "");
+        const rawTitle = String(fc.match_name || fc.title || "");
         const status = String(fc.status || "").toUpperCase();
         const isLive = status.includes("LIVE") || fc.isLive === true;
         if (!isLive) continue;
 
-        const matchId = String(fc.match_id || "");
-        if (!matchId) continue;
+        const matchId = String(fc.match_id || fc.id || "");
+        if (!matchId || !rawTitle) continue;
+        if (!isCricketStreamAdmin(rawTitle, cat, eventName)) continue;
         const playerUrl = `https://iosfancode.vercel.app/?watch=${encodeURIComponent(matchId)}`;
         const cleanTitle = rawTitle.replace(/\[.*?\]|\(.*?\)/g, "").trim() || rawTitle;
 
@@ -730,6 +755,7 @@ async function syncAllrounderToDatabase(manual = false) {
         const safeId = w.title || w.tvgId || w.match_id || "";
         if (!safeId) continue;
         const title = w.title || safeId;
+        if (!isCricketStreamAdmin(title, "", "")) continue;
         const playerUrl = `https://allrounderlive.in/willow-player?id=${encodeURIComponent(safeId)}`;
 
         for (const cb of candidateMatches) {

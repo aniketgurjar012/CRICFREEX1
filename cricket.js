@@ -1278,24 +1278,20 @@
 
   function shouldAllowWatchLinks(match) {
     if (!match) return false;
+    if (state.page === "upcoming" || state.page === "recent") return false;
     if (isCompletedMatch(match)) return false;
+    if (isUpcomingMatch(match) && !isMatchStartingSoon(match)) return false;
 
-    // If the match has live streams attached (auto-synced or manual), allow watching!
+    // Only allow for live matches or matches starting soon (within 1 hr):
     const midStr = String(match.id);
     const hasAuto = (match.auto_servers && match.auto_servers.length > 0) ||
                     (state.autoServers && state.autoServers[midStr] && state.autoServers[midStr].length > 0);
     const hasManual = watchLinks.some(item => String(item.category).slice(watchLinkPrefix.length) === midStr);
-    if (hasAuto || hasManual) {
-      return true;
-    }
 
-    if (state.page === "recent") return false;
-    if (isMatchStartingSoon(match)) return true;
-    if (isUpcomingMatch(match)) return false;
-    if (state.page === "live") {
-      return isLiveMatch(match) || !isUpcomingMatch(match);
+    if (state.page === "live" || isLiveMatch(match) || isMatchStartingSoon(match)) {
+      return Boolean(hasAuto || hasManual);
     }
-    return isLiveMatch(match);
+    return false;
   }
 
   function isMatchAtStumps(match) {
@@ -1369,6 +1365,9 @@
 
   function getMatchServers(match, allowWatchLinks = true) {
     if (!allowWatchLinks || !match || !match.id) return [];
+    if (state.page === "upcoming" || state.page === "recent") return [];
+    if (isCompletedMatch(match)) return [];
+    if (isUpcomingMatch(match) && !isMatchStartingSoon(match)) return [];
     const matchIdStr = String(match.id);
 
     // 1. Manual servers configured in Admin panel
@@ -1579,7 +1578,7 @@
     (state.matches || []).forEach(match => {
       const card = root.querySelector(`.cricket-match-card[data-card-match-id="${match.id}"]`);
       if (!card) return;
-      const validLinks = getMatchServers(match, true);
+      const validLinks = getMatchServers(match, shouldAllowWatchLinks(match));
       let linksWrap = card.querySelector(".cricket-watch-links");
       if (validLinks.length) {
         if (!linksWrap) {
@@ -1627,7 +1626,7 @@
   function renderMatchViewServers(match, container) {
     const parent = container || root.querySelector(".cricket-content");
     if (!parent || state.page !== "match" || String(state.selectedMatch?.id) !== String(match?.id)) return;
-    const validLinks = getMatchServers(match, true);
+    const validLinks = getMatchServers(match, shouldAllowWatchLinks(match));
     let bar = parent.querySelector(".cricket-match-view-servers");
     if (!validLinks.length) {
       if (bar) bar.remove();
@@ -1712,10 +1711,39 @@
   let lastClientSyncTime = 0;
   let clientSyncInProgress = false;
 
+  function isCricketStream(title = "", category = "", eventName = "") {
+    const t = String(title || "").toLowerCase();
+    const c = String(category || "").toLowerCase();
+    const e = String(eventName || "").toLowerCase();
+    const combined = `${t} ${c} ${e}`;
+
+    const nonCricket = [
+      "football", "soccer", "futsal", "basketball", "nba", "tennis", "atp", "wta",
+      "hockey", "fih", "badminton", "bwf", "volleyball", "table tennis", "golf",
+      "baseball", "mlb", "rugby", "motorsport", "formula 1", "formula one", "f1",
+      "motogp", "wrestling", "wwe", "mma", "ufc", "boxing", "kabaddi", "handball",
+      "athletics", "swimming", "snooker", "darts", "cycling", "skiing", "judo",
+      "karate", "taekwondo", "polo", "chess", "euroleague", "la liga", "serie a",
+      "bundesliga", "ligue 1", "champions league", "europa league", "carabao cup",
+      "copa del rey", "isl", "fa cup", "durand cup"
+    ];
+    if (nonCricket.some(w => combined.includes(w))) return false;
+    if (c === "cricket" || c === "cricket-match") return true;
+
+    const cricketIndicators = [
+      "cricket", "t20", "t10", "odi", "test match", "test", "ipl", "bbl", "cpl", "psl",
+      "bpl", "lpl", "wpl", "ilt20", "sa20", "mlc", "hundred", "super smash", "ranji",
+      "syed mushtaq", "vijay hazare", "dulip", "irani", "deodhar", "sheffield", "county",
+      "blast", "npl", "nepal premier", "icc", "asia cup", "world cup", "trophy", "shield",
+      "stumps", "innings", "under-19", "u19", "women"
+    ];
+    return cricketIndicators.some(w => combined.includes(w));
+  }
+
   async function syncAllrounderClient(force = false) {
     const now = Date.now();
     if (clientSyncInProgress) return;
-    if (!force && now - lastClientSyncTime < 25000) return;
+    if (!force && now - lastClientSyncTime < 8000) return;
     clientSyncInProgress = true;
 
     try {
@@ -1756,6 +1784,7 @@
           const rawTitle = fc.match_name || fc.title || "";
           const matchId = String(fc.match_id || fc.id || "");
           if (!matchId || !rawTitle) continue;
+          if (!isCricketStream(rawTitle, cat, fc.event_name || "")) continue;
 
           const playerUrl = `https://iosfancode.vercel.app/?watch=${encodeURIComponent(matchId)}`;
           const title = rawTitle.replace(/\[.*?\]|\(.*?\)/g, "").trim() || rawTitle;
@@ -1808,6 +1837,7 @@
           const safeId = w.title || w.tvgId || w.match_id || "";
           if (!safeId) continue;
           const title = w.title || safeId;
+          if (!isCricketStream(title, "", "")) continue;
           const playerUrl = `https://allrounderlive.in/willow-player?id=${encodeURIComponent(safeId)}`;
 
           let matched = false;
@@ -1876,7 +1906,7 @@
               sort_order: sNum
             });
           }
-        } else {
+        } else if (isCricketStream(st.title, "", "")) {
           const vsParts = st.title.split(/\s+[-–—]\s+/);
           const matchPart = vsParts[vsParts.length - 1] || st.title;
           const vsMatch = matchPart.match(/^(.+?)\s+(?:vs\.?|v\/s|v)\s+(.+)$/i);
@@ -2782,8 +2812,17 @@
       if (requestId !== state.request) return;
       matches = result.matches || [];
       if (category === "upcoming") {
-        matches = matches.filter(m => isMatchIn2DayUpcomingWindow(m));
+        matches = matches.filter(m => isMatchIn2DayUpcomingWindow(m) && !isMatchStartingSoon(m) && !isLiveMatch(m));
         matches.sort((a, b) => (Number(a.startDate || 0) - Number(b.startDate || 0)));
+      } else if (category === "live") {
+        const upcomingMatches = _matchDataCache.upcoming || [];
+        upcomingMatches.forEach(um => {
+          if ((isMatchStartingSoon(um) || isLiveMatch(um)) && !isCompletedMatch(um)) {
+            if (!matches.some(m => String(m.id) === String(um.id))) {
+              matches.push(um);
+            }
+          }
+        });
       }
       _matchDataCache[category] = matches;
       state.matches = matches;
@@ -2792,8 +2831,11 @@
         localStorage.setItem("cricfreex_all_matches", JSON.stringify(state.allKnownMatches || {}));
       } catch (e) {}
       matches.forEach(m => {
-        if (m.auto_servers?.length) {
+        if (category === "live" && m.auto_servers?.length) {
           state.autoServers[String(m.id)] = m.auto_servers;
+        } else if (category === "upcoming") {
+          m.auto_servers = [];
+          m.servers = [];
         }
         if (!state.allKnownMatches) state.allKnownMatches = {};
         if (m.id) state.allKnownMatches[String(m.id)] = m;
@@ -4560,7 +4602,7 @@
 
   window.setInterval(() => {
     syncAllrounderClient();
-  }, 45000);
+  }, 10000);
 
   window.addEventListener("cricfreex:content-updated", event => {
     watchLinks = (event.detail || []).filter(item =>
@@ -4649,5 +4691,5 @@
       // Even if Cricbuzz API is slow, still sync allrounder streams!
       syncAllrounderClient(true);
     });
-  }, 30000);
+  }, 12000);
 })();
