@@ -1355,7 +1355,8 @@ def _sync_to_supabase(matched_servers: dict[str, list[dict[str, Any]]]):
         try:
             rec_html = fetch(PAGES["recent"], 10)
             for rm in extract_matches(rec_html):
-                recent_mids.add(str(rm.get("id")))
+                if classify_match(rm) == "recent":
+                    recent_mids.add(str(rm.get("id")))
         except Exception:
             pass
 
@@ -1630,9 +1631,10 @@ def sync_allrounder_streams() -> dict[str, list[dict[str, Any]]]:
         try:
             rec_html = fetch(PAGES["recent"], 10)
             for rm in extract_matches(rec_html):
-                rm_id = str(rm.get("id"))
-                if rm_id in matched_servers:
-                    del matched_servers[rm_id]
+                if classify_match(rm) == "recent":
+                    rm_id = str(rm.get("id"))
+                    if rm_id in matched_servers:
+                        del matched_servers[rm_id]
         except Exception:
             pass
 
