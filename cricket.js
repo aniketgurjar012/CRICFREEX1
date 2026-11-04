@@ -1201,9 +1201,9 @@
     if (!startMs || isNaN(startMs)) return false;
     if (startMs < 1e11) startMs *= 1000;
     const diffMs = startMs - Date.now();
-    // 1 hour before scheduled start time (diffMs <= 3600000) OR start time already passed (diffMs <= 0)
+    // 1 hour before scheduled start time (diffMs <= 3600000) OR start time already passed (diffMs <= 0 within 3 days)
     // Matches remain in live section until completed!
-    return diffMs <= 3600000 && !isCompletedMatch(match);
+    return diffMs <= 3600000 && diffMs > -86400000 * 3 && !isCompletedMatch(match);
   }
 
   function isLiveMatch(match) {
@@ -1893,7 +1893,7 @@
           const vsMatch = matchPart.match(/^(.+?)\s+(?:vs\.?|v\/s|v)\s+(.+)$/i);
           const t1 = vsMatch ? vsMatch[1].trim() : matchPart;
           const t2 = vsMatch ? vsMatch[2].trim() : "Opponent";
-          const exId = `ex_${cleanStreamStr(t1).replace(/[^a-z0-9]/g, "")}_vs_${cleanStreamStr(t2).replace(/[^a-z0-9]/g, "")}`;
+          const exId = `ex_fc_${matchId || (cleanStreamStr(t1).replace(/[^a-z0-9]/g, "") + "_vs_" + cleanStreamStr(t2).replace(/[^a-z0-9]/g, ""))}`;
           const newEx = {
             id: exId,
             series: vsParts.length > 1 ? vsParts[0].trim() : "Live Cricket Stream",
@@ -2775,14 +2775,37 @@
 
     request("/api/matches/upcoming").then(res => {
       if (res && Array.isArray(res.matches)) {
-        const upcomingOnly = res.matches.filter(m => isMatchIn2DayUpcomingWindow(m));
+        const rawUpcoming = res.matches.filter(m => isMatchIn2DayUpcomingWindow(m));
+        if (!state.allKnownMatches) state.allKnownMatches = {};
+        rawUpcoming.forEach(m => { if (m?.id) state.allKnownMatches[String(m.id)] = m; });
+
+        const upcomingOnly = rawUpcoming.filter(m => !isMatchStartingSoon(m) && !isLiveMatch(m));
         _matchDataCache.upcoming = upcomingOnly;
         try {
           localStorage.setItem("cricfreex_cached_upcoming_matches", JSON.stringify(upcomingOnly));
           localStorage.setItem("cricfreex_all_matches", JSON.stringify(state.allKnownMatches || {}));
         } catch (e) {}
-        if (!state.allKnownMatches) state.allKnownMatches = {};
-        upcomingOnly.forEach(m => { if (m?.id) state.allKnownMatches[String(m.id)] = m; });
+
+        // Immediate promotion: Push any matches starting within 1 hour into Live section
+        const startingSoon = rawUpcoming.filter(m => (isMatchStartingSoon(m) || isLiveMatch(m)) && !isCompletedMatch(m));
+        if (startingSoon.length) {
+          if (!_matchDataCache.live) _matchDataCache.live = [];
+          let added = false;
+          startingSoon.forEach(sm => {
+            if (!_matchDataCache.live.some(m => String(m.id) === String(sm.id))) {
+              _matchDataCache.live.push(sm);
+              added = true;
+            }
+          });
+          if (added && state.page === "live") {
+            state.matches = _matchDataCache.live;
+            renderMatchList(
+              state.matches,
+              match => openMatch(match, "live", "scorecard", true),
+              "No live matches are available right now."
+            );
+          }
+        }
       }
     }).catch(() => {});
   }
@@ -2817,8 +2840,9 @@
         matches = matches.filter(m => isMatchIn2DayUpcomingWindow(m) && !isMatchStartingSoon(m) && !isLiveMatch(m));
         matches.sort((a, b) => (Number(a.startDate || 0) - Number(b.startDate || 0)));
       } else if (category === "live") {
-        const upcomingMatches = _matchDataCache.upcoming || [];
-        upcomingMatches.forEach(um => {
+        // Collect from all master pool matches (live or starting within 1 hour)
+        const pool = Object.values(state.allKnownMatches || {});
+        pool.forEach(um => {
           if ((isMatchStartingSoon(um) || isLiveMatch(um)) && !isCompletedMatch(um)) {
             if (!matches.some(m => String(m.id) === String(um.id))) {
               matches.push(um);
@@ -4510,6 +4534,14 @@
         const result = await request("/api/matches/live");
         const matches = result.matches || [];
         if (!matches.length) return;
+        const pool = Object.values(state.allKnownMatches || {});
+        pool.forEach(um => {
+          if ((isMatchStartingSoon(um) || isLiveMatch(um)) && !isCompletedMatch(um)) {
+            if (!matches.some(m => String(m.id) === String(um.id))) {
+              matches.push(um);
+            }
+          }
+        });
         state.matches = matches;
 
         matches.forEach(m => {

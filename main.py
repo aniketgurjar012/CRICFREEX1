@@ -629,7 +629,7 @@ def classify_match(match):
     start_sec = parse_start_date_sec(match.get("startDate"))
     if start_sec is not None:
         diff_sec = start_sec - time.time()
-        if diff_sec <= 3600 and diff_sec > -86400 * 5:
+        if diff_sec <= 3600 and diff_sec > -86400 * 3:
             return "live"
 
     # 3. Live state indicators
@@ -1710,17 +1710,24 @@ def get_matches(category: str):
             # Primary Cricbuzz upcoming page contains all today/tomorrow matches
             pass
         elif category == "live":
-            # Also extract upcoming matches so matches starting within 1 hour or start time passed appear in live section
+            # Extract upcoming matches and all upcoming series schedules so any match starting within 1 hour or start time passed appears in live section
             seen_ids = {m.get("id") for m in raw_matches}
-            try:
-                up_html = fetch(PAGES["upcoming"], 10)
-                for sm in extract_matches(up_html):
-                    sm_id = sm.get("id")
-                    if sm_id and sm_id not in seen_ids:
-                        seen_ids.add(sm_id)
-                        raw_matches.append(sm)
-            except Exception:
-                pass
+            for sp in (
+                PAGES["upcoming"],
+                "/cricket-schedule/upcoming-series/international",
+                "/cricket-schedule/upcoming-series/league",
+                "/cricket-schedule/upcoming-series/domestic",
+                "/cricket-schedule/upcoming-series/women"
+            ):
+                try:
+                    up_html = fetch(sp, 60 if "schedule" in sp else 10)
+                    for sm in extract_matches(up_html):
+                        sm_id = sm.get("id")
+                        if sm_id and sm_id not in seen_ids:
+                            seen_ids.add(sm_id)
+                            raw_matches.append(sm)
+                except Exception:
+                    pass
         elif category == "recent":
             # Also extract from live page so recently finished matches appear in recent
             seen_ids = {m.get("id") for m in raw_matches}

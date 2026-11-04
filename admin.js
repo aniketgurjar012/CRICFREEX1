@@ -413,16 +413,30 @@ function renderWatchMatchOptions(category){
   placeholder.textContent="Select a match";
   select.append(placeholder);
 
-  watchMatches[category].forEach(match=>{
+  const seenIds = new Set();
+  (watchMatches[category] || []).forEach(match=>{
+    const mId = String(match.id);
+    seenIds.add(mId);
     const option=document.createElement("option");
-    option.value=String(match.id);
+    option.value=mId;
     option.textContent=matchOptionLabel(match);
     select.append(option);
   });
 
-  if(watchMatches[category].some(
-    match=>String(match.id)===previous
-  )){
+  // Also include any watch links in database that aren't in watchMatches
+  content.filter(isCricketWatchLink).forEach(item => {
+    const mId = cricketWatchMatchId(item);
+    if (mId && !seenIds.has(mId)) {
+      seenIds.add(mId);
+      const option = document.createElement("option");
+      option.value = mId;
+      const isAuto = item.public_id?.startsWith("auto_");
+      option.textContent = `[${isAuto ? 'FanCode Stream' : 'Custom Server'}] ${item.title || mId} (${mId})`;
+      select.append(option);
+    }
+  });
+
+  if(seenIds.has(previous)){
     select.value=previous;
   }else{
     select.value="";
@@ -756,7 +770,7 @@ async function syncAllrounderToDatabase(manual = false) {
       }
       if (!matched && isCricketStreamAdmin(rawTitle, cat, eventName)) {
         liveStreamsToInsert.push({
-          matchId: `ex_${matchId}`,
+          matchId: `ex_fc_${matchId}`,
           source: "fancode",
           playerUrl,
           title: rawTitle
@@ -813,6 +827,7 @@ async function syncAllrounderToDatabase(manual = false) {
       statusEl.style.display = "block";
     }
 
+    renderWatchMatchOptions($("watchMatchCategory")?.value || "live");
     if (manual) {
       setWatchLinkStatus(msg);
       loadSelectedMatchLinks();
@@ -911,8 +926,10 @@ async function cleanupFinishedWatchLinks(activeLiveUrls = null){
   }catch(err){
     console.warn("cleanupFinishedWatchLinks admin error:", err);
   }
-}
-
+}
+
+
+
 function addWatchLinkRow(item={}){
   if($("watchLinkRows").children.length>=6){
     setWatchLinkStatus("A match can have up to six watch servers.");
