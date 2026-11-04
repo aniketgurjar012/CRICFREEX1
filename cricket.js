@@ -1209,6 +1209,11 @@
   function isLiveMatch(match) {
     if (!match) return false;
     if (isCompletedMatch(match)) return false;
+    const midStr = String(match.id || "");
+    if ((match.auto_servers && match.auto_servers.length > 0) ||
+        (state.autoServers && state.autoServers[midStr] && state.autoServers[midStr].length > 0)) {
+      return true;
+    }
     if (isMatchStartingSoon(match)) return true;
     const stateStr = String(match.state || "").trim().toLowerCase();
     const statusStr = String(match.status || "").trim().toLowerCase();
@@ -1288,7 +1293,7 @@
                     (state.autoServers && state.autoServers[midStr] && state.autoServers[midStr].length > 0);
     const hasManual = watchLinks.some(item => String(item.category).slice(watchLinkPrefix.length) === midStr);
 
-    if (state.page === "live" || isLiveMatch(match) || isMatchStartingSoon(match)) {
+    if (state.page === "live" || state.page === "match" || isLiveMatch(match) || isMatchStartingSoon(match)) {
       return Boolean(hasAuto || hasManual);
     }
     return false;
@@ -1377,8 +1382,19 @@
       Number(left.sort_order || 0) - Number(right.sort_order || 0)
     );
 
-    // 2. Auto-synced servers from allrounderlive
-    const autoItems = (match.auto_servers || state.autoServers?.[matchIdStr] || []);
+    // 2. Auto-synced servers from FanCode / backend
+    const rawAuto = [
+      ...(Array.isArray(match.auto_servers) ? match.auto_servers : []),
+      ...(Array.isArray(state.autoServers?.[matchIdStr]) ? state.autoServers[matchIdStr] : [])
+    ];
+    const autoItems = [];
+    const seenAutoUrls = new Set();
+    rawAuto.forEach(s => {
+      if (s && s.media_url && !seenAutoUrls.has(s.media_url)) {
+        seenAutoUrls.add(s.media_url);
+        autoItems.push(s);
+      }
+    });
 
     const seenUrls = new Set();
     const validLinks = [];
@@ -1766,10 +1782,10 @@
     clientSyncInProgress = true;
 
     try {
-      // Fetch FanCode and backend auto-servers IN PARALLEL with zero delays
+      // Fetch FanCode and backend auto-servers IN PARALLEL with cache-busting timestamp
       const [fcRes, beRes] = await Promise.allSettled([
-        fetchWithTimeout("https://raw.githubusercontent.com/drmlive/fancode-live-events/main/fancode.json", 3500),
-        fetchWithTimeout(`${apiBase}/api/auto-servers`, 2500)
+        fetchWithTimeout(`https://raw.githubusercontent.com/drmlive/fancode-live-events/main/fancode.json?t=${Date.now()}`, 3500),
+        fetchWithTimeout(`${apiBase}/api/auto-servers?t=${Date.now()}`, 2500)
       ]);
 
       const mergedServers = {};
@@ -1931,6 +1947,14 @@
         }
       }
       state.autoServers = finalServers;
+
+      // Ensure every match in state.matches directly has auto_servers populated
+      (state.matches || []).forEach(m => {
+        const mid = String(m.id);
+        if (state.autoServers[mid]) {
+          m.auto_servers = state.autoServers[mid];
+        }
+      });
 
       try {
         localStorage.setItem("cricfreex_auto_servers", JSON.stringify(state.autoServers));
@@ -4495,58 +4519,11 @@
         });
         syncAllrounderClient();
 
-        // Update cards in-place
+        // Update cards in-place with state, scores, and watch server links
         matches.forEach(match => {
           const card = root.querySelector(`.cricket-match-card[data-card-match-id="${match.id}"]`);
-          if (!card) return;
-
-          // Update state badge
-          const stateEl = card.querySelector(".cricket-state");
-          if (stateEl) {
-            stateEl.textContent = match.state || "Match";
-            stateEl.classList.toggle("is-live", isLiveMatch(match));
-          }
-
-          // Update status text
-          const statusEl = card.querySelector(".cricket-match-status");
-          if (statusEl) {
-            statusEl.textContent = normalizeMatchStatus(match.status || match.state || "Match details", match);
-          }
-
-          // Update scores
-          const scoreEls = card.querySelectorAll(".cricket-team-score");
-          [match.team1, match.team2].forEach((team, index) => {
-            const score = match.score?.[index === 0 ? "team1Score" : "team2Score"];
-            const scoreText = formatMatchScoreDisplay(score, true);
-            if (scoreEls[index]) {
-              scoreEls[index].textContent = scoreText;
-            }
-          });
-
-          // If watch links appeared for this match and weren't in DOM before, add them
-          if (!card.querySelector(".cricket-watch-links")) {
-            const validLinks = getMatchServers(match, shouldAllowWatchLinks(match));
-            if (validLinks.length) {
-              const links = element("div", "cricket-watch-links");
-              links.appendChild(element("strong", "cricket-watch-label", "Watch Live"));
-              validLinks.forEach(({ url, sourceURL }, index) => {
-                const serverLabel = `Server ${index + 1}`;
-                const button = element("button", "cricket-watch-link", `▶ ${serverLabel}`);
-                button.type = "button";
-                button.setAttribute("data-match-id", String(match.id));
-                button.setAttribute("data-server-idx", String(index));
-                button.setAttribute(
-                  "aria-label",
-                  `${serverLabel} for ${match.team1?.teamName || "Team 1"} vs ${match.team2?.teamName || "Team 2"}`
-                );
-                button.addEventListener("click", event => {
-                  event.stopPropagation();
-                  startMatchServer(match, index, true);
-                });
-                links.appendChild(button);
-              });
-              card.appendChild(links);
-            }
+          if (card) {
+            updateMatchCardInPlace(card, match, shouldAllowWatchLinks(match));
           }
         });
       } catch (err) {
