@@ -1677,8 +1677,14 @@
       const s = score.summary.trim();
       if (s && s !== "0/0" && s !== "0/0 (0)" && s !== "0") return s;
     }
-    if (!Object.keys(score).length) return isCb ? "Yet to bat" : "LIVE";
-    const parts = Object.values(score).map(innings => {
+
+    const inningsList = Object.entries(score)
+      .filter(([k, v]) => v && typeof v === "object" && (k.startsWith("inngs") || v.runs != null || v.overs != null))
+      .map(([k, v]) => v);
+
+    if (!inningsList.length) return isCb ? "Yet to bat" : "LIVE";
+
+    const parts = inningsList.map(innings => {
       if (!innings) return null;
       if (typeof innings === "string") {
         const s = innings.trim();
@@ -1688,15 +1694,28 @@
         const s = innings.summary.trim();
         return (s && s !== "0/0" && s !== "0/0 (0)" && s !== "0") ? s : null;
       }
-      if (innings.runs == null && innings.wickets == null && innings.overs == null) return null;
-      const runs = innings.runs ?? 0;
+      const runs = innings.runs;
       const wkts = innings.wickets;
       const ov = innings.overs;
-      if (runs === 0 && (wkts === 0 || wkts == null) && (ov === 0 || ov == null)) return null;
-      const wktsStr = (wkts != null && wkts !== 10) ? `/${wkts}` : (wkts === 10 ? "/10" : "");
-      const ovStr = ov != null ? ` (${ov})` : "";
-      return `${runs}${wktsStr}${ovStr}`;
+      if (runs == null && wkts == null && ov == null) return null;
+
+      const r = runs ?? 0;
+      let wStr = "";
+      if (wkts != null) {
+        wStr = `/${wkts}`;
+      } else if (ov != null) {
+        wStr = "/0";
+      }
+
+      let ovStr = "";
+      if (ov != null) {
+        ovStr = ` (${ov})`;
+      }
+
+      let decl = innings.isDeclared ? " d" : "";
+      return `${r}${wStr}${decl}${ovStr}`;
     }).filter(Boolean);
+
     return parts.join(" & ") || (isCb ? "Yet to bat" : "LIVE");
   }
 
@@ -1743,21 +1762,19 @@
   async function syncAllrounderClient(force = false) {
     const now = Date.now();
     if (clientSyncInProgress) return;
-    if (!force && now - lastClientSyncTime < 8000) return;
+    if (!force && now - lastClientSyncTime < 5000) return;
     clientSyncInProgress = true;
 
     try {
-      // Fetch FanCode, Willow, and backend auto-servers ALL IN PARALLEL with strict timeouts
-      const [fcRes, wRes, beRes] = await Promise.allSettled([
+      // Fetch FanCode and backend auto-servers IN PARALLEL with zero delays
+      const [fcRes, beRes] = await Promise.allSettled([
         fetchWithTimeout("https://raw.githubusercontent.com/drmlive/fancode-live-events/main/fancode.json", 3500),
-        fetchWithTimeout("https://willow-api.sayanwork-studioo.workers.dev/", 2200),
-        fetchWithTimeout(`${apiBase}/api/auto-servers`, 3000)
+        fetchWithTimeout(`${apiBase}/api/auto-servers`, 2500)
       ]);
 
+      const mergedServers = {};
       if (beRes.status === "fulfilled" && beRes.value?.servers && Object.keys(beRes.value.servers).length > 0) {
-        Object.entries(beRes.value.servers).forEach(([mid, sList]) => {
-          state.autoServers[mid] = sList;
-        });
+        Object.assign(mergedServers, beRes.value.servers);
       }
 
       // Maintain state.allKnownMatches
@@ -1817,6 +1834,7 @@
               const inMainGrid = (state.matches || []).some(m => String(m.id) === mid);
               if (!inMainGrid && !isCompletedMatch(cb) && !extraCricbuzzLiveMatches.some(m => String(m.id) === mid)) {
                 cb.isCricbuzzMatch = true;
+                cb.state = "Live";
                 extraCricbuzzLiveMatches.push(cb);
               }
               break;
@@ -1824,59 +1842,6 @@
           }
           if (!matched) {
             unmatchedStreams.push({ source: "fancode", title, playerUrl });
-          }
-        }
-      }
-
-      if (wRes.status === "fulfilled" && Array.isArray(wRes.value?.Matches)) {
-        for (const w of wRes.value.Matches) {
-          const status = String(w.status || "").toUpperCase();
-          const isLive = status.includes("LIVE") || w.isLive === true;
-          if (!isLive) continue;
-
-          const safeId = w.title || w.tvgId || w.match_id || "";
-          if (!safeId) continue;
-          const title = w.title || safeId;
-          if (!isCricketStream(title, "", "")) continue;
-          const playerUrl = `https://allrounderlive.in/willow-player?id=${encodeURIComponent(safeId)}`;
-
-          let matched = false;
-          for (const cb of candidateMatches) {
-            if (matchStreamToCb(title, cb)) {
-              matched = true;
-              const mid = String(cb.id);
-              if (!newAutoServers[mid]) newAutoServers[mid] = [];
-              if (!newAutoServers[mid].some(s => s.source === "willow")) {
-                const sNum = newAutoServers[mid].length + 1;
-                const sObj = {
-                  id: `client_w_${mid}_${sNum}`,
-                  title: `Server ${sNum}`,
-                  serverLabel: `Server ${sNum}`,
-                  category: `${watchLinkPrefix}${mid}`,
-                  media_type: "link",
-                  media_url: playerUrl,
-                  source: "willow",
-                  published: true,
-                  sort_order: sNum
-                };
-                newAutoServers[mid].push(sObj);
-                if (!cb.auto_servers) cb.auto_servers = [];
-                if (!cb.auto_servers.some(s => s.media_url === playerUrl)) {
-                  cb.auto_servers.push(sObj);
-                }
-              }
-
-              // If cb is NOT currently in the main live grid (state.matches), but stream is LIVE:
-              const inMainGrid = (state.matches || []).some(m => String(m.id) === mid);
-              if (!inMainGrid && !isCompletedMatch(cb) && !extraCricbuzzLiveMatches.some(m => String(m.id) === mid)) {
-                cb.isCricbuzzMatch = true;
-                extraCricbuzzLiveMatches.push(cb);
-              }
-              break;
-            }
-          }
-          if (!matched) {
-            unmatchedStreams.push({ source: "willow", title, playerUrl });
           }
         }
       }
@@ -1951,8 +1916,21 @@
         }
       });
 
-      // Auto-update streams: if a stream went away, it gets purged; if new, it gets added
-      state.autoServers = newAutoServers;
+      // Auto-update streams: merge backend servers with client-discovered servers
+      const finalServers = Object.assign({}, mergedServers);
+      for (const [k, v] of Object.entries(newAutoServers)) {
+        if (!finalServers[k]) {
+          finalServers[k] = v;
+        } else {
+          const existingUrls = new Set(finalServers[k].map(s => s.media_url));
+          v.forEach(s => {
+            if (!existingUrls.has(s.media_url)) {
+              finalServers[k].push(s);
+            }
+          });
+        }
+      }
+      state.autoServers = finalServers;
 
       try {
         localStorage.setItem("cricfreex_auto_servers", JSON.stringify(state.autoServers));
@@ -3586,10 +3564,12 @@
         inngHeading.textContent = `Innings ${index + 1}`;
       }
       appendToTarget(inngHeading);
+      const inngWkts = (inning.wickets != null && !isNaN(inning.wickets)) ? `/${inning.wickets}` : (inning.overs != null ? "/0" : "");
+      const inngOv = (inning.overs != null && inning.overs !== "" && inning.overs !== "—") ? ` (${inning.overs} ov)` : "";
       appendToTarget(element(
         "p",
         "cricket-score-summary",
-        `${inning.runs ?? ""}/${inning.wickets ?? ""} (${inning.overs ?? "—"} overs)`
+        `${inning.runs ?? 0}${inngWkts}${inngOv}`
       ));
       if (inning.batting?.length) {
         appendMatchTable(target, ["Batter", "Dismissal", "R", "B", "4s", "6s", "SR"],
@@ -4685,7 +4665,7 @@
           state.matches = liveOnly;
         }
       }
-      // 2. Always sync allrounder streams (FanCode & Willow) seamlessly
+      // 2. Always sync FanCode streams seamlessly
       syncAllrounderClient(true);
     }).catch(() => {
       // Even if Cricbuzz API is slow, still sync allrounder streams!

@@ -615,6 +615,13 @@ def classify_match(match):
     )):
         return "recent"
 
+    # If active FanCode live stream is attached to this match, it MUST be LIVE!
+    mid_str = str(match.get("id") or "")
+    if mid_str:
+        with AUTO_SERVERS_LOCK:
+            if mid_str in AUTO_MATCH_SERVERS:
+                return "live"
+
     # 2. Check startDate:
     # If match is within 1 hour before start time (diff_sec <= 3600) OR
     # scheduled start time has passed (diff_sec <= 0):
@@ -813,12 +820,22 @@ def extract_page(html, path):
 
 
 # =========================================================
-# ALLROUNDERLIVE 24/7 AUTO STREAM SYNC
+# FANCODE 24/7 AUTO STREAM SYNC (iosfancode.vercel.app)
 # =========================================================
 AUTO_MATCH_SERVERS: dict[str, list[dict[str, Any]]] = {}
 EXTRA_LIVE_MATCHES: dict[str, dict[str, Any]] = {}
 AUTO_SERVERS_LOCK = threading.Lock()
 LAST_AUTO_SYNC_TIME: float = 0.0
+
+try:
+    _cached_sv_path = PROJECT_DIR / "auto_servers.json"
+    if _cached_sv_path.exists():
+        with open(_cached_sv_path, "r", encoding="utf-8") as _f:
+            _loaded_sv = json.load(_f)
+            if isinstance(_loaded_sv, dict):
+                AUTO_MATCH_SERVERS.update(_loaded_sv)
+except Exception:
+    pass
 
 
 TEAM_ALIASES: dict[str, list[str]] = {
@@ -1048,18 +1065,22 @@ def _parse_cricinfo_score(score_str: str) -> dict[str, Any]:
     s = str(score_str).strip()
     if not s or s in ("0", "0/0", "0/0 (0)"):
         return {}
-    m = re.search(r'(\d+)(?:/(\d+))?(?:\s*\(([0-9.]+)\s*(?:ov)?\))?', s)
-    if m:
-        runs = int(m.group(1))
-        wkts = int(m.group(2)) if m.group(2) is not None else (10 if "/" not in s and runs > 0 else None)
-        overs = float(m.group(3)) if m.group(3) is not None else None
-        res: dict[str, Any] = {"runs": runs}
-        if wkts is not None:
-            res["wickets"] = wkts
-        if overs is not None:
-            res["overs"] = overs
-        return {"inngs1": res, "summary": s}
-    return {"summary": s}
+    res: dict[str, Any] = {"summary": s}
+    inngs_parts = [p.strip() for p in s.split("&")]
+    for idx, part in enumerate(inngs_parts):
+        key = f"inngs{idx + 1}"
+        m = re.search(r'(\d+)(?:/(\d+))?(?:d)?(?:\s*\(([0-9.]+)\s*(?:ov)?.*?\))?', part)
+        if m:
+            r = int(m.group(1))
+            w = int(m.group(2)) if m.group(2) is not None else None
+            o = float(m.group(3)) if m.group(3) is not None else None
+            inn_obj: dict[str, Any] = {"runs": r}
+            if w is not None:
+                inn_obj["wickets"] = w
+            if o is not None:
+                inn_obj["overs"] = o
+            res[key] = inn_obj
+    return res
 
 
 _CRICINFO_CACHE: dict[str, Any] = {"time": 0.0, "matches": []}
@@ -1093,14 +1114,14 @@ def fetch_cricinfo_matches() -> list[dict[str, Any]]:
 
     def _fetch_scoreboard(u: str):
         try:
-            r = session.get(u, timeout=3, headers=headers)
+            r = session.get(u, timeout=6, headers=headers)
             if r.status_code == 200:
                 return r.json()
         except Exception:
             pass
         try:
             req = urllib.request.Request(u, headers=headers)
-            with urllib.request.urlopen(req, timeout=3) as res:
+            with urllib.request.urlopen(req, timeout=6) as res:
                 return json.loads(res.read().decode("utf-8"))
         except Exception as e:
             logger.warning("Error fetching Cricinfo scoreboard (%s): %s", u, e)
@@ -1420,7 +1441,7 @@ def _sync_to_supabase(matched_servers: dict[str, list[dict[str, Any]]]):
                         except Exception:
                             pass
 
-        # 3. Delete any old Allrounder FanCode servers or ended FanCode / Willow auto servers
+        # 3. Delete any old Allrounder FanCode servers, Willow servers, or ended FanCode auto servers
         active_auto_urls = {
             s.get("media_url")
             for servers in matched_servers.values()
@@ -1431,8 +1452,8 @@ def _sync_to_supabase(matched_servers: dict[str, list[dict[str, Any]]]):
             m_url = str(r.get("media_url") or "")
             pub_id = str(r.get("public_id") or "")
             row_id = r.get("id")
-            # If it's an old Allrounder FanCode link (allrounderlive.in/fc-play) OR an auto_ link no longer active:
-            if "allrounderlive.in/fc-play" in m_url or (pub_id.startswith("auto_") and m_url not in active_auto_urls):
+            # If it's an old Allrounder / Willow link OR an auto_ link no longer active:
+            if "allrounderlive.in/fc-play" in m_url or "allrounderlive.in/willow" in m_url or (pub_id.startswith("auto_") and m_url not in active_auto_urls):
                 if row_id:
                     del_req = urllib.request.Request(
                         f"{SUPABASE_URL}/rest/v1/content?id=eq.{row_id}",
@@ -1449,7 +1470,7 @@ def _sync_to_supabase(matched_servers: dict[str, list[dict[str, Any]]]):
 
 
 def sync_allrounder_streams() -> dict[str, list[dict[str, Any]]]:
-    global LAST_AUTO_SYNC_TIME, _WILLOW_COOLDOWN_UNTIL
+    global LAST_AUTO_SYNC_TIME
     try:
         cb_matches: list[dict[str, Any]] = []
         try:
@@ -1499,14 +1520,14 @@ def sync_allrounder_streams() -> dict[str, list[dict[str, Any]]]:
         try:
             fc_url = f"https://raw.githubusercontent.com/drmlive/fancode-live-events/main/fancode.json?t={int(time.time() * 1000)}"
             req = urllib.request.Request(fc_url, headers=headers)
-            with urllib.request.urlopen(req, timeout=8) as r:
+            with urllib.request.urlopen(req, timeout=6) as r:
                 fc_raw = json.loads(r.read().decode("utf-8"))
             fc_matches = fc_raw if isinstance(fc_raw, list) else fc_raw.get("matches", [])
 
             fc_live_urls = set()
             for fc in fc_matches:
                 fc_status = str(fc.get("status", "")).upper()
-                if "LIVE" not in fc_status:
+                if "LIVE" not in fc_status and fc.get("isLive") is not True:
                     continue
 
                 cat = str(fc.get("event_category") or fc.get("category") or "").lower()
@@ -1587,104 +1608,6 @@ def sync_allrounder_streams() -> dict[str, list[dict[str, Any]]]:
         except Exception as e:
             logger.warning("AutoStreamSync FanCode direct error: %s", e)
 
-        # 2. Willow streams from allrounderlive
-        if time.time() > _WILLOW_COOLDOWN_UNTIL:
-            try:
-                req = urllib.request.Request(
-                    "https://willow-api.sayanwork-studioo.workers.dev/",
-                    headers=headers
-                )
-                with urllib.request.urlopen(req, timeout=6) as r:
-                    willow_data = json.loads(r.read().decode("utf-8"))
-                for w in willow_data.get("Matches", []):
-                    w_status = str(w.get("status", "")).upper()
-                    is_live = "LIVE" in w_status or w.get("isLive")
-                    has_stream = bool(
-                        w.get("stream_url_alpha") or w.get("stream_url_bravo") or
-                        w.get("streamUrl") or w.get("hls") or
-                        w.get("playbackUrl") or w.get("drm_key") or
-                        w.get("channel_id") or w.get("tvgId")
-                    )
-                    if not is_live and not has_stream:
-                        continue
-
-                    safe_id = (
-                        w.get("title") or w.get("tvgId") or
-                        w.get("tvgName") or w.get("match_id") or ""
-                    )
-                    if not safe_id:
-                        continue
-                    title = w.get("title") or safe_id
-                    if not is_cricket_content(title):
-                        continue
-
-                    encoded_id = urllib.parse.quote(str(safe_id))
-                    player_url = f"https://allrounderlive.in/willow-player?id={encoded_id}"
-
-                    w_matched = False
-                    for cb in cb_list:
-                        if classify_match(cb) == "recent":
-                            continue
-                        if _match_stream_to_cb(title, cb):
-                            w_matched = True
-                            mid = str(cb["id"])
-                            matched_servers.setdefault(mid, [])
-                            if not any(s.get("source") == "willow" for s in matched_servers[mid]):
-                                matched_servers[mid].append({
-                                    "id": f"auto_w_{mid}_{len(matched_servers[mid])}",
-                                    "title": f"Server {len(matched_servers[mid]) + 1}",
-                                    "serverLabel": f"Server {len(matched_servers[mid]) + 1}",
-                                    "category": f"__cricket_watch__:{mid}",
-                                    "media_type": "link",
-                                    "media_url": player_url,
-                                    "source": "willow",
-                                    "published": True,
-                                    "sort_order": len(matched_servers[mid])
-                                })
-                            break
-
-                    if not w_matched and is_cricket_content(title):
-                        ex_w_id = f"ex_w_{re.sub(r'[^a-zA-Z0-9]', '_', str(safe_id))[:30]}"
-                        matched_servers.setdefault(ex_w_id, [])
-                        if not any(s.get("source") == "willow" for s in matched_servers[ex_w_id]):
-                            matched_servers[ex_w_id].append({
-                                "id": f"auto_w_{ex_w_id}_0",
-                                "title": "Server 1",
-                                "serverLabel": "Server 1",
-                                "category": f"__cricket_watch__:{ex_w_id}",
-                                "media_type": "link",
-                                "media_url": player_url,
-                                "source": "willow",
-                                "published": True,
-                                "sort_order": 0
-                            })
-                            w_teams = [clean_team_name(part.strip()) for part in re.split(r'\s+vs\s+|\s+v\s+', title, flags=re.I)]
-                            wt1_n = w_teams[0] if len(w_teams) > 0 and w_teams[0] else "Team 1"
-                            wt2_n = w_teams[1] if len(w_teams) > 1 and w_teams[1] else "Team 2"
-                            wt1_obj = {"teamName": wt1_n, "teamSName": wt1_n[:4].upper()}
-                            wt2_obj = {"teamName": wt2_n, "teamSName": wt2_n[:4].upper()}
-                            attach_cricinfo_logo(wt1_obj)
-                            attach_cricinfo_logo(wt2_obj)
-                            new_extra_matches[ex_w_id] = {
-                                "id": ex_w_id,
-                                "series": "Live Streaming",
-                                "description": title,
-                                "state": "Live",
-                                "status": "Live Streaming",
-                                "team1": wt1_obj,
-                                "team2": wt2_obj,
-                                "venue": {"ground": "Live Stream"},
-                                "score": {},
-                                "isSynthetic": True,
-                                "_category": "live"
-                            }
-            except urllib.error.HTTPError as he:
-                if he.code == 429:
-                    _WILLOW_COOLDOWN_UNTIL = time.time() + 90
-                logger.warning("AutoStreamSync Willow HTTP error: %s", he)
-            except Exception as e:
-                logger.warning("AutoStreamSync Willow error: %s", e)
-
         # Delete/prune servers for any matches that have completed
         # But if the stream is STILL actively broadcasting on FanCode, keep it until broadcast finishes
         try:
@@ -1700,9 +1623,8 @@ def sync_allrounder_streams() -> dict[str, list[dict[str, Any]]]:
             pass
 
         with AUTO_SERVERS_LOCK:
-            if matched_servers:
-                AUTO_MATCH_SERVERS.clear()
-                AUTO_MATCH_SERVERS.update(matched_servers)
+            AUTO_MATCH_SERVERS.clear()
+            AUTO_MATCH_SERVERS.update(matched_servers)
             EXTRA_LIVE_MATCHES.clear()
             EXTRA_LIVE_MATCHES.update(new_extra_matches)
             LAST_AUTO_SYNC_TIME = time.time()
@@ -1729,7 +1651,7 @@ def _auto_sync_background_loop():
             sync_allrounder_streams()
         except Exception as e:
             logger.error("Background stream sync error: %s", e)
-        time.sleep(10)
+        time.sleep(5)
 
 
 _sync_thread = threading.Thread(
@@ -1788,22 +1710,17 @@ def get_matches(category: str):
             # Primary Cricbuzz upcoming page contains all today/tomorrow matches
             pass
         elif category == "live":
-            # Also extract upcoming matches and schedules so matches starting within 1 hour or start time passed appear in live section
+            # Also extract upcoming matches so matches starting within 1 hour or start time passed appear in live section
             seen_ids = {m.get("id") for m in raw_matches}
-            for sp in (
-                PAGES["upcoming"],
-                "/cricket-schedule/upcoming-series/international",
-                "/cricket-schedule/upcoming-series/league"
-            ):
-                try:
-                    up_html = fetch(sp, 60)
-                    for sm in extract_matches(up_html):
-                        sm_id = sm.get("id")
-                        if sm_id and sm_id not in seen_ids:
-                            seen_ids.add(sm_id)
-                            raw_matches.append(sm)
-                except Exception:
-                    pass
+            try:
+                up_html = fetch(PAGES["upcoming"], 10)
+                for sm in extract_matches(up_html):
+                    sm_id = sm.get("id")
+                    if sm_id and sm_id not in seen_ids:
+                        seen_ids.add(sm_id)
+                        raw_matches.append(sm)
+            except Exception:
+                pass
         elif category == "recent":
             # Also extract from live page so recently finished matches appear in recent
             seen_ids = {m.get("id") for m in raw_matches}
@@ -1833,12 +1750,16 @@ def get_matches(category: str):
         # Rolls over automatically at midnight (12:00 AM IST)
         if category == "upcoming":
             valid_upcoming = []
+            with AUTO_SERVERS_LOCK:
+                active_live_mids = set(AUTO_MATCH_SERVERS.keys())
             for m in matches:
-                # If match is starting within 1 hour or already live, do NOT include in upcoming
-                if classify_match(m) == "live":
+                m_id = str(m.get("id"))
+                # If match is starting within 1 hour or already live or has active stream, do NOT include in upcoming
+                if m_id in active_live_mids or classify_match(m) == "live":
                     continue
                 sd = m.get("startDate")
                 if not sd:
+                    valid_upcoming.append(m)
                     continue
                 try:
                     s_sec = parse_start_date_sec(sd)
@@ -1846,8 +1767,10 @@ def get_matches(category: str):
                         s_ms = s_sec * 1000.0
                         if s_ms <= end_tomorrow_ms:
                             valid_upcoming.append(m)
+                    else:
+                        valid_upcoming.append(m)
                 except (ValueError, TypeError):
-                    pass
+                    valid_upcoming.append(m)
             matches = valid_upcoming
 
         # Cricinfo Fallback Integration:
@@ -1855,32 +1778,32 @@ def get_matches(category: str):
         try:
             ci_all = fetch_cricinfo_matches()
             for ci_m in ci_all:
-                if ci_m.get("_category") == category:
-                    if category == "upcoming":
-                        if classify_match(ci_m) == "live":
-                            continue
-                        ci_sd = ci_m.get("startDate")
-                        if not ci_sd:
-                            continue
+                ci_cls = classify_match(ci_m)
+                if ci_cls != category:
+                    continue
+
+                if category == "upcoming":
+                    ci_sd = ci_m.get("startDate")
+                    if ci_sd:
                         try:
                             ci_sec = parse_start_date_sec(ci_sd)
-                            if not ci_sec or (ci_sec * 1000.0) > end_tomorrow_ms:
+                            if ci_sec and (ci_sec * 1000.0) > end_tomorrow_ms:
                                 continue
                         except Exception:
-                            continue
+                            pass
 
-                    t1_name = ci_m.get("team1", {}).get("teamName", "")
-                    t2_name = ci_m.get("team2", {}).get("teamName", "")
-                    already_in_cb = False
-                    for existing in matches:
-                        ex_t1 = existing.get("team1", {}).get("teamName", "")
-                        ex_t2 = existing.get("team2", {}).get("teamName", "")
-                        if (_team_token_match(t1_name, ex_t1) and _team_token_match(t2_name, ex_t2)) or \
-                           (_team_token_match(t1_name, ex_t2) and _team_token_match(t2_name, ex_t1)):
-                            already_in_cb = True
-                            break
-                    if not already_in_cb:
-                        matches.append(ci_m)
+                t1_name = ci_m.get("team1", {}).get("teamName", "")
+                t2_name = ci_m.get("team2", {}).get("teamName", "")
+                already_in_cb = False
+                for existing in matches:
+                    ex_t1 = existing.get("team1", {}).get("teamName", "")
+                    ex_t2 = existing.get("team2", {}).get("teamName", "")
+                    if (_team_token_match(t1_name, ex_t1) and _team_token_match(t2_name, ex_t2)) or \
+                       (_team_token_match(t1_name, ex_t2) and _team_token_match(t2_name, ex_t1)):
+                        already_in_cb = True
+                        break
+                if not already_in_cb:
+                    matches.append(ci_m)
         except Exception as ci_err:
             logger.warning("Cricinfo fallback merge error: %s", ci_err)
 
@@ -1888,12 +1811,20 @@ def get_matches(category: str):
             # Chronological sort so closest upcoming match appears first
             matches.sort(key=lambda m: float(parse_start_date_sec(m.get("startDate")) or 0))
 
-        # Unmatched Allrounder live streams included in Live section (cricket only)
+        # Unmatched FanCode live streams included in Live section (cricket only)
         if category == "live":
             with AUTO_SERVERS_LOCK:
+                active_live_mids = set(AUTO_MATCH_SERVERS.keys())
                 for ex_id, ex_m in EXTRA_LIVE_MATCHES.items():
                     if not any(str(m.get("id")) == str(ex_id) for m in matches):
                         matches.append(dict(ex_m))
+
+            # Also ensure ANY raw_match that has an active live stream in AUTO_MATCH_SERVERS is in Live!
+            for raw_m in raw_matches:
+                m_id = str(raw_m.get("id"))
+                if m_id in active_live_mids and not any(str(m.get("id")) == m_id for m in matches):
+                    raw_m["state"] = "Live"
+                    matches.append(raw_m)
 
         with AUTO_SERVERS_LOCK:
             for match in matches:

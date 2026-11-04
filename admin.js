@@ -707,67 +707,41 @@ async function syncAllrounderToDatabase(manual = false) {
       } catch (e) {}
     }
 
-    // 2. Fetch FanCode (direct feed) & Willow streams in parallel
-    const [fcRes, wRes] = await Promise.allSettled([
-      fetch("https://raw.githubusercontent.com/drmlive/fancode-live-events/main/fancode.json").then(r => r.json()),
-      fetch("https://willow-api.sayanwork-studioo.workers.dev/").then(r => r.json())
-    ]);
+    // 2. Fetch FanCode direct live feed (iosfancode.vercel.app)
+    let fcMatches = [];
+    try {
+      const fcRes = await fetch("https://raw.githubusercontent.com/drmlive/fancode-live-events/main/fancode.json").then(r => r.json());
+      fcMatches = Array.isArray(fcRes) ? fcRes : (Array.isArray(fcRes?.matches) ? fcRes.matches : []);
+    } catch (e) {
+      console.warn("FanCode feed fetch error:", e);
+    }
 
     const liveStreamsToInsert = [];
 
     // FanCode direct streams
-    if (fcRes.status === "fulfilled" && Array.isArray(fcRes.value?.matches)) {
-      for (const fc of fcRes.value.matches) {
-        const cat = String(fc.event_category || fc.category || "").toLowerCase();
-        const eventName = String(fc.event_name || "");
-        const rawTitle = String(fc.match_name || fc.title || "");
-        const status = String(fc.status || "").toUpperCase();
-        const isLive = status.includes("LIVE") || fc.isLive === true;
-        if (!isLive) continue;
+    for (const fc of fcMatches) {
+      const cat = String(fc.event_category || fc.category || "").toLowerCase();
+      const eventName = String(fc.event_name || "");
+      const rawTitle = String(fc.match_name || fc.title || "");
+      const status = String(fc.status || "").toUpperCase();
+      const isLive = status.includes("LIVE") || fc.isLive === true;
+      if (!isLive) continue;
 
-        const matchId = String(fc.match_id || fc.id || "");
-        if (!matchId || !rawTitle) continue;
-        if (!isCricketStreamAdmin(rawTitle, cat, eventName)) continue;
-        const playerUrl = `https://iosfancode.vercel.app/?watch=${encodeURIComponent(matchId)}`;
-        const cleanTitle = rawTitle.replace(/\[.*?\]|\(.*?\)/g, "").trim() || rawTitle;
+      const matchId = String(fc.match_id || fc.id || "");
+      if (!matchId || !rawTitle) continue;
+      if (!isCricketStreamAdmin(rawTitle, cat, eventName)) continue;
+      const playerUrl = `https://iosfancode.vercel.app/?watch=${encodeURIComponent(matchId)}`;
+      const cleanTitle = rawTitle.replace(/\[.*?\]|\(.*?\)/g, "").trim() || rawTitle;
 
-        for (const cb of candidateMatches) {
-          if (matchStreamToCb(cleanTitle, cb)) {
-            liveStreamsToInsert.push({
-              matchId: String(cb.id),
-              source: "fancode",
-              playerUrl,
-              title: rawTitle
-            });
-            break;
-          }
-        }
-      }
-    }
-
-    // Willow streams
-    if (wRes.status === "fulfilled" && Array.isArray(wRes.value?.Matches)) {
-      for (const w of wRes.value.Matches) {
-        const status = String(w.status || "").toUpperCase();
-        const isLive = status.includes("LIVE") || w.isLive === true;
-        if (!isLive) continue;
-
-        const safeId = w.title || w.tvgId || w.match_id || "";
-        if (!safeId) continue;
-        const title = w.title || safeId;
-        if (!isCricketStreamAdmin(title, "", "")) continue;
-        const playerUrl = `https://allrounderlive.in/willow-player?id=${encodeURIComponent(safeId)}`;
-
-        for (const cb of candidateMatches) {
-          if (matchStreamToCb(title, cb)) {
-            liveStreamsToInsert.push({
-              matchId: String(cb.id),
-              source: "willow",
-              playerUrl,
-              title
-            });
-            break;
-          }
+      for (const cb of candidateMatches) {
+        if (matchStreamToCb(cleanTitle, cb)) {
+          liveStreamsToInsert.push({
+            matchId: String(cb.id),
+            source: "fancode",
+            playerUrl,
+            title: rawTitle
+          });
+          break;
         }
       }
     }
