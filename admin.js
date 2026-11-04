@@ -187,6 +187,10 @@ async function bootstrap(){
 
   showAdmin();
   await loadAll();
+  syncAllrounderToDatabase(true);
+  if (!window._fancodeSyncInterval) {
+    window._fancodeSyncInterval = setInterval(() => syncAllrounderToDatabase(), 20000);
+  }
 }
 
 $("loginForm").onsubmit=async e=>{
@@ -219,6 +223,10 @@ $("loginForm").onsubmit=async e=>{
 
   showAdmin();
   await loadAll();
+  syncAllrounderToDatabase(true);
+  if (!window._fancodeSyncInterval) {
+    window._fancodeSyncInterval = setInterval(() => syncAllrounderToDatabase(), 20000);
+  }
 
   $("loginButton").disabled=false;
   $("loginButton").textContent="Continue";
@@ -733,8 +741,10 @@ async function syncAllrounderToDatabase(manual = false) {
       const playerUrl = `https://iosfancode.vercel.app/?watch=${encodeURIComponent(matchId)}`;
       const cleanTitle = rawTitle.replace(/\[.*?\]|\(.*?\)/g, "").trim() || rawTitle;
 
+      let matched = false;
       for (const cb of candidateMatches) {
         if (matchStreamToCb(cleanTitle, cb)) {
+          matched = true;
           liveStreamsToInsert.push({
             matchId: String(cb.id),
             source: "fancode",
@@ -743,6 +753,14 @@ async function syncAllrounderToDatabase(manual = false) {
           });
           break;
         }
+      }
+      if (!matched && isCricketStreamAdmin(rawTitle, cat, eventName)) {
+        liveStreamsToInsert.push({
+          matchId: `ex_${matchId}`,
+          source: "fancode",
+          playerUrl,
+          title: rawTitle
+        });
       }
     }
 
@@ -1085,6 +1103,11 @@ $("addWatchLink").addEventListener("click",()=>{
 $("refreshWatchMatches").addEventListener("click",()=>{
   loadCricketMatches($("watchMatchCategory").value);
 });
+
+const autoSyncBtn = $("autoSyncAllrounderBtn");
+if (autoSyncBtn) {
+  autoSyncBtn.addEventListener("click", () => syncAllrounderToDatabase(true));
+}
 
 $("watchLinksForm").addEventListener("submit",async event=>{
   event.preventDefault();
