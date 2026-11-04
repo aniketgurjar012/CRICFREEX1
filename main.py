@@ -1453,7 +1453,7 @@ def _sync_to_supabase(matched_servers: dict[str, list[dict[str, Any]]]):
             pub_id = str(r.get("public_id") or "")
             row_id = r.get("id")
             # If it's an old Allrounder / Willow link OR an auto_ link no longer active:
-            if "allrounderlive.in/fc-play" in m_url or "allrounderlive.in/willow" in m_url or (pub_id.startswith("auto_") and m_url not in active_auto_urls):
+            if "allrounderlive.in" in m_url or (pub_id.startswith("auto_") and m_url not in active_auto_urls):
                 if row_id:
                     del_req = urllib.request.Request(
                         f"{SUPABASE_URL}/rest/v1/content?id=eq.{row_id}",

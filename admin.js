@@ -189,7 +189,7 @@ async function bootstrap(){
   await loadAll();
   syncAllrounderToDatabase(true);
   if (!window._fancodeSyncInterval) {
-    window._fancodeSyncInterval = setInterval(() => syncAllrounderToDatabase(), 20000);
+    window._fancodeSyncInterval = setInterval(() => syncAllrounderToDatabase(), 30000);
   }
 }
 
@@ -225,7 +225,7 @@ $("loginForm").onsubmit=async e=>{
   await loadAll();
   syncAllrounderToDatabase(true);
   if (!window._fancodeSyncInterval) {
-    window._fancodeSyncInterval = setInterval(() => syncAllrounderToDatabase(), 20000);
+    window._fancodeSyncInterval = setInterval(() => syncAllrounderToDatabase(), 30000);
   }
 
   $("loginButton").disabled=false;
@@ -801,7 +801,7 @@ async function syncAllrounderToDatabase(manual = false) {
     }
 
     // 3. Clean up any completed watch links
-    await cleanupFinishedWatchLinks();
+    await cleanupFinishedWatchLinks(new Set(liveStreamsToInsert.map(x => x.playerUrl)));
 
     const msg = insertedCount > 0
       ? `✅ Successfully synced ${insertedCount} new stream server(s) directly to Supabase database!`
@@ -833,7 +833,7 @@ async function syncAllrounderToDatabase(manual = false) {
   }
 }
 
-async function cleanupFinishedWatchLinks(){
+async function cleanupFinishedWatchLinks(activeLiveUrls = null){
   const watchItems=content.filter(isCricketWatchLink);
   if(!watchItems.length)return;
 
@@ -841,21 +841,21 @@ async function cleanupFinishedWatchLinks(){
     const response=await fetch(`${CRICKET_API_BASE}/api/matches/recent`,{
       headers:{Accept:"application/json"}
     });
-    if(!response.ok)return;
-    const result=await response.json();
-    const recentMatches=Array.isArray(result.matches)?result.matches:[];
     const finishedMatchIds=new Set();
-
-    recentMatches.forEach(m=>{
-      const s=String(m.state||"").trim().toLowerCase();
-      const st=String(m.status||"").trim().toLowerCase();
-      if([
-        "complete","completed","abandon","abandoned",
-        "cancelled","canceled","no result","drawn","forfeit"
-      ].includes(s) || st.includes("won by")||st.includes("match tied")||st.includes("no result")||st.includes("match drawn")||st.includes("match abandoned")||st.includes("match cancelled")){
-        finishedMatchIds.add(String(m.id));
-      }
-    });
+    if(response.ok){
+      const result=await response.json();
+      const recentMatches=Array.isArray(result.matches)?result.matches:[];
+      recentMatches.forEach(m=>{
+        const s=String(m.state||"").trim().toLowerCase();
+        const st=String(m.status||"").trim().toLowerCase();
+        if([
+          "complete","completed","abandon","abandoned",
+          "cancelled","canceled","no result","drawn","forfeit"
+        ].includes(s) || st.includes("won by")||st.includes("match tied")||st.includes("no result")||st.includes("match drawn")||st.includes("match abandoned")||st.includes("match cancelled")){
+          finishedMatchIds.add(String(m.id));
+        }
+      });
+    }
 
     (watchMatches.live||[]).forEach(m=>{
       const s=String(m.state||"").trim().toLowerCase();
@@ -871,9 +871,24 @@ async function cleanupFinishedWatchLinks(){
       }
     });
 
-    const itemsToDelete=watchItems.filter(item=>
-      finishedMatchIds.has(cricketWatchMatchId(item))
-    );
+    const itemsToDelete=watchItems.filter(item=>{
+      const mid = cricketWatchMatchId(item);
+      const mUrl = String(item.media_url || "");
+      const pubId = String(item.public_id || "");
+
+      // 1. Delete allrounder links (legacy)
+      if (mUrl.includes("allrounderlive.in")) return true;
+
+      // 2. Delete matches that have finished
+      if (finishedMatchIds.has(mid)) return true;
+
+      // 3. Delete ended auto FanCode streams if activeLiveUrls is passed
+      if (activeLiveUrls instanceof Set) {
+        if (mUrl.includes("iosfancode.vercel.app") && !activeLiveUrls.has(mUrl)) return true;
+        if (pubId.startsWith("auto_") && !activeLiveUrls.has(mUrl)) return true;
+      }
+      return false;
+    });
 
     if(!itemsToDelete.length)return;
 
@@ -890,14 +905,14 @@ async function cleanupFinishedWatchLinks(){
       const currentSelectedMatchId=$("watchMatch")?.value;
       if(currentSelectedMatchId && affectedMatchIds.includes(currentSelectedMatchId)){
         loadSelectedMatchLinks();
-        setWatchLinkStatus("Watch links for this match were deleted because the match has finished.");
+        setWatchLinkStatus("Watch links for this match were deleted because the match has finished or stream ended.");
       }
     }
   }catch(err){
     console.warn("cleanupFinishedWatchLinks admin error:", err);
   }
-}
-
+}
+
 function addWatchLinkRow(item={}){
   if($("watchLinkRows").children.length>=6){
     setWatchLinkStatus("A match can have up to six watch servers.");
