@@ -16,7 +16,10 @@ from main import (
     get_team,
     v4_match,
     v4_records,
-    _finished_match_watch_records
+    _finished_match_watch_records,
+    _find_unique_stream_match,
+    _match_stream_to_cb,
+    is_cricket_content
 )
 from scrapers.normalized import extract_match_info
 from scrapers.normalized import extract_scorecard
@@ -629,6 +632,70 @@ class AutoStreamCleanupTests(unittest.TestCase):
         )
 
         self.assertEqual([record["id"] for record in deleted], ["manual-1", "auto-1"])
+
+
+class FanCodeMatchTests(unittest.TestCase):
+
+    def setUp(self):
+        self.match = {
+            "id": 101,
+            "state": "Live",
+            "team1": {"teamName": "Zimbabwe", "teamSName": "ZIM"},
+            "team2": {"teamName": "Afghanistan", "teamSName": "AFG"}
+        }
+
+    def test_stream_matches_both_exact_team_names_or_short_names(self):
+        self.assertTrue(_match_stream_to_cb(
+            "Zimbabwe vs Afghanistan [English]",
+            self.match
+        ))
+        self.assertTrue(_match_stream_to_cb("ZIM vs AFG", self.match))
+        self.assertTrue(_match_stream_to_cb(
+            "Afghanistan vs Zimbabwe in UAE, 2026",
+            self.match
+        ))
+        self.assertTrue(_match_stream_to_cb(
+            "Zimbabwe vs Afghanistan 1st ODI 2026",
+            self.match
+        ))
+
+    def test_stream_does_not_match_from_partial_or_unrelated_team_names(self):
+        self.assertFalse(_match_stream_to_cb(
+            "Vissel Kobe vs Afghanistan",
+            self.match
+        ))
+        self.assertFalse(_match_stream_to_cb(
+            "Zimbabwe vs Afghanistan Academy",
+            self.match
+        ))
+
+    def test_ambiguous_team_pair_is_not_assigned_to_a_match(self):
+        duplicate = {
+            **self.match,
+            "id": 102,
+            "description": "Different fixture"
+        }
+        self.assertIsNone(_find_unique_stream_match(
+            "Zimbabwe vs Afghanistan",
+            [self.match, duplicate]
+        ))
+
+    def test_explicit_non_cricket_sport_overrides_cricket_category(self):
+        self.assertFalse(is_cricket_content(
+            "ATP Masters - Rolex Paris Masters 2026",
+            "cricket",
+            "Live Cricket Stream"
+        ))
+        self.assertTrue(is_cricket_content(
+            "Zimbabwe vs Afghanistan",
+            "cricket",
+            "Live Cricket Stream"
+        ))
+        self.assertFalse(is_cricket_content(
+            "Live Cricket Stream",
+            "",
+            "Live Cricket Stream"
+        ))
 
 
 class MatchCategoryTests(unittest.TestCase):

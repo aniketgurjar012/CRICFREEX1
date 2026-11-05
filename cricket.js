@@ -1630,6 +1630,16 @@
     return String(text).toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
   }
 
+  function normalizeStreamTeamSide(text) {
+    return cleanStreamStr(text)
+      .replace(/\b(english|hindi|live|stream|match)\b/g, " ")
+      .replace(/\bunder\s*19\b/g, "u19")
+      .replace(/\b(men|t20i?|odi|test|day|session|innings|20\d{2})\b/g, " ")
+      .replace(/\b(1st|2nd|3rd|[4-9]th)\b/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
   function isStreamWomenMatch(obj) {
     const s = typeof obj === "string" ? obj : [obj.team1?.teamName, obj.team2?.teamName, obj.series, obj.description].join(" ");
     return /\b(women|womens|wbbl)\b/i.test(s) || /-w\b/i.test(s) || /W$/.test(obj.team1?.teamSName || "") || /W$/.test(obj.team2?.teamSName || "");
@@ -1643,47 +1653,58 @@
     if (!team) return false;
     const name = cleanStreamStr(team.teamName);
     const sname = cleanStreamStr(team.teamSName);
-    const terms = new Set();
-    if (name) {
-      terms.add(name);
-      const stripped = name.split(" ").filter(w => !["women", "team", "men"].includes(w)).join(" ");
-      if (stripped) terms.add(stripped);
-      name.split(" ").forEach(w => {
-        if (w.length >= 4 && !["cricket", "club", "team", "kings", "royals", "super", "giants", "riders", "challengers", "knights", "stars", "titans", "strikers", "heat", "sixers", "thunder", "scorchers", "renegades", "hurricanes", "women", "mens", "eagles", "falcons", "patriots", "lions", "warriors"].includes(w)) {
-          terms.add(w);
-        }
-      });
-    }
-    if (sname && sname.length >= 2) {
-      terms.add(sname);
-      if (sname.endsWith("w") && sname.length > 2) terms.add(sname.slice(0, -1));
-    }
+    const terms = new Set([name]);
+    if (sname.length >= 2) terms.add(sname);
     [name, sname].forEach(key => {
       if (STREAM_ALIASES[key]) {
-        STREAM_ALIASES[key].forEach(a => terms.add(cleanStreamStr(a)));
+        STREAM_ALIASES[key].forEach(alias => {
+          const cleaned = cleanStreamStr(alias);
+          const words = cleaned.split(" ");
+          const generic = new Set([
+            "blues", "bulls", "dolphins", "eagles", "falcons", "heat",
+            "hurricanes", "knights", "lions", "patriots", "renegades",
+            "royals", "scorchers", "sixers", "stars", "strikers", "thunder",
+            "titans", "warriors", "whites"
+          ]);
+          if (cleaned && (words.length > 1 || cleaned.length > 3) &&
+              !words.every(word => generic.has(word))) {
+            terms.add(cleaned);
+          }
+        });
       }
     });
 
-    const noSpaceStream = streamStr.replace(/\s+/g, "");
+    const normalizedTerms = new Set(Array.from(terms, normalizeStreamTeamSide));
+    return normalizedTerms.has(normalizeStreamTeamSide(streamStr));
+  }
 
-    for (const term of terms) {
-      if (!term) continue;
-      const re = new RegExp("\\b" + term.replace(/\s+/g, "\\s+") + "\\b");
-      if (re.test(streamStr)) return true;
-
-      const noSpaceTerm = term.replace(/\s+/g, "");
-      if (noSpaceTerm.length >= 4 && noSpaceStream.includes(noSpaceTerm)) return true;
-    }
-    return false;
+  function findUniqueStreamMatch(streamTitle, matches) {
+    const matched = new Map();
+    matches.forEach(match => {
+      if (match?.id && matchStreamToCb(streamTitle, match)) {
+        matched.set(String(match.id), match);
+      }
+    });
+    return matched.size === 1 ? matched.values().next().value : null;
   }
 
   function matchStreamToCb(streamTitle, cb) {
     const cleanStream = cleanStreamStr(streamTitle);
+    const sides = cleanStream.split(/\b(?:vs?|versus)\b/);
+    if (sides.length !== 2) return false;
+    const left = sides[0].split(/\s(?:-|:|\|)\s/).pop().trim();
+    let right = sides[1].split(/\s(?:-|:|\|)\s|,/)[0].trim();
+    right = right.replace(/\s+in\s+.+$/, "").trim();
+    if (!left || !right) return false;
     if (isStreamWomenMatch(streamTitle) !== isStreamWomenMatch(cb)) return false;
     const cbA = isStreamATeam(cb.team1?.teamName) || isStreamATeam(cb.team2?.teamName);
     const stA = isStreamATeam(cleanStream);
     if (cbA !== stA) return false;
-    return teamMatchesStream(cb.team1, cleanStream) && teamMatchesStream(cb.team2, cleanStream);
+    return (
+      teamMatchesStream(cb.team1, left) && teamMatchesStream(cb.team2, right)
+    ) || (
+      teamMatchesStream(cb.team1, right) && teamMatchesStream(cb.team2, left)
+    );
   }
 
   function updateDomMatchServers() {
@@ -1884,7 +1905,7 @@
       "bundesliga", "ligue 1", "champions league", "europa league", "carabao cup",
       "copa del rey", "isl", "fa cup", "durand cup"
     ];
-    if (nonCricket.some(w => combined.includes(w))) return false;
+    if (nonCricket.some(w => new RegExp(`(^|[^a-z0-9])${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}($|[^a-z0-9])`).test(combined))) return false;
     if (c === "cricket" || c === "cricket-match") return true;
 
     const cricketIndicators = [
@@ -1894,7 +1915,8 @@
       "blast", "npl", "nepal premier", "icc", "asia cup", "world cup", "trophy", "shield",
       "stumps", "innings", "under-19", "u19", "women"
     ];
-    return cricketIndicators.some(w => combined.includes(w));
+    const cricketContext = combined.replace(/\blive cricket stream\b/g, " ");
+    return cricketIndicators.some(w => new RegExp(`(^|[^a-z0-9])${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}($|[^a-z0-9])`).test(cricketContext));
   }
 
   async function syncAllrounderClient(force = false) {
@@ -1925,14 +1947,12 @@
       if (!candidateMatches.length) candidateMatches.push(...(state.matches || []));
 
       const newAutoServers = {};
-      const unmatchedStreams = [];
-      const extraCricbuzzLiveMatches = [];
-
       if (fcRes.status === "fulfilled") {
         const fcMatches = Array.isArray(fcRes.value) ? fcRes.value : (Array.isArray(fcRes.value?.matches) ? fcRes.value.matches : []);
         for (const fc of fcMatches) {
           const status = String(fc.status || "").toUpperCase();
           const isFcLive = status.includes("LIVE") || fc.isLive === true;
+          if (!isFcLive) continue;
 
           const cat = String(fc.event_category || fc.category || "").toLowerCase();
           const rawTitle = fc.match_name || fc.title || "";
@@ -1945,102 +1965,32 @@
           const playerUrl = `https://iosfancode.vercel.app/?watch=${encodeURIComponent(matchId)}`;
           const title = rawTitle.replace(/\[.*?\]|\(.*?\)/g, "").trim() || rawTitle;
 
-          let matched = false;
-          for (const cb of candidateMatches) {
-            if (matchStreamToCb(title, cb)) {
-              matched = true;
-              const mid = String(cb.id);
-              // Only 1 FanCode server per match (Server 1)
-              if (!newAutoServers[mid] || newAutoServers[mid].length === 0) {
-                const sObj = {
-                  id: `client_fc_${mid}_1`,
-                  title: "Server 1",
-                  serverLabel: "Server 1",
-                  category: `${watchLinkPrefix}${mid}`,
-                  media_type: "link",
-                  media_url: playerUrl,
-                  source: "fancode",
-                  published: true,
-                  sort_order: 1
-                };
-                newAutoServers[mid] = [sObj];
-                cb.auto_servers = [sObj];
-              }
+          const eligibleMatches = candidateMatches.filter(match =>
+            isLiveMatch(match) || isMatchStartingSoon(match)
+          );
+          const cb = findUniqueStreamMatch(title, eligibleMatches);
+          if (!cb) continue;
 
-              const inMainGrid = (state.matches || []).some(m => String(m.id) === mid);
-              if (!inMainGrid && !isCompletedMatch(cb) && !extraCricbuzzLiveMatches.some(m => String(m.id) === mid)) {
-                cb.isCricbuzzMatch = true;
-                cb.state = "Live";
-                extraCricbuzzLiveMatches.push(cb);
-              }
-              break;
-            }
-          }
-          if (!matched && isFcLive) {
-            unmatchedStreams.push({ source: "fancode", title, playerUrl });
-          }
-        }
-      }
-
-      const extraStreams = [...extraCricbuzzLiveMatches];
-      for (const st of unmatchedStreams) {
-        let ex = null;
-        for (const existing of extraStreams) {
-          if (matchStreamToCb(st.title, existing)) {
-            ex = existing;
-            break;
-          }
-        }
-        if (ex) {
-          if (!ex.auto_servers) ex.auto_servers = [];
-          if (!ex.auto_servers.some(s => s.media_url === st.playerUrl)) {
-            const sNum = ex.auto_servers.length + 1;
-            ex.auto_servers.push({
-              id: `extra_${ex.id}_${sNum}`,
-              title: `Server ${sNum}`,
-              serverLabel: `Server ${sNum}`,
-              category: `${watchLinkPrefix}${ex.id}`,
+          const mid = String(cb.id);
+          if (!newAutoServers[mid]?.length) {
+            const sObj = {
+              id: `client_fc_${mid}_1`,
+              title: "Server 1",
+              serverLabel: "Server 1",
+              category: `${watchLinkPrefix}${mid}`,
               media_type: "link",
-              media_url: st.playerUrl,
-              source: st.source,
+              media_url: playerUrl,
+              source: "fancode",
               published: true,
-              sort_order: sNum
-            });
+              sort_order: 1
+            };
+            newAutoServers[mid] = [sObj];
+            cb.auto_servers = [sObj];
           }
-        } else if (isCricketStream(st.title, "", "")) {
-          const vsParts = st.title.split(/\s+[-–—]\s+/);
-          const matchPart = vsParts[vsParts.length - 1] || st.title;
-          const vsMatch = matchPart.match(/^(.+?)\s+(?:vs\.?|v\/s|v)\s+(.+)$/i);
-          const t1 = vsMatch ? vsMatch[1].trim() : matchPart;
-          const t2 = vsMatch ? vsMatch[2].trim() : "Opponent";
-          const exId = `ex_fc_${matchId || (cleanStreamStr(t1).replace(/[^a-z0-9]/g, "") + "_vs_" + cleanStreamStr(t2).replace(/[^a-z0-9]/g, ""))}`;
-          const newEx = {
-            id: exId,
-            series: vsParts.length > 1 ? vsParts[0].trim() : "Live Cricket Stream",
-            state: "In Progress",
-            status: "Live Streaming",
-            isLiveStream: true,
-            isSynthetic: true,
-            team1: { teamName: t1, teamSName: t1.slice(0, 4).toUpperCase() },
-            team2: { teamName: t2, teamSName: t2.slice(0, 4).toUpperCase() },
-            auto_servers: [
-              {
-                id: `extra_${exId}_1`,
-                title: "Server 1",
-                serverLabel: "Server 1",
-                category: `${watchLinkPrefix}${exId}`,
-                media_type: "link",
-                media_url: st.playerUrl,
-                source: st.source,
-                published: true,
-                sort_order: 1
-              }
-            ]
-          };
-          extraStreams.push(newEx);
         }
       }
 
+      const extraStreams = [];
 
 
       state.extraLiveStreams = extraStreams;
@@ -2836,18 +2786,7 @@
         arr.forEach(m => { if (m?.id) state.allKnownMatches[String(m.id)] = m; });
       }
     });
-    const _cachedExt = localStorage.getItem("cricfreex_cached_extra_streams");
-    if (_cachedExt) {
-      const _parsedExt = JSON.parse(_cachedExt);
-      if (Array.isArray(_parsedExt) && _parsedExt.length) {
-        state.extraLiveStreams = _parsedExt;
-        _parsedExt.forEach(ex => {
-          if (ex?.id && ex.auto_servers?.length) {
-            state.autoServers[ex.id] = ex.auto_servers;
-          }
-        });
-      }
-    }
+    state.extraLiveStreams = [];
   } catch (e) {}
   let _preloadingStarted = false;
 

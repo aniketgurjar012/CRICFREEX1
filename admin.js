@@ -610,6 +610,16 @@ function cleanStreamStr(text) {
   return String(text).toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
 }
 
+function normalizeStreamTeamSide(text) {
+  return cleanStreamStr(text)
+    .replace(/\b(english|hindi|live|stream|match)\b/g, " ")
+    .replace(/\bunder\s*19\b/g, "u19")
+    .replace(/\b(men|t20i?|odi|test|day|session|innings|20\d{2})\b/g, " ")
+    .replace(/\b(1st|2nd|3rd|[4-9]th)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function isStreamWomenMatch(obj) {
   const s = typeof obj === "string" ? obj : [obj.team1?.teamName, obj.team2?.teamName, obj.series, obj.description].join(" ");
   return /\b(women|womens|wbbl)\b/i.test(s) || /-w\b/i.test(s) || /W$/.test(obj.team1?.teamSName || "") || /W$/.test(obj.team2?.teamSName || "");
@@ -623,46 +633,40 @@ function teamMatchesStream(team, streamStr) {
   if (!team) return false;
   const name = cleanStreamStr(team.teamName);
   const sname = cleanStreamStr(team.teamSName);
-  const terms = new Set();
-  if (name) {
-    terms.add(name);
-    const stripped = name.split(" ").filter(w => !["women", "team", "men"].includes(w)).join(" ");
-    if (stripped) terms.add(stripped);
-    name.split(" ").forEach(w => {
-      if (w.length >= 4 && !["cricket", "club", "team", "kings", "royals", "super", "giants", "riders", "challengers", "knights", "stars", "titans", "strikers", "heat", "sixers", "thunder", "scorchers", "renegades", "hurricanes", "women", "mens", "eagles", "falcons", "patriots", "lions", "warriors"].includes(w)) {
-        terms.add(w);
-      }
-    });
-  }
-  if (sname && sname.length >= 2) {
-    terms.add(sname);
-    if (sname.endsWith("w") && sname.length > 2) terms.add(sname.slice(0, -1));
-  }
+  const terms = new Set([name]);
+  if (sname.length >= 2) terms.add(sname);
   [name, sname].forEach(key => {
     if (STREAM_ALIASES[key]) {
-      STREAM_ALIASES[key].forEach(a => terms.add(cleanStreamStr(a)));
+      STREAM_ALIASES[key].forEach(alias => {
+        const cleaned = cleanStreamStr(alias);
+        const words = cleaned.split(" ");
+        const generic = new Set([
+          "blues", "bulls", "dolphins", "eagles", "falcons", "heat",
+          "hurricanes", "knights", "lions", "patriots", "renegades",
+          "royals", "scorchers", "sixers", "stars", "strikers", "thunder",
+          "titans", "warriors", "whites"
+        ]);
+        if (cleaned && (words.length > 1 || cleaned.length > 3) &&
+            !words.every(word => generic.has(word))) {
+          terms.add(cleaned);
+        }
+      });
     }
   });
 
-  const noSpaceStream = streamStr.replace(/\s+/g, "");
-
-  for (const term of terms) {
-    if (!term || term.length < 2) continue;
-    if (term.length <= 3) {
-      const rx = new RegExp(`(^|\\s)${term}(\\s|$)`, "i");
-      if (rx.test(streamStr)) return true;
-      continue;
-    }
-    if (streamStr.includes(term)) return true;
-    const noSpaceTerm = term.replace(/\s+/g, "");
-    if (noSpaceTerm.length >= 4 && noSpaceStream.includes(noSpaceTerm)) return true;
-  }
-  return false;
+  const normalizedTerms = new Set(Array.from(terms, normalizeStreamTeamSide));
+  return normalizedTerms.has(normalizeStreamTeamSide(streamStr));
 }
 
 function matchStreamToCb(streamTitle, cb) {
   if (!streamTitle || !cb) return false;
   const cleanTitle = cleanStreamStr(streamTitle);
+  const sides = cleanTitle.split(/\b(?:vs?|versus)\b/);
+  if (sides.length !== 2) return false;
+  const left = sides[0].split(/\s(?:-|:|\|)\s/).pop().trim();
+  let right = sides[1].split(/\s(?:-|:|\|)\s|,/)[0].trim();
+  right = right.replace(/\s+in\s+.+$/, "").trim();
+  if (!left || !right) return false;
   const streamIsWomen = isStreamWomenMatch(streamTitle);
   const cbIsWomen = isStreamWomenMatch(cb);
   if (streamIsWomen !== cbIsWomen) return false;
@@ -677,10 +681,34 @@ function matchStreamToCb(streamTitle, cb) {
   if (cbIsT1A !== streamIsT1A && (cbIsT1A || streamIsT1A)) return false;
   if (cbIsT2A !== streamIsT2A && (cbIsT2A || streamIsT2A)) return false;
 
-  const m1 = teamMatchesStream(t1, cleanTitle);
-  const m2 = teamMatchesStream(t2, cleanTitle);
+  return (
+    teamMatchesStream(t1, left) && teamMatchesStream(t2, right)
+  ) || (
+    teamMatchesStream(t1, right) && teamMatchesStream(t2, left)
+  );
+}
 
-  return Boolean(m1 && m2);
+function findUniqueStreamMatch(streamTitle, matches) {
+  const matched = new Map();
+  matches.forEach(match => {
+    if (match?.id && matchStreamToCb(streamTitle, match)) {
+      matched.set(String(match.id), match);
+    }
+  });
+  return matched.size === 1 ? matched.values().next().value : null;
+}
+
+function isAdminLiveOrStartingSoon(match) {
+  const state = String(match?.state || "").toLowerCase();
+  const status = String(match?.status || "").toLowerCase();
+  if (/\b(live|in progress|innings break|stumps|toss|delayed|rain delay)\b/.test(`${state} ${status}`)) {
+    return true;
+  }
+  const start = Number(match?.startDate);
+  if (!start || !Number.isFinite(start)) return false;
+  const startMs = start < 1e11 ? start * 1000 : start;
+  const delta = startMs - Date.now();
+  return delta <= 60 * 60 * 1000 && delta >= -6 * 60 * 60 * 1000;
 }
 
 let isAutoSyncingToDatabase = false;
@@ -697,7 +725,7 @@ function isCricketStreamAdmin(title = "", category = "", eventName = "") {
     "bundesliga", "ligue 1", "champions league", "europa league", "carabao cup",
     "copa del rey", "isl", "fa cup", "durand cup"
   ];
-  if (nonCricket.some(w => combined.includes(w))) return false;
+  if (nonCricket.some(w => new RegExp(`(^|[^a-z0-9])${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}($|[^a-z0-9])`).test(combined))) return false;
   if (category === "cricket" || category === "cricket-match") return true;
   const cricketIndicators = [
     "cricket", "t20", "t10", "odi", "test match", "test", "ipl", "bbl", "cpl", "psl",
@@ -706,7 +734,8 @@ function isCricketStreamAdmin(title = "", category = "", eventName = "") {
     "blast", "npl", "nepal premier", "icc", "asia cup", "world cup", "trophy", "shield",
     "stumps", "innings", "under-19", "u19", "women"
   ];
-  return cricketIndicators.some(w => combined.includes(w));
+  const cricketContext = combined.replace(/\blive cricket stream\b/g, " ");
+  return cricketIndicators.some(w => new RegExp(`(^|[^a-z0-9])${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}($|[^a-z0-9])`).test(cricketContext));
 }
 
 async function syncAllrounderToDatabase(manual = false) {
@@ -756,6 +785,7 @@ async function syncAllrounderToDatabase(manual = false) {
       const rawTitle = String(fc.match_name || fc.title || "");
       const status = String(fc.status || "").toUpperCase();
       const isFcLive = status.includes("LIVE") || fc.isLive === true;
+      if (!isFcLive) continue;
 
       const matchId = String(fc.match_id || fc.id || "").trim();
       if (!matchId || !rawTitle) continue;
@@ -765,39 +795,29 @@ async function syncAllrounderToDatabase(manual = false) {
       const playerUrl = `https://iosfancode.vercel.app/?watch=${encodeURIComponent(matchId)}`;
       const cleanTitle = rawTitle.replace(/\[.*?\]|\(.*?\)/g, "").trim() || rawTitle;
 
-      let matched = false;
-      for (const cb of candidateMatches) {
-        if (matchStreamToCb(cleanTitle, cb)) {
-          matched = true;
-          const midStr = String(cb.id);
-          // Exactly 1 FanCode server per match (Server 1)
-          const alreadyQueued = liveStreamsToInsert.some(x => x.matchId === midStr && x.source === "fancode");
-          const alreadyInDb = content.some(c => isCricketWatchLink(c) && cricketWatchMatchId(c) === midStr && (String(c.media_url || "").includes("iosfancode") || String(c.public_id || "").startsWith("auto_")));
-          if (!alreadyQueued && !alreadyInDb) {
-            liveStreamsToInsert.push({
-              matchId: midStr,
-              source: "fancode",
-              playerUrl,
-              title: rawTitle
-            });
-          }
-          break;
-        }
+      const cb = findUniqueStreamMatch(
+        cleanTitle,
+        candidateMatches.filter(isAdminLiveOrStartingSoon)
+      );
+      if (!cb) continue;
+      const midStr = String(cb.id);
+      const alreadyQueued = liveStreamsToInsert.some(x =>
+        x.matchId === midStr && x.source === "fancode"
+      );
+      const alreadyInDb = content.some(c =>
+        isCricketWatchLink(c) &&
+        cricketWatchMatchId(c) === midStr &&
+        (String(c.media_url || "").includes("iosfancode") ||
+         String(c.public_id || "").startsWith("auto_"))
+      );
+      if (!alreadyQueued && !alreadyInDb) {
+        liveStreamsToInsert.push({
+          matchId: midStr,
+          source: "fancode",
+          playerUrl,
+          title: rawTitle
+        });
       }
-      if (!matched && isFcLive && isCricketStreamAdmin(rawTitle, cat, eventName)) {
-        const exMid = `ex_fc_${matchId}`;
-        const alreadyQueued = liveStreamsToInsert.some(x => x.matchId === exMid);
-        if (!alreadyQueued) {
-          liveStreamsToInsert.push({
-            matchId: exMid,
-            source: "fancode",
-            playerUrl,
-            title: rawTitle
-          });
-        }
-      }
-      continue;
-
     }
 
 
