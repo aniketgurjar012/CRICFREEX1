@@ -1899,8 +1899,11 @@ def get_matches(category: str):
                     if ci_sd:
                         try:
                             ci_sec = parse_start_date_sec(ci_sd)
-                            if ci_sec and (ci_sec * 1000.0) > end_tomorrow_ms:
-                                continue
+                            if ci_sec:
+                                ci_ms = ci_sec * 1000.0
+                                today_start_ms = int(today_start_ist.timestamp() * 1000)
+                                if ci_ms < today_start_ms or ci_ms > end_tomorrow_ms:
+                                    continue
                         except Exception:
                             pass
 
