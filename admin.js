@@ -910,11 +910,39 @@ async function cleanupFinishedWatchLinks(activeLiveUrls = null){
       }
     });
 
+    let activeMatchIds = new Set();
+    if (activeLiveUrls instanceof Set) {
+      watchItems.forEach(item => {
+        if (activeLiveUrls.has(String(item.media_url || ""))) {
+          activeMatchIds.add(cricketWatchMatchId(item));
+        }
+      });
+    } else {
+      const autoResponse = await fetch(`${CRICKET_API_BASE}/api/auto-servers`, {
+        headers: { Accept: "application/json" }
+      });
+      if (!autoResponse.ok) return;
+      const autoResult = await autoResponse.json();
+      const lastSync = Number(autoResult.last_sync || 0);
+      if (!lastSync || Date.now() / 1000 - lastSync > 120) return;
+      activeMatchIds = new Set(
+        Object.entries(autoResult.servers || {})
+          .filter(([, servers]) => Array.isArray(servers) && servers.length)
+          .map(([matchId]) => String(matchId))
+      );
+      activeLiveUrls = new Set(
+        Object.values(autoResult.servers || {})
+          .flatMap(servers => Array.isArray(servers) ? servers : [])
+          .map(server => String(server.media_url || ""))
+      );
+    }
+
     const itemsToDelete=watchItems.filter(item=>{
       const mid = cricketWatchMatchId(item);
       const mUrl = String(item.media_url || "");
       const pubId = String(item.public_id || "");
       const isAuto = pubId.startsWith("auto_");
+      if (activeMatchIds.has(mid)) return false;
 
       // 1. Delete allrounder links (legacy)
       if (mUrl.includes("allrounderlive.in")) return true;
@@ -1022,6 +1050,114 @@ function getPublicSiteBase() {
   return "https://cricfreex-freecricket.vercel.app";
 }
 
+function shareTeamFlag(team, series = "") {
+  const name = typeof team === "object" && team
+    ? String(team.teamName || team.teamSName || "")
+    : String(team || "");
+  const shortName = typeof team === "object" && team
+    ? String(team.teamSName || "")
+    : "";
+  const normalize = value => value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const aliases = {
+    afghanistan: "af", afg: "af",
+    australia: "au", aus: "au",
+    bangladesh: "bd", ban: "bd",
+    england: "gb-eng", eng: "gb-eng",
+    india: "in", ind: "in",
+    ireland: "ie", ire: "ie",
+    nepal: "np", nep: "np",
+    netherlands: "nl", ned: "nl",
+    "new zealand": "nz", nzl: "nz", nz: "nz",
+    pakistan: "pk", pak: "pk",
+    "south africa": "za", rsa: "za", sa: "za",
+    "sri lanka": "lk", sl: "lk",
+    "west indies": "wi", windies: "wi", wi: "wi",
+    zimbabwe: "zw", zim: "zw",
+    "united arab emirates": "ae", uae: "ae",
+    usa: "us", "united states": "us",
+    canada: "ca", can: "ca",
+    scotland: "gb-sct", sco: "gb-sct",
+    "papua new guinea": "pg", png: "pg",
+    oman: "om", namibia: "na", uganda: "ug"
+  };
+  const countryCodes = new Set([
+    "af", "ae", "au", "bd", "ca", "gb", "ie", "in", "lk", "na", "nl",
+    "np", "nz", "om", "pg", "pk", "us", "za", "zw"
+  ]);
+  let code = null;
+  for (const candidate of [name, shortName]) {
+    const normalized = normalize(candidate);
+    code = aliases[normalized] || Object.entries(aliases).find(([alias]) =>
+      alias.length > 3 && normalized.startsWith(`${alias} `)
+    )?.[1];
+    if (code) break;
+    if (countryCodes.has(normalized)) {
+      code = normalized;
+      break;
+    }
+  }
+  if (!code) {
+    const context = normalize(series);
+    if (/\b(ipl|wpl|ranji|vijay hazare|duleep|irani)\b/.test(context)) code = "in";
+    else if (/\b(bbl|big bash|wbbl|sheffield shield)\b/.test(context)) code = "au";
+    else if (/\b(psl|pakistan super league)\b/.test(context)) code = "pk";
+    else if (/\b(bpl|bangladesh premier league)\b/.test(context)) code = "bd";
+    else if (/\b(sa20|csa)\b/.test(context)) code = "za";
+    else if (/\b(the hundred|vitality blast|county championship)\b/.test(context)) code = "gb-eng";
+    else if (/\b(super smash|plunket shield)\b/.test(context)) code = "nz";
+    else if (/\b(lpl|lanka premier league)\b/.test(context)) code = "lk";
+  }
+  if (!code) return "";
+  if (code === "wi") return "🌴";
+  if (code === "gb-eng" || code === "gb-sct") {
+    const tag = code === "gb-eng" ? "eng" : "sct";
+    return `\u{1F3F4}${[...tag].map(char => String.fromCodePoint(0xE0061 + char.charCodeAt(0) - 97)).join("")}\u{E007F}`;
+  }
+  if (!/^[a-z]{2}$/.test(code)) return "";
+  return [...code].map(char => String.fromCodePoint(0x1F1E6 + char.charCodeAt(0) - 97)).join("");
+}
+
+function formatMatchShareMessage(match, streamUrl) {
+  const teamLabel = team => {
+    const name = typeof team === "object" && team
+      ? team.teamName || team.teamSName
+      : team;
+    const flag = shareTeamFlag(team, match?.series);
+    return `${name || "Team"}${flag ? ` ${flag}` : ""}`;
+  };
+  return [
+    `🏆 ${match?.series || match?.description || "Live Cricket"}`,
+    `🏏 ${teamLabel(match?.team1)} vs ${teamLabel(match?.team2)}`,
+    "",
+    `🔴 WATCH LIVE : ${streamUrl}`,
+    "",
+    "⚠️ Open in Chrome Browser"
+  ].join("\n");
+}
+
+async function copyShareMessage(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return;
+  } catch (clipboardError) {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    document.body.appendChild(textarea);
+    textarea.select();
+    let copied = false;
+    try {
+      copied = document.execCommand("copy");
+    } finally {
+      textarea.remove();
+    }
+    if (!copied) {
+      throw new Error(`Clipboard access failed: ${clipboardError.message}`);
+    }
+  }
+}
+
 function updateWatchShareableLinks(matchId, records) {
   const box = $("watchShareableLinksBox");
   const list = $("watchShareableLinksList");
@@ -1048,6 +1184,7 @@ function updateWatchShareableLinks(matchId, records) {
   items.push({
     label: "Match Link",
     url: `${base}/?match=${matchId}`,
+    serverIndex: 0,
     desc: "Opens match page & auto-plays Server 1"
   });
 
@@ -1056,12 +1193,17 @@ function updateWatchShareableLinks(matchId, records) {
     items.push({
       label: `Server ${sNum} Link`,
       url: `${base}/?match=${matchId}&server=${sNum}`,
+      serverIndex: i,
       desc: `Directly launches Server ${sNum} for ${matchTitle}`
     });
   }
 
+  const availableServers = records?.length ? records : selectedMatchLinks;
   list.replaceChildren();
   items.forEach(it => {
+    const streamUrl = availableServers[it.serverIndex]?.media_url;
+    const copyUrl = streamUrl || it.url;
+    const shareMessage = formatMatchShareMessage(matchObj, copyUrl);
     const row = document.createElement("div");
     row.className = "watch-share-item";
 
@@ -1071,31 +1213,24 @@ function updateWatchShareableLinks(matchId, records) {
 
     const urlCode = document.createElement("code");
     urlCode.className = "watch-share-url";
-    urlCode.textContent = it.url;
-    urlCode.title = `${it.url} (${it.desc})`;
+    urlCode.textContent = copyUrl;
+    urlCode.title = `${copyUrl} (${it.desc})`;
 
     const copyBtn = document.createElement("button");
     copyBtn.type = "button";
     copyBtn.className = "ghost watch-share-copy-btn";
-    copyBtn.textContent = "📋 Copy Link";
+    copyBtn.textContent = "📋 Copy Message";
     copyBtn.addEventListener("click", async () => {
       try {
-        await navigator.clipboard.writeText(it.url);
+        await copyShareMessage(shareMessage);
         copyBtn.textContent = "✓ Copied!";
         copyBtn.style.color = "var(--green)";
         setTimeout(() => {
-          copyBtn.textContent = "📋 Copy Link";
+          copyBtn.textContent = "📋 Copy Message";
           copyBtn.style.color = "";
         }, 2000);
-      } catch (err) {
-        const ta = document.createElement("textarea");
-        ta.value = it.url;
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand("copy");
-        ta.remove();
-        copyBtn.textContent = "✓ Copied!";
-        setTimeout(() => { copyBtn.textContent = "📋 Copy Link"; }, 2000);
+      } catch (error) {
+        setWatchLinkStatus(`Could not copy share message: ${error.message}`, true);
       }
     });
 
@@ -1642,12 +1777,12 @@ $("contentForm").onsubmit=async event=>{
       category:
         $("contentCategory").value.trim()||null,
 
-      kind: "channel",
-      parent_id: null,
-      media_type: "iframe",
+      kind: existing?.kind || "channel",
+      parent_id: existing?.parent_id ?? null,
+      media_type: existing?.media_type || "iframe",
       media_url: mediaUrl,
       image_url: existing?.image_url||null,
-      episode_number: null,
+      episode_number: existing?.episode_number ?? null,
       sort_order: Number($("sortOrder").value)||0,
       published: true,
       updated_at: new Date().toISOString()
@@ -1681,25 +1816,6 @@ $("contentForm").onsubmit=async event=>{
       existing?.media_url &&
       uploadedVideo &&
       existing.media_url!==uploadedVideo
-    ){
-      const path=
-        storagePath(
-          existing.media_url
-        );
-
-      if(path)oldPaths.push(path);
-    }
-
-    /*
-      If an existing channel/video is
-      converted into a Series, its old
-      uploaded player media is no longer
-      referenced.
-    */
-
-    if(
-      existing?.media_url &&
-      kind==="series"
     ){
       const path=
         storagePath(

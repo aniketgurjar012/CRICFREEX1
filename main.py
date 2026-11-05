@@ -1042,7 +1042,8 @@ def _match_stream_to_cb(stream_title: str, cb_match: dict[str, Any]) -> bool:
 
 def _clean_team_tokens(name: str) -> set[str]:
     cleaned = re.sub(r'[^a-zA-Z0-9\s]', ' ', str(name or "")).lower()
-    return {w for w in cleaned.split() if len(w) > 2 and w not in GENERIC_MASCOTS}
+    ignored = {"cricket", "club", "team", "the"}
+    return {w for w in cleaned.split() if w not in ignored}
 
 
 def _team_token_match(name1: str, name2: str) -> bool:
@@ -1051,15 +1052,17 @@ def _team_token_match(name1: str, name2: str) -> bool:
     if k1 and k2:
         if k1 == k2:
             return True
-        if k1 in _KNOWN_TEAM_ALIASES and _KNOWN_TEAM_ALIASES[k1] == k2:
+        canonical1 = _KNOWN_TEAM_ALIASES.get(k1, k1)
+        canonical2 = _KNOWN_TEAM_ALIASES.get(k2, k2)
+        if canonical1 == canonical2:
             return True
-        if k2 in _KNOWN_TEAM_ALIASES and _KNOWN_TEAM_ALIASES[k2] == k1:
+        international1 = _INTL_TEAM_IDS.get(canonical1)
+        international2 = _INTL_TEAM_IDS.get(canonical2)
+        if international1 and international2 and international1[0] == international2[0]:
             return True
     t1 = _clean_team_tokens(name1)
     t2 = _clean_team_tokens(name2)
-    if not t1 or not t2:
-        return False
-    return bool(t1.intersection(t2))
+    return bool(t1 and t2 and t1 == t2)
 
 
 def _parse_cricinfo_score(score_str: str) -> dict[str, Any]:
@@ -1297,31 +1300,131 @@ def get_cricinfo_tab_data(match_id: str, tab: str) -> dict[str, Any]:
         if tab == "scorecard":
             matchcards = espn_summary.get("matchcards", [])
             innings = []
-            for mc in matchcards:
+            for competition in espn_summary.get("header", {}).get("competitions", []):
+                for competitor in competition.get("competitors", []):
+                    team = competitor.get("team", {})
+                    team_name = team.get("displayName") or team.get("name")
+                    if not team_name:
+                        continue
+
+                    line_scores = competitor.get("linescores") or []
+                    if line_scores:
+                        for line_score in line_scores:
+                            if line_score.get("isBatting") is False:
+                                continue
+                            runs = line_score.get("runs")
+                            wickets = line_score.get("wickets")
+                            score_match = None
+                            if runs is None and line_score.get("score") is not None:
+                                score_match = re.match(
+                                    r"\s*(\d+)(?:/(\d+))?",
+                                    str(line_score["score"])
+                                )
+                                if score_match:
+                                    runs = int(score_match.group(1))
+                                    if wickets is None and score_match.group(2):
+                                        wickets = int(score_match.group(2))
+                            if runs is None:
+                                continue
+                            innings.append({
+                                "team": team_name,
+                                "runs": runs,
+                                "wickets": wickets,
+                                "overs": line_score.get("overs"),
+                                "batting": [],
+                                "bowling": [],
+                                "_period": line_score.get("period", 0)
+                            })
+                        continue
+
+                    for score_part in str(competitor.get("score") or "").split("&"):
+                        score_match = re.search(
+                            r"(\d+)(?:/(\d+))?(?:\s*\(([\d.]+)\s*ov)?",
+                            score_part,
+                            re.I
+                        )
+                        if score_match:
+                            innings.append({
+                                "team": team_name,
+                                "runs": int(score_match.group(1)),
+                                "wickets": int(score_match.group(2)) if score_match.group(2) else None,
+                                "overs": score_match.group(3),
+                                "batting": [],
+                                "bowling": []
+                            })
+
+            for matchcard in matchcards:
+                team = matchcard.get("team") or {}
+                team_name = (
+                    team.get("displayName")
+                    if isinstance(team, dict)
+                    else team
+                ) or matchcard.get("teamName")
+                runs_value = matchcard.get("runs", matchcard.get("score"))
+                if not team_name or runs_value is None:
+                    continue
+                runs_match = re.match(r"\s*(\d+)", str(runs_value))
+                if not runs_match:
+                    continue
+                runs = int(runs_match.group(1))
+
                 batting_rows = []
-                for p in mc.get("playerDetails", []):
-                    runs_val = str(p.get("runs", "0"))
-                    balls_val = str(p.get("ballsFaced", "0"))
+                for player in matchcard.get("playerDetails", []):
+                    player_name = player.get("playerName")
+                    if not player_name:
+                        continue
+                    runs_value = str(player.get("runs", "0"))
+                    balls_value = str(player.get("ballsFaced", "0"))
                     try:
-                        r_f = float(runs_val)
-                        b_f = float(balls_val)
-                        sr = str(round(r_f / max(b_f, 1.0) * 100.0, 2))
-                    except Exception:
-                        sr = "0.0"
+                        strike_rate = str(round(
+                            float(runs_value) / max(float(balls_value), 1.0) * 100.0,
+                            2
+                        ))
+                    except (TypeError, ValueError):
+                        strike_rate = "0.0"
                     batting_rows.append({
-                        "name": p.get("playerName", ""),
-                        "dismissal": p.get("dismissal", ""),
-                        "runs": runs_val,
-                        "balls": balls_val,
-                        "fours": str(p.get("fours", "0")),
-                        "sixes": str(p.get("sixes", "0")),
-                        "strikeRate": sr
+                        "name": player_name,
+                        "dismissal": player.get("dismissal", ""),
+                        "runs": runs_value,
+                        "balls": balls_value,
+                        "fours": str(player.get("fours", "0")),
+                        "sixes": str(player.get("sixes", "0")),
+                        "strikeRate": strike_rate
                     })
+
+                existing = next(
+                    (
+                        inning for inning in innings
+                        if inning.get("team", "").casefold() == str(team_name).casefold()
+                        and str(inning.get("runs")) == str(runs)
+                    ),
+                    None
+                )
+                if not existing:
+                    same_score = [
+                        inning for inning in innings
+                        if str(inning.get("runs")) == str(runs)
+                    ]
+                    if len(same_score) == 1:
+                        existing = same_score[0]
+                if existing:
+                    existing["batting"] = batting_rows
+                    existing["bowling"] = matchcard.get("bowling", [])
+                    continue
+                if innings:
+                    continue
                 innings.append({
-                    "title": f"{mc.get('teamName', 'Team')} ({mc.get('runs', '')} - {mc.get('total', '')})",
+                    "team": team_name,
+                    "runs": runs,
+                    "wickets": matchcard.get("wickets"),
+                    "overs": matchcard.get("overs"),
                     "batting": batting_rows,
-                    "bowling": []
+                    "bowling": matchcard.get("bowling", [])
                 })
+
+            innings.sort(key=lambda inning: inning.get("_period", float("inf")))
+            for inning in innings:
+                inning.pop("_period", None)
             data = {"innings": innings}
         elif tab == "info":
             game_info = espn_summary.get("gameInfo", {})
@@ -1351,14 +1454,97 @@ def get_cricinfo_tab_data(match_id: str, tab: str) -> dict[str, Any]:
             squads = []
             for ros in rosters:
                 t_name = ros.get("team", {}).get("displayName", "Team")
-                players = [{"name": p.get("displayName", "")} for p in ros.get("roster", [])]
+                players = [
+                    {
+                        "name": p.get("displayName") or p.get("fullName") or p.get("name", ""),
+                        "role": p.get("position", {}).get("displayName", "")
+                    }
+                    for p in ros.get("roster", [])
+                    if p.get("displayName") or p.get("fullName") or p.get("name")
+                ]
                 squads.append({"teamName": t_name, "players": players})
-            data = {"squads": squads}
+            data = {"teams": squads}
+        elif tab == "points":
+            standings_groups = []
+
+            def collect_standings(node):
+                if not isinstance(node, dict):
+                    return
+                standings = node.get("standings")
+                if isinstance(standings, dict) and standings.get("entries"):
+                    standings_groups.append(standings["entries"])
+                for child in node.get("children", []):
+                    collect_standings(child)
+
+            collect_standings(espn_summary.get("standings", {}))
+            entries = [entry for group in standings_groups for entry in group]
+            stat_names = []
+            for entry in entries:
+                for stat in entry.get("stats", []):
+                    label = stat.get("shortDisplayName") or stat.get("displayName") or stat.get("name")
+                    if label and label not in stat_names:
+                        stat_names.append(label)
+            if entries and stat_names:
+                rows = [["Team", *stat_names]]
+                for entry in entries:
+                    values = {
+                        stat.get("shortDisplayName") or stat.get("displayName") or stat.get("name"):
+                        stat.get("displayValue", stat.get("value", ""))
+                        for stat in entry.get("stats", [])
+                    }
+                    team = entry.get("team", {})
+                    rows.append([
+                        team.get("displayName") or team.get("name") or "Team",
+                        *[values.get(name, "") for name in stat_names]
+                    ])
+                data = {"tables": [rows], "headings": [espn_summary.get("standings", {}).get("name", "Standings")]}
+            else:
+                data = {"tables": [], "emptyMessage": "A points table is not available in the Cricinfo feed for this match."}
+        elif tab == "news":
+            articles = espn_summary.get("news", {}).get("articles", [])
+            links = []
+            for article in articles:
+                href = (
+                    article.get("links", {}).get("web", {}).get("href")
+                    or article.get("links", {}).get("source", {}).get("href")
+                    or article.get("link")
+                )
+                if href and str(href).startswith(("https://", "http://")):
+                    links.append({
+                        "title": article.get("headline") or article.get("title") or "Cricket news",
+                        "url": href
+                    })
+            data = {
+                "links": links,
+                "emptyMessage": "Cricinfo has no related news articles for this match right now."
+            }
+        elif tab == "commentary":
+            plays = espn_summary.get("plays", [])
+            deliveries = [
+                {
+                    "over": play.get("clock", {}).get("displayValue")
+                    or play.get("period", {}).get("number")
+                    or "Update",
+                    "text": play.get("text") or play.get("shortText") or ""
+                }
+                for play in plays
+                if play.get("text") or play.get("shortText")
+            ]
+            data = {
+                "deliveries": deliveries,
+                "emptyMessage": "Ball-by-ball commentary is not available in the Cricinfo feed for this match."
+            }
         else:
-            data = {"message": f"{tab.title()} data is not available for this match."}
+            data = {
+                "tables": [],
+                "emptyMessage": f"{tab.title()} data is not available in the Cricinfo feed for this match."
+            }
     except Exception as e:
         logger.warning("Error fetching Cricinfo summary: %s", e)
-        data = {"innings": []}
+        data = {
+            "innings": [],
+            "emptyMessage": f"Cricinfo match details could not be loaded: {e}"
+        }
     return data
 
 
@@ -1457,6 +1643,20 @@ def deduplicate_supabase_content():
         logger.warning("deduplicate_supabase_content error: %s", e)
 
 
+def _finished_match_watch_records(
+    existing_records: list[dict[str, Any]],
+    recent_match_ids: set[str],
+    matched_servers: dict[str, list[dict[str, Any]]]
+) -> list[dict[str, Any]]:
+    finished_ids_without_streams = recent_match_ids - set(matched_servers)
+    return [
+        record
+        for record in existing_records
+        if str(record.get("category") or "").startswith("__cricket_watch__:")
+        and str(record["category"]).split(":", 1)[1] in finished_ids_without_streams
+    ]
+
+
 
 def _sync_to_supabase(matched_servers: dict[str, list[dict[str, Any]]]):
     try:
@@ -1467,13 +1667,6 @@ def _sync_to_supabase(matched_servers: dict[str, list[dict[str, Any]]]):
             existing_records = json.loads(r.read().decode("utf-8"))
 
         existing_urls = {r.get("media_url") for r in existing_records if r.get("media_url")}
-        existing_ids_by_mid = {}
-        for r in existing_records:
-            cat = str(r.get("category") or "")
-            if cat.startswith("__cricket_watch__:"):
-                mid = cat[len("__cricket_watch__:"):].strip()
-                existing_ids_by_mid.setdefault(mid, []).append(r.get("id"))
-
         # 1. Insert new streams
         for mid, servers in matched_servers.items():
             cat = f"__cricket_watch__:{mid}"
@@ -1501,8 +1694,12 @@ def _sync_to_supabase(matched_servers: dict[str, list[dict[str, Any]]]):
                         with urllib.request.urlopen(post_req, timeout=5):
                             pass
                         existing_urls.add(m_url)
-                    except Exception:
-                        pass
+                    except Exception as error:
+                        logger.warning(
+                            "Failed to save auto stream for match %s: %s",
+                            mid,
+                            error
+                        )
 
         # 2. Delete ended match servers from Supabase
         recent_mids = set()
@@ -1514,27 +1711,28 @@ def _sync_to_supabase(matched_servers: dict[str, list[dict[str, Any]]]):
         except Exception:
             pass
 
-        for r_mid in recent_mids:
-            if r_mid in existing_ids_by_mid:
-                # Don't delete if the stream is still actively live
-                if r_mid in matched_servers:
-                    continue
-                # Only delete auto-synced rows for finished matches, NEVER delete manual admin links!
-                for r in existing_records:
-                    row_id = r.get("id")
-                    cat = str(r.get("category") or "")
-                    pub_id = str(r.get("public_id") or "")
-                    if row_id and cat == f"__cricket_watch__:{r_mid}" and pub_id.startswith("auto_"):
-                        del_req = urllib.request.Request(
-                            f"{SUPABASE_URL}/rest/v1/content?id=eq.{row_id}",
-                            headers=headers,
-                            method="DELETE"
-                        )
-                        try:
-                            with urllib.request.urlopen(del_req, timeout=5):
-                                pass
-                        except Exception:
-                            pass
+        for record in _finished_match_watch_records(
+            existing_records,
+            recent_mids,
+            matched_servers
+        ):
+            row_id = record.get("id")
+            if not row_id:
+                continue
+            del_req = urllib.request.Request(
+                f"{SUPABASE_URL}/rest/v1/content?id=eq.{row_id}",
+                headers=headers,
+                method="DELETE"
+            )
+            try:
+                with urllib.request.urlopen(del_req, timeout=5):
+                    pass
+            except Exception as error:
+                logger.warning(
+                    "Failed to delete finished-match stream %s: %s",
+                    row_id,
+                    error
+                )
 
         # 3. Delete any old Allrounder FanCode servers, Willow servers, or ended FanCode auto servers
         active_auto_urls = {
@@ -1558,8 +1756,12 @@ def _sync_to_supabase(matched_servers: dict[str, list[dict[str, Any]]]):
                     try:
                         with urllib.request.urlopen(del_req, timeout=5):
                             pass
-                    except Exception:
-                        pass
+                    except Exception as error:
+                        logger.warning(
+                            "Failed to delete inactive auto stream %s: %s",
+                            row_id,
+                            error
+                        )
     except Exception as sup_err:
         logger.warning("Supabase auto-sync error: %s", sup_err)
 
@@ -1617,7 +1819,12 @@ def sync_allrounder_streams() -> dict[str, list[dict[str, Any]]]:
             req = urllib.request.Request(fc_url, headers=headers)
             with urllib.request.urlopen(req, timeout=6) as r:
                 fc_raw = json.loads(r.read().decode("utf-8"))
-            fc_matches = fc_raw if isinstance(fc_raw, list) else fc_raw.get("matches", [])
+            if isinstance(fc_raw, list):
+                fc_matches = fc_raw
+            elif isinstance(fc_raw, dict) and isinstance(fc_raw.get("matches"), list):
+                fc_matches = fc_raw["matches"]
+            else:
+                raise ValueError("FanCode feed did not contain a match list")
 
             fc_live_urls = set()
             for fc in fc_matches:
@@ -1709,6 +1916,11 @@ def sync_allrounder_streams() -> dict[str, list[dict[str, Any]]]:
                     }
         except Exception as e:
             logger.warning("AutoStreamSync FanCode direct error: %s", e)
+            with AUTO_SERVERS_LOCK:
+                return {
+                    mid: list(servers)
+                    for mid, servers in AUTO_MATCH_SERVERS.items()
+                }
 
         # Delete/prune servers for any matches that have completed
         # But if the stream is STILL actively broadcasting on FanCode, keep it until broadcast finishes
@@ -1735,8 +1947,8 @@ def sync_allrounder_streams() -> dict[str, list[dict[str, Any]]]:
         try:
             with open(PROJECT_DIR / "auto_servers.json", "w", encoding="utf-8") as f:
                 json.dump(matched_servers, f)
-        except Exception:
-            pass
+        except Exception as error:
+            logger.warning("Failed to persist auto-server cache: %s", error)
 
         # 3. Direct background sync to Supabase database (zero admin manual work)
         _sync_to_supabase(matched_servers)
@@ -1815,13 +2027,38 @@ def get_matches(category: str):
         raise HTTPException(400, "Invalid category")
 
     try:
-
-        html = fetch(PAGES[category], MATCH_CACHE_TTL)
-        raw_matches = extract_matches(html)
+        try:
+            html = fetch(PAGES[category], MATCH_CACHE_TTL)
+            raw_matches = extract_matches(html)
+        except Exception as cb_error:
+            logger.warning(
+                "Cricbuzz %s matches unavailable; using Cricinfo fallback: %s",
+                category,
+                cb_error
+            )
+            raw_matches = []
 
         if category == "upcoming":
-            # Primary Cricbuzz upcoming page contains all today/tomorrow matches
-            pass
+            seen_ids = {str(m.get("id")) for m in raw_matches if m.get("id")}
+            for schedule_path in (
+                "/cricket-schedule/upcoming-series/international",
+                "/cricket-schedule/upcoming-series/league",
+                "/cricket-schedule/upcoming-series/domestic",
+                "/cricket-schedule/upcoming-series/women"
+            ):
+                try:
+                    schedule_html = fetch(schedule_path, 60)
+                    for scheduled_match in extract_matches(schedule_html):
+                        match_id = str(scheduled_match.get("id") or "")
+                        if match_id and match_id not in seen_ids:
+                            seen_ids.add(match_id)
+                            raw_matches.append(scheduled_match)
+                except Exception as schedule_error:
+                    logger.warning(
+                        "Cricbuzz upcoming schedule unavailable (%s): %s",
+                        schedule_path,
+                        schedule_error
+                    )
         elif category == "live":
             # Extract upcoming matches and all upcoming series schedules so any match starting within 1 hour or start time passed appears in live section
             seen_ids = {m.get("id") for m in raw_matches}
@@ -1920,6 +2157,16 @@ def get_matches(category: str):
                 t2_name = ci_m.get("team2", {}).get("teamName", "")
                 already_in_cb = False
                 for existing in matches:
+                    ci_start = parse_start_date_sec(ci_m.get("startDate"))
+                    cb_start = parse_start_date_sec(existing.get("startDate"))
+                    if ci_start is not None and cb_start is not None:
+                        if abs(ci_start - cb_start) > 36 * 60 * 60:
+                            continue
+                    elif (ci_m.get("series") or "").strip().casefold() != (
+                        existing.get("series") or ""
+                    ).strip().casefold():
+                        continue
+
                     ex_t1 = existing.get("team1", {}).get("teamName", "")
                     ex_t2 = existing.get("team2", {}).get("teamName", "")
                     if (_team_token_match(t1_name, ex_t1) and _team_token_match(t2_name, ex_t2)) or \

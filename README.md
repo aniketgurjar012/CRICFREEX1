@@ -22,6 +22,7 @@ Port 8765 keeps CricFreeX separate from other local cricket apps that commonly u
 - Admin content editing no longer offers poster/thumbnail uploads or previews. Existing image references are preserved on edits. If the sections table is empty, new content can still be assigned to the built-in **Live Channels** section slug without creating a database section.
 - Channel players are shown when a channel is selected, including after restoring a shared channel URL. Sources on `localhost` or `127.0.0.1` only work for viewers whose own device runs that source service.
 - Supabase Realtime refreshes published match links on the public site. Match scores refresh every 30 seconds.
+- The Python service syncs FanCode streams and removes match watch links after a result, without requiring the Admin page or public site to stay open.
 - Rankings, team player roles, available series/match statistics and historical scorecards come from the configured cricket data provider. Unsupported or unavailable information is not fabricated.
 The **Records** section uses the provider's current records endpoint and offers batting/bowling categories with format, year, team and opponent filters. Match **Overs** and **Graphs** use every innings and over list present in the provider's over-by-over feed, ordered from the first available over onward. Graphs visualize cumulative innings runs; they do not estimate win probability. A source that omits earlier innings cannot provide those missing overs.
 

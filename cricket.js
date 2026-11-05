@@ -863,14 +863,17 @@
   // Fetch updated team logos in background and cache for instant 0ms access
   if (typeof window !== "undefined") {
     setTimeout(() => {
-      fetch("/api/team-logos").then(r => r.json()).then(res => {
+      fetch(apiURL("/api/team-logos")).then(r => {
+        if (!r.ok) throw new Error(`Team logo API returned HTTP ${r.status}`);
+        return r.json();
+      }).then(res => {
         if (res && res.logos) {
           Object.assign(CRICINFO_TEAM_LOGOS, res.logos);
           try {
             localStorage.setItem("cricfreex_cricinfo_logos", JSON.stringify(CRICINFO_TEAM_LOGOS));
           } catch (e) {}
         }
-      }).catch(() => {});
+      }).catch(error => console.warn("Could not refresh Cricinfo team logos:", error));
     }, 100);
   }
 
@@ -1041,6 +1044,63 @@
     if (visual) span.appendChild(visual);
     span.appendChild(document.createTextNode(cleanName));
     return span;
+  }
+
+  function teamFlagEmoji(team, seriesContext = "") {
+    const name = typeof team === "object" && team
+      ? (team.teamName || team.teamSName || "")
+      : String(team || "");
+    const code = getTeamFlagCode(String(name), seriesContext);
+    if (!code) return "";
+    if (code === "wi") return "🌴";
+    if (code.startsWith("gb-")) {
+      const region = code.slice(3);
+      if (!/^[a-z]{3}$/.test(region)) return "";
+      return `\u{1F3F4}${[...region].map(char => String.fromCodePoint(0xE0061 + char.charCodeAt(0) - 97)).join("")}\u{E007F}`;
+    }
+    if (!/^[a-z]{2}$/.test(code)) return "";
+    return [...code].map(char => String.fromCodePoint(0x1F1E6 + char.charCodeAt(0) - 97)).join("");
+  }
+
+  function formatMatchShareMessage(match, streamUrl) {
+    const teamLabel = team => {
+      const name = typeof team === "object" && team
+        ? (team.teamName || team.teamSName)
+        : team;
+      const flag = teamFlagEmoji(team, match?.series);
+      return `${name || "Team"}${flag ? ` ${flag}` : ""}`;
+    };
+    return [
+      `🏆 ${match?.series || match?.description || "Live Cricket"}`,
+      `🏏 ${teamLabel(match?.team1)} vs ${teamLabel(match?.team2)}`,
+      "",
+      `🔴 WATCH LIVE : ${streamUrl}`,
+      "",
+      "⚠️ Open in Chrome Browser"
+    ].join("\n");
+  }
+
+  async function copyShareMessage(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch (clipboardError) {
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      let copied = false;
+      try {
+        copied = document.execCommand("copy");
+      } finally {
+        textarea.remove();
+      }
+      if (!copied) {
+        throw new Error(`Clipboard access failed: ${clipboardError.message}`);
+      }
+    }
   }
 
   function updateCricketURL(params, push = true) {
@@ -1268,9 +1328,18 @@
   }
 
   function isMatchIn2DayUpcomingWindow(match) {
-    if (!match?.startDate) return false;
+    if (!match) return false;
+    if (!match.startDate) {
+      return ["preview", "upcoming", "scheduled"].includes(
+        String(match.state || "").trim().toLowerCase()
+      );
+    }
     let startMs = Number(match.startDate);
-    if (!startMs || isNaN(startMs)) return false;
+    if (!startMs || isNaN(startMs)) {
+      return ["preview", "upcoming", "scheduled"].includes(
+        String(match.state || "").trim().toLowerCase()
+      );
+    }
     if (startMs < 1e11) startMs *= 1000;
     const istOffsetMs = 5.5 * 60 * 60 * 1000;
     const istNow = new Date(Date.now() + istOffsetMs);
@@ -1348,11 +1417,15 @@
         });
       }
 
+      const activeMatchIds = new Set();
+      if (Date.now() - lastClientSyncTime < 120000) {
+        Object.entries(state.autoServers || {}).forEach(([matchId, servers]) => {
+          if (Array.isArray(servers) && servers.length) activeMatchIds.add(matchId);
+        });
+      }
       const itemsToDelete = watchLinks.filter(item => {
-        const pubId = String(item.public_id || "");
-        // NEVER delete manual watch links saved by admin for upcoming matches!
-        if (!pubId.startsWith("auto_")) return false;
-        return finishedIds.has(String(item.category).slice(watchLinkPrefix.length));
+        const matchId = String(item.category).slice(watchLinkPrefix.length);
+        return finishedIds.has(matchId) && !activeMatchIds.has(matchId);
       });
       if (!itemsToDelete.length) return;
 
@@ -1690,7 +1763,7 @@
         notice.style.display = "flex";
         notice.style.alignItems = "center";
         notice.style.gap = "8px";
-        notice.innerHTML = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#ffb74d;box-shadow:0 0 6px #ffb74d;"></span><strong>Live Stream:</strong> Abhi live stream available nahi hai (match live stream aane par yahan Server 1 aa jayega)`;
+        notice.innerHTML = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#ffb74d;box-shadow:0 0 6px #ffb74d;"></span>The live stream hasn't started yet. Please wait a few minutes.`;
         bar.appendChild(notice);
       } else if (bar) {
         bar.remove();
@@ -2262,26 +2335,23 @@
     actions.style.gap = "8px";
     actions.style.alignItems = "center";
 
-    const shareBtn = element("button", "cricket-action-button", "📋 Copy Link");
+    const shareBtn = element("button", "cricket-action-button", "📋 Copy Message");
     shareBtn.type = "button";
-    shareBtn.title = "Copy direct shareable link for this match and server";
+    shareBtn.title = "Copy a shareable match message with this server link";
     shareBtn.addEventListener("click", async () => {
-      const shareUrl = `${location.origin}${cleanCricketPath(location)}?match=${active.match.id}&server=${active.serverIndex + 1}`;
+      const shareText = formatMatchShareMessage(
+        active.match,
+        active.sourceURL || active.url
+      );
       try {
-        await navigator.clipboard.writeText(shareUrl);
+        await copyShareMessage(
+          shareText
+        );
         shareBtn.textContent = "✓ Copied!";
-        showCricketToast("Direct Server Link copied to clipboard!");
-        setTimeout(() => { shareBtn.textContent = "📋 Copy Link"; }, 2000);
-      } catch (e) {
-        const ta = document.createElement("textarea");
-        ta.value = shareUrl;
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand("copy");
-        ta.remove();
-        shareBtn.textContent = "✓ Copied!";
-        showCricketToast("Direct Server Link copied to clipboard!");
-        setTimeout(() => { shareBtn.textContent = "📋 Copy Link"; }, 2000);
+        showCricketToast("Match share message copied to clipboard!");
+        setTimeout(() => { shareBtn.textContent = "📋 Copy Message"; }, 2000);
+      } catch (error) {
+        showCricketToast(`Could not copy share message: ${error.message}`);
       }
     });
 
@@ -3618,20 +3688,24 @@
         appendToTarget(element("div", "cricket-message", "A detailed scorecard is not available for this match right now."));
         return;
       }
+      const inningsOrdinal = index => {
+        const ordinal = ["1st", "2nd", "3rd"][index];
+        return ordinal || `${index + 1}th`;
+      };
+      const inningsLabel = (inning, index) => {
+        const label = inning.team || `Innings ${index + 1}`;
+        return `${label} — ${inningsOrdinal(index)} innings`;
+      };
       if (data.innings.length > 1) {
         const inningsTabs = element("div", "cricket-tabs cricket-match-tabs");
         data.innings.forEach((inning, index) => {
           const button = element("button", "cricket-tab");
-          if (inning.team) {
-            const matchTeam = [match?.team1, match?.team2].find(t =>
-              t && (t.teamName === inning.team || t.teamSName === inning.team)
-            );
-            const visual = getTeamVisualElement(matchTeam || inning.team, match?.series);
-            if (visual) button.appendChild(visual);
-            button.appendChild(document.createTextNode(inning.team));
-          } else {
-            button.textContent = `Innings ${index + 1}`;
-          }
+          const matchTeam = [match?.team1, match?.team2].find(t =>
+            t && (t.teamName === inning.team || t.teamSName === inning.team)
+          );
+          const visual = inning.team && getTeamVisualElement(matchTeam || inning.team, match?.series);
+          if (visual) button.appendChild(visual);
+          button.appendChild(document.createTextNode(inningsLabel(inning, index)));
           button.type = "button";
           button.classList.toggle("active", index === state.scorecardInning);
           button.addEventListener("click", () => {
@@ -3649,23 +3723,36 @@
       inngHeading.style.display = "flex";
       inngHeading.style.alignItems = "center";
       inngHeading.style.gap = "8px";
-      if (inning.team) {
-        const matchTeam = [match?.team1, match?.team2].find(t =>
-          t && (t.teamName === inning.team || t.teamSName === inning.team)
-        );
-        const visual = getTeamVisualElement(matchTeam || inning.team, match?.series);
-        if (visual) inngHeading.appendChild(visual);
-        inngHeading.appendChild(document.createTextNode(inning.team));
-      } else {
-        inngHeading.textContent = `Innings ${index + 1}`;
-      }
+      const matchTeam = [match?.team1, match?.team2].find(t =>
+        t && (t.teamName === inning.team || t.teamSName === inning.team)
+      );
+      const visual = inning.team && getTeamVisualElement(matchTeam || inning.team, match?.series);
+      if (visual) inngHeading.appendChild(visual);
+      inngHeading.appendChild(document.createTextNode(inningsLabel(inning, index)));
       appendToTarget(inngHeading);
-      const inngWkts = (inning.wickets != null && !isNaN(inning.wickets)) ? `/${inning.wickets}` : (inning.overs != null ? "/0" : "");
-      const inngOv = (inning.overs != null && inning.overs !== "" && inning.overs !== "—") ? ` (${inning.overs} ov)` : "";
+      const hasRuns = inning.runs !== null &&
+        inning.runs !== undefined &&
+        String(inning.runs).trim() !== "";
+      const hasWickets = inning.wickets !== null &&
+        inning.wickets !== undefined &&
+        String(inning.wickets).trim() !== "";
+      const hasOvers = inning.overs !== null &&
+        inning.overs !== undefined &&
+        String(inning.overs).trim() !== "" &&
+        inning.overs !== "—";
+      const scoreParts = [];
+      if (hasRuns) {
+        scoreParts.push(`${inning.runs}${hasWickets ? `/${inning.wickets}` : ""}`);
+      } else if (hasWickets) {
+        scoreParts.push(`${inning.wickets} wickets`);
+      }
+      if (hasOvers) scoreParts.push(`(${inning.overs} ov)`);
       appendToTarget(element(
         "p",
         "cricket-score-summary",
-        `${inning.runs ?? 0}${inngWkts}${inngOv}`
+        scoreParts.length
+          ? scoreParts.join(" ")
+          : "Score details are not available for this innings."
       ));
       if (inning.batting?.length) {
         appendMatchTable(target, ["Batter", "Dismissal", "R", "B", "4s", "6s", "SR"],
@@ -3805,7 +3892,11 @@
     if (tab === "commentary") {
       const deliveries = data.deliveries || [];
       if (!deliveries.length) {
-        appendToTarget(element("div", "cricket-message", "Ball-by-ball commentary is not available right now."));
+        appendToTarget(element(
+          "div",
+          "cricket-message",
+          data.emptyMessage || "Ball-by-ball commentary is not available right now."
+        ));
         return;
       }
       deliveries.forEach(ball => {
@@ -3837,7 +3928,13 @@
           element("span", "cricket-directory-title", item.title),
           element("span", "cricket-directory-action", "Read article →")
         );
-        card.addEventListener("click", () => openArticle(item));
+        card.addEventListener("click", () => {
+          if (item.url && /^https?:\/\//i.test(item.url)) {
+            window.open(item.url, "_blank", "noopener,noreferrer");
+            return;
+          }
+          openArticle(item);
+        });
         appendToTarget(card);
       });
       return;

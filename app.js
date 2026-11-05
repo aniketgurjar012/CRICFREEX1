@@ -141,8 +141,21 @@ async function cleanupFinishedWatchLinks() {
       }
     });
 
+    const autoResponse = await fetch(`${C.CRICKET_API_URL}/api/auto-servers`, {
+      headers: { Accept: "application/json" }
+    });
+    if (!autoResponse.ok) return;
+    const autoResult = await autoResponse.json();
+    const lastSync = Number(autoResult.last_sync || 0);
+    if (!lastSync || Date.now() / 1000 - lastSync > 120) return;
+    const activeMatchIds = new Set(
+      Object.entries(autoResult.servers || {})
+        .filter(([, servers]) => Array.isArray(servers) && servers.length)
+        .map(([matchId]) => String(matchId))
+    );
     const itemsToDelete = watchItems.filter(item =>
-      finishedMatchIds.has(cricketWatchMatchId(item))
+      finishedMatchIds.has(cricketWatchMatchId(item)) &&
+      !activeMatchIds.has(cricketWatchMatchId(item))
     );
 
     if (!itemsToDelete.length) return;

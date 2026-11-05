@@ -1,6 +1,6 @@
 import json
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from fastapi import HTTPException
 
@@ -9,11 +9,14 @@ from main import (
     extract_page,
     get_page,
     get_matches,
+    get_cricinfo_tab_data,
+    _team_token_match,
     get_section,
     get_series,
     get_team,
     v4_match,
-    v4_records
+    v4_records,
+    _finished_match_watch_records
 )
 from scrapers.normalized import extract_match_info
 from scrapers.normalized import extract_scorecard
@@ -462,6 +465,171 @@ class MatchInfoTests(unittest.TestCase):
             }]
         )
 
+    def test_cricinfo_match_tabs_use_available_summary_data(self):
+        match_id = "ci_test_summary_101"
+        summary = {
+            "header": {
+                "competitions": [{
+                    "competitors": [{
+                        "team": {"displayName": "Team A"},
+                        "linescores": [{"runs": 123, "wickets": 4, "overs": 28.3}]
+                    }]
+                }]
+            },
+            "rosters": [{
+                "team": {"displayName": "Team A"},
+                "roster": [{
+                    "displayName": "Player One",
+                    "position": {"displayName": "Batter"}
+                }]
+            }],
+            "standings": {
+                "name": "Series Table",
+                "children": [{
+                    "standings": {
+                        "entries": [{
+                            "team": {"displayName": "Team A"},
+                            "stats": [{
+                                "name": "matchesPlayed",
+                                "displayName": "Matches Played",
+                                "shortDisplayName": "Mat",
+                                "displayValue": "3"
+                            }]
+                        }]
+                    }
+                }]
+            },
+            "news": {
+                "articles": [{
+                    "headline": "Match report",
+                    "links": {"web": {"href": "https://example.com/report"}}
+                }]
+            }
+        }
+        response = MagicMock()
+        response.__enter__.return_value.read.return_value = json.dumps(summary).encode()
+        with patch("main.fetch_cricinfo_matches", return_value=[{
+            "id": match_id,
+            "seriesId": "123",
+            "series": "Series",
+            "description": "Match"
+        }]), patch("main.urllib.request.urlopen", return_value=response):
+            scorecard = get_cricinfo_tab_data(match_id, "scorecard")
+            squads = get_cricinfo_tab_data(match_id, "squad")
+            points = get_cricinfo_tab_data(match_id, "points")
+            news = get_cricinfo_tab_data(match_id, "news")
+
+        self.assertEqual(scorecard["innings"][0]["team"], "Team A")
+        self.assertEqual(scorecard["innings"][0]["runs"], 123)
+        self.assertEqual(squads["teams"][0]["players"][0]["name"], "Player One")
+        self.assertEqual(points["tables"][0][1], ["Team A", "3"])
+        self.assertEqual(news["links"][0]["url"], "https://example.com/report")
+
+    def test_cricinfo_scorecard_ignores_non_batting_periods(self):
+        match_id = "ci_test_scorecard_periods_102"
+        summary = {
+            "header": {
+                "competitions": [{
+                    "competitors": [
+                        {
+                            "team": {"displayName": "Team A"},
+                            "linescores": [
+                                {
+                                    "period": 1,
+                                    "runs": 250,
+                                    "wickets": 10,
+                                    "overs": 70.2,
+                                    "isBatting": True
+                                },
+                                {
+                                    "period": 3,
+                                    "runs": 0,
+                                    "wickets": 0,
+                                    "overs": 65.0,
+                                    "isBatting": False
+                                }
+                            ]
+                        },
+                        {
+                            "team": {"displayName": "Team B"},
+                            "linescores": [
+                                {
+                                    "period": 1,
+                                    "runs": 0,
+                                    "wickets": 0,
+                                    "overs": 70.2,
+                                    "isBatting": False
+                                },
+                                {
+                                    "period": 2,
+                                    "runs": 245,
+                                    "wickets": 10,
+                                    "overs": 68.4,
+                                    "isBatting": True
+                                }
+                            ]
+                        }
+                    ]
+                }]
+            },
+            "matchcards": [
+                {
+                    "teamName": "Team B",
+                    "runs": "245",
+                    "playerDetails": [{
+                        "playerName": "Player B",
+                        "runs": 75,
+                        "ballsFaced": 100
+                    }]
+                },
+                {
+                    "teamName": "Team A",
+                    "playerDetails": [{
+                        "playerName": "Player A",
+                        "runs": 90,
+                        "ballsFaced": 110
+                    }]
+                }
+            ]
+        }
+        response = MagicMock()
+        response.__enter__.return_value.read.return_value = json.dumps(summary).encode()
+        with patch("main.fetch_cricinfo_matches", return_value=[{
+            "id": match_id,
+            "seriesId": "123",
+            "series": "Series",
+            "description": "Match"
+        }]), patch("main.urllib.request.urlopen", return_value=response):
+            scorecard = get_cricinfo_tab_data(match_id, "scorecard")
+
+        innings = scorecard["innings"]
+        self.assertEqual(
+            [(inning["team"], inning["runs"]) for inning in innings],
+            [("Team A", 250), ("Team B", 245)]
+        )
+        self.assertEqual(innings[1]["batting"][0]["name"], "Player B")
+        self.assertTrue(all(inning["runs"] != 0 for inning in innings))
+
+
+class AutoStreamCleanupTests(unittest.TestCase):
+
+    def test_completed_matches_delete_manual_and_auto_links_but_keep_live_streams(self):
+        records = [
+            {"id": "manual-1", "category": "__cricket_watch__:finished"},
+            {"id": "auto-1", "category": "__cricket_watch__:finished"},
+            {"id": "live-1", "category": "__cricket_watch__:still_live"},
+            {"id": "channel-1", "category": "sports"}
+        ]
+        matched_servers = {"still_live": [{"media_url": "https://example.test/live"}]}
+
+        deleted = _finished_match_watch_records(
+            records,
+            {"finished", "still_live"},
+            matched_servers
+        )
+
+        self.assertEqual([record["id"] for record in deleted], ["manual-1", "auto-1"])
+
 
 class MatchCategoryTests(unittest.TestCase):
 
@@ -478,6 +646,9 @@ class MatchCategoryTests(unittest.TestCase):
         with patch("main.fetch", return_value="<html>matches</html>"), patch(
             "main.extract_matches",
             return_value=matches
+        ), patch(
+            "main.fetch_cricinfo_matches",
+            return_value=[]
         ):
             self.assertEqual(
                 [item["id"] for item in get_matches("upcoming")["matches"]],
@@ -491,6 +662,61 @@ class MatchCategoryTests(unittest.TestCase):
                 [item["id"] for item in get_matches("live")["matches"]],
                 [3, 4, 6]
             )
+
+    def test_upcoming_matches_include_cricbuzz_schedule_fixtures(self):
+        primary_match = {
+            "id": 1,
+            "state": "Preview",
+            "series": "Series",
+            "team1": {"teamName": "Team A"},
+            "team2": {"teamName": "Team B"}
+        }
+        scheduled_match = {
+            "id": 2,
+            "state": "Preview",
+            "series": "Series",
+            "team1": {"teamName": "Team C"},
+            "team2": {"teamName": "Team D"}
+        }
+
+        def fake_extract_matches(html):
+            return [scheduled_match] if "upcoming-series" in html else [primary_match]
+
+        with patch("main.fetch", side_effect=lambda path, ttl: path), patch(
+            "main.extract_matches",
+            side_effect=fake_extract_matches
+        ), patch("main.fetch_cricinfo_matches", return_value=[]):
+            result = get_matches("upcoming")
+
+        self.assertEqual(
+            {match["id"] for match in result["matches"]},
+            {1, 2}
+        )
+
+    def test_cricinfo_matches_remain_available_when_cricbuzz_fails(self):
+        cricinfo_match = {
+            "id": "ci_123",
+            "state": "In Progress",
+            "series": "Series",
+            "team1": {"teamName": "Team A"},
+            "team2": {"teamName": "Team B"}
+        }
+        with patch("main.fetch", side_effect=OSError("Cricbuzz unavailable")), patch(
+            "main.fetch_cricinfo_matches",
+            return_value=[cricinfo_match]
+        ):
+            result = get_matches("live")
+
+        self.assertEqual(
+            [match["id"] for match in result["matches"]],
+            ["ci_123"]
+        )
+
+    def test_match_deduplication_preserves_distinct_team_variants(self):
+        self.assertTrue(_team_token_match("Auckland Aces", "Auckland"))
+        self.assertTrue(_team_token_match("Australia", "AUS"))
+        self.assertFalse(_team_token_match("Karachi Region Blues", "Karachi Region Whites"))
+        self.assertFalse(_team_token_match("West Indies", "West Indies Women"))
 
 
 class SeriesRouteTests(unittest.TestCase):
