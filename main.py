@@ -629,7 +629,8 @@ def classify_match(match):
     start_sec = parse_start_date_sec(match.get("startDate"))
     if start_sec is not None:
         diff_sec = start_sec - time.time()
-        if diff_sec <= 3600 and diff_sec > -86400 * 3:
+        # Promote to live if starting within 1 hour OR started within the last 6 hours
+        if -6 * 3600 <= diff_sec <= 3600:
             return "live"
 
     # 3. Live state indicators
@@ -1361,16 +1362,104 @@ def get_cricinfo_tab_data(match_id: str, tab: str) -> dict[str, Any]:
 
 SUPABASE_URL = "https://zcdujcunojbzsvcmzifr.supabase.co"
 SUPABASE_KEY = "sb_publishable_qLoe2BZoZXPGoyavUS4rXg_BwonZQt-"
+SUPABASE_ADMIN_EMAIL = "aniketgurjar012@gmail.com"
+SUPABASE_ADMIN_PASSWORD = "MP47ca1025"
+_SUPABASE_AUTH_TOKEN: str | None = None
+_SUPABASE_TOKEN_EXPIRES_AT: float = 0.0
 
 
-def _sync_to_supabase(matched_servers: dict[str, list[dict[str, Any]]]):
+def _get_supabase_auth_headers() -> dict[str, str]:
+    global _SUPABASE_AUTH_TOKEN, _SUPABASE_TOKEN_EXPIRES_AT
+    now = time.time()
+    if _SUPABASE_AUTH_TOKEN and now < _SUPABASE_TOKEN_EXPIRES_AT - 60:
+        return {
+            "apikey": SUPABASE_KEY,
+            "Authorization": f"Bearer {_SUPABASE_AUTH_TOKEN}",
+            "Content-Type": "application/json"
+        }
+
     try:
-        url = f"{SUPABASE_URL}/rest/v1/content?select=id,public_id,category,media_url&category=like.__cricket_watch__*"
-        headers = {
+        auth_url = f"{SUPABASE_URL}/auth/v1/token?grant_type=password"
+        payload = json.dumps({
+            "email": SUPABASE_ADMIN_EMAIL,
+            "password": SUPABASE_ADMIN_PASSWORD
+        }).encode("utf-8")
+        req = urllib.request.Request(
+            auth_url,
+            data=payload,
+            headers={
+                "apikey": SUPABASE_KEY,
+                "Content-Type": "application/json"
+            },
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=6) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            _SUPABASE_AUTH_TOKEN = data.get("access_token")
+            expires_in = data.get("expires_in", 3600)
+            _SUPABASE_TOKEN_EXPIRES_AT = now + float(expires_in)
+            logger.info("Supabase admin auth token refreshed successfully")
+            return {
+                "apikey": SUPABASE_KEY,
+                "Authorization": f"Bearer {_SUPABASE_AUTH_TOKEN}",
+                "Content-Type": "application/json"
+            }
+    except Exception as e:
+        logger.warning("Failed to authenticate Supabase admin: %s", e)
+        return {
             "apikey": SUPABASE_KEY,
             "Authorization": f"Bearer {SUPABASE_KEY}",
             "Content-Type": "application/json"
         }
+
+
+def deduplicate_supabase_content():
+    try:
+        headers = _get_supabase_auth_headers()
+        url = f"{SUPABASE_URL}/rest/v1/content?select=id,title,media_url,category,section_slug,public_id,sort_order"
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=10) as r:
+            all_content = json.loads(r.read().decode("utf-8"))
+
+        seen_keys = {}
+        duplicate_ids = []
+        for item in all_content:
+            cat = str(item.get("category") or "").strip().lower()
+            title = str(item.get("title") or "").strip().lower()
+            m_url = str(item.get("media_url") or "").strip()
+            row_id = item.get("id")
+            if not row_id or not m_url:
+                continue
+
+            # Unique key for channels/links
+            key = (cat, title, m_url)
+            if key in seen_keys:
+                duplicate_ids.append(row_id)
+            else:
+                seen_keys[key] = row_id
+
+        if duplicate_ids:
+            logger.info("Found %d duplicate content rows in Supabase. Deleting...", len(duplicate_ids))
+            for i in range(0, len(duplicate_ids), 20):
+                batch = duplicate_ids[i:i+20]
+                ids_param = ",".join(batch)
+                del_url = f"{SUPABASE_URL}/rest/v1/content?id=in.({ids_param})"
+                del_req = urllib.request.Request(del_url, headers=headers, method="DELETE")
+                try:
+                    with urllib.request.urlopen(del_req, timeout=6):
+                        pass
+                except Exception as ex:
+                    logger.warning("Error deleting duplicate batch: %s", ex)
+            logger.info("Deduplication completed. Removed %d duplicate rows.", len(duplicate_ids))
+    except Exception as e:
+        logger.warning("deduplicate_supabase_content error: %s", e)
+
+
+
+def _sync_to_supabase(matched_servers: dict[str, list[dict[str, Any]]]):
+    try:
+        headers = _get_supabase_auth_headers()
+        url = f"{SUPABASE_URL}/rest/v1/content?select=id,public_id,category,media_url&category=like.__cricket_watch__*"
         req = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(req, timeout=6) as r:
             existing_records = json.loads(r.read().decode("utf-8"))
@@ -1428,8 +1517,12 @@ def _sync_to_supabase(matched_servers: dict[str, list[dict[str, Any]]]):
                 # Don't delete if the stream is still actively live
                 if r_mid in matched_servers:
                     continue
-                for row_id in existing_ids_by_mid[r_mid]:
-                    if row_id:
+                # Only delete auto-synced rows for finished matches, NEVER delete manual admin links!
+                for r in existing_records:
+                    row_id = r.get("id")
+                    cat = str(r.get("category") or "")
+                    pub_id = str(r.get("public_id") or "")
+                    if row_id and cat == f"__cricket_watch__:{r_mid}" and pub_id.startswith("auto_"):
                         del_req = urllib.request.Request(
                             f"{SUPABASE_URL}/rest/v1/content?id=eq.{row_id}",
                             headers=headers,
@@ -1646,9 +1739,20 @@ def sync_allrounder_streams() -> dict[str, list[dict[str, Any]]]:
 
 
 def _auto_sync_background_loop():
+    # Run channel deduplication once on startup
+    try:
+        deduplicate_supabase_content()
+    except Exception as e:
+        logger.warning("Startup deduplication error: %s", e)
+
+    sync_counter = 0
     while True:
         try:
             sync_allrounder_streams()
+            sync_counter += 1
+            if sync_counter >= 120:
+                sync_counter = 0
+                deduplicate_supabase_content()
         except Exception as e:
             logger.error("Background stream sync error: %s", e)
         time.sleep(5)
@@ -1770,9 +1874,10 @@ def get_matches(category: str):
                     continue
                 try:
                     s_sec = parse_start_date_sec(sd)
+                    today_start_ms = int(today_start_ist.timestamp() * 1000)
                     if s_sec:
                         s_ms = s_sec * 1000.0
-                        if s_ms <= end_tomorrow_ms:
+                        if today_start_ms <= s_ms <= end_tomorrow_ms:
                             valid_upcoming.append(m)
                     else:
                         valid_upcoming.append(m)

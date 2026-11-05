@@ -289,7 +289,29 @@ async function loadAll(){
 
     $("adminLoadStatus").classList.add("hidden");
     $("adminLoadStatus").textContent="";
-    content=c.data||[];
+    
+    // Automatic Deduplication of channels in content
+    const seenContentKeys = new Set();
+    const uniqueContent = [];
+    const duplicateContentIds = [];
+    (c.data || []).forEach(item => {
+      const mUrl = String(item.media_url || "").trim();
+      const cat = String(item.category || "").trim().toLowerCase();
+      const title = String(item.title || "").trim().toLowerCase();
+      const key = `${cat}___${title}___${mUrl}`;
+      if (mUrl && seenContentKeys.has(key)) {
+        if (item.id) duplicateContentIds.push(item.id);
+      } else {
+        if (mUrl) seenContentKeys.add(key);
+        uniqueContent.push(item);
+      }
+    });
+    content = uniqueContent;
+    if (duplicateContentIds.length > 0) {
+      db.from("content").delete().in("id", duplicateContentIds).then(() => {
+        console.log("Cleaned up", duplicateContentIds.length, "duplicate channel rows in Supabase.");
+      }).catch(() => {});
+    }
     settings=w.data||{};
 
     $("statSections").textContent=sections.length;
@@ -890,14 +912,20 @@ async function cleanupFinishedWatchLinks(activeLiveUrls = null){
       const mid = cricketWatchMatchId(item);
       const mUrl = String(item.media_url || "");
       const pubId = String(item.public_id || "");
+      const isAuto = pubId.startsWith("auto_");
 
       // 1. Delete allrounder links (legacy)
       if (mUrl.includes("allrounderlive.in")) return true;
 
-      // 2. Delete matches that have finished
-      if (finishedMatchIds.has(mid)) return true;
+      // 2. NEVER delete manual watch links saved by admin for upcoming matches!
+      if (!isAuto) {
+        // Only delete manual link if match is explicitly completed with a final result
+        if (finishedMatchIds.has(mid)) return true;
+        return false;
+      }
 
-      // 3. Delete ended auto FanCode streams if activeLiveUrls is passed
+      // 3. For auto-synced links: delete if match finished or stream ended
+      if (finishedMatchIds.has(mid)) return true;
       if (activeLiveUrls instanceof Set) {
         if (mUrl.includes("iosfancode.vercel.app") && !activeLiveUrls.has(mUrl)) return true;
         if (pubId.startsWith("auto_") && !activeLiveUrls.has(mUrl)) return true;

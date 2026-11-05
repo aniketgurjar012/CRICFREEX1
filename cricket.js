@@ -1201,9 +1201,9 @@
     if (!startMs || isNaN(startMs)) return false;
     if (startMs < 1e11) startMs *= 1000;
     const diffMs = startMs - Date.now();
-    // 1 hour before scheduled start time (diffMs <= 3600000) OR start time already passed (diffMs <= 0 within 3 days)
-    // Matches remain in live section until completed!
-    return diffMs <= 3600000 && diffMs > -86400000 * 3 && !isCompletedMatch(match);
+    // 1 hour before scheduled start time (diffMs <= 3600000) OR started within last 6 hours (diffMs > -6 * 3600 * 1000)
+    // Excludes matches from yesterday!
+    return diffMs <= 3600000 && diffMs > -6 * 3600 * 1000 && !isCompletedMatch(match);
   }
 
   function isLiveMatch(match) {
@@ -1270,7 +1270,9 @@
     const istNow = new Date(Date.now() + istOffsetMs);
     const istTodayStartUtcMs = Date.UTC(istNow.getUTCFullYear(), istNow.getUTCMonth(), istNow.getUTCDate()) - istOffsetMs;
     const istTomorrowEndUtcMs = istTodayStartUtcMs + (2 * 24 * 60 * 60 * 1000) - 1;
-    return startMs <= istTomorrowEndUtcMs;
+    // Strict 2-day window: MUST be today or tomorrow (>= today 00:00 IST and <= tomorrow 23:59 IST)
+    // Completely excludes matches from yesterday (4 Nov)!
+    return startMs >= istTodayStartUtcMs && startMs <= istTomorrowEndUtcMs;
   }
 
   function isUpcomingMatch(match) {
@@ -1340,9 +1342,12 @@
         });
       }
 
-      const itemsToDelete = watchLinks.filter(item =>
-        finishedIds.has(String(item.category).slice(watchLinkPrefix.length))
-      );
+      const itemsToDelete = watchLinks.filter(item => {
+        const pubId = String(item.public_id || "");
+        // NEVER delete manual watch links saved by admin for upcoming matches!
+        if (!pubId.startsWith("auto_")) return false;
+        return finishedIds.has(String(item.category).slice(watchLinkPrefix.length));
+      });
       if (!itemsToDelete.length) return;
 
       const deleteIds = itemsToDelete.map(item => item.id);
