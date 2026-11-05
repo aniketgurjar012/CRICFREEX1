@@ -1676,6 +1676,24 @@ def _finished_match_watch_records(
     ]
 
 
+def _synthetic_stream_watch_records(
+    existing_records: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    synthetic_prefixes = ("ex_", "extra_")
+    return [
+        record
+        for record in existing_records
+        if (
+            str(record.get("category") or "")
+            .removeprefix("__cricket_watch__:")
+            .startswith(synthetic_prefixes)
+            or str(record.get("public_id") or "").startswith(
+                ("extra_ex_", "auto_fc_ex_")
+            )
+        )
+    ]
+
+
 
 def _sync_to_supabase(matched_servers: dict[str, list[dict[str, Any]]]):
     try:
@@ -1730,11 +1748,19 @@ def _sync_to_supabase(matched_servers: dict[str, list[dict[str, Any]]]):
         except Exception:
             pass
 
-        for record in _finished_match_watch_records(
-            existing_records,
-            recent_mids,
-            matched_servers
-        ):
+        records_to_delete = {
+            str(record.get("id")): record
+            for record in (
+                _synthetic_stream_watch_records(existing_records)
+                + _finished_match_watch_records(
+                    existing_records,
+                    recent_mids,
+                    matched_servers
+                )
+            )
+            if record.get("id")
+        }
+        for record in records_to_delete.values():
             row_id = record.get("id")
             if not row_id:
                 continue
@@ -1764,6 +1790,11 @@ def _sync_to_supabase(matched_servers: dict[str, list[dict[str, Any]]]):
             m_url = str(r.get("media_url") or "")
             pub_id = str(r.get("public_id") or "")
             row_id = r.get("id")
+            category_match_id = str(r.get("category") or "").removeprefix(
+                "__cricket_watch__:"
+            )
+            if category_match_id.startswith(("ex_", "extra_")):
+                continue
             # If it's an old Allrounder / Willow link OR an auto_ link no longer active:
             if "allrounderlive.in" in m_url or (pub_id.startswith("auto_") and m_url not in active_auto_urls):
                 if row_id:

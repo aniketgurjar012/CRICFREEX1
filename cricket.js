@@ -175,7 +175,8 @@
   };
   const watchLinkPrefix = "__cricket_watch__:";
   let watchLinks = (window.CRICFREEX_CONTENT || []).filter(item =>
-    String(item.category || "").startsWith(watchLinkPrefix)
+    String(item.category || "").startsWith(watchLinkPrefix) &&
+    !/^(?:ex_|extra_)/i.test(String(item.category).slice(watchLinkPrefix.length))
   );
 
   if (!root || !channelSection) return;
@@ -2796,6 +2797,12 @@
       );
       localStorage.setItem("cricfreex_all_matches", JSON.stringify(state.allKnownMatches));
     }
+    state.autoServers = Object.fromEntries(
+      Object.entries(state.autoServers || {}).filter(([matchId]) =>
+        !/^(?:ex_|extra_)/i.test(matchId)
+      )
+    );
+    localStorage.setItem("cricfreex_auto_servers", JSON.stringify(state.autoServers));
     localStorage.removeItem("cricfreex_cached_extra_streams");
     if (!state.allKnownMatches) state.allKnownMatches = {};
     Object.values(_matchDataCache).forEach(arr => {

@@ -1098,11 +1098,48 @@ function shareTeamFlag(team, series = "") {
     canada: "ca", can: "ca",
     scotland: "gb-sct", sco: "gb-sct",
     "papua new guinea": "pg", png: "pg",
-    oman: "om", namibia: "na", uganda: "ug"
+    oman: "om", omn: "om", namibia: "na", nam: "na", uganda: "ug", uga: "ug",
+    "hong kong": "hk", hkg: "hk", hk: "hk",
+    kenya: "ke", ken: "ke", bermuda: "bm", ber: "bm",
+    singapore: "sg", sgp: "sg", sin: "sg",
+    malaysia: "my", mas: "my", mly: "my",
+    italy: "it", ita: "it", germany: "de", ger: "de",
+    spain: "es", esp: "es", japan: "jp", jpn: "jp",
+    thailand: "th", tha: "th", qatar: "qa", qat: "qa",
+    kuwait: "kw", kuw: "kw", "saudi arabia": "sa", ksa: "sa", sau: "sa",
+    bahrain: "bh", bhr: "bh", nigeria: "ng", nga: "ng", nig: "ng",
+    tanzania: "tz", tan: "tz", rwanda: "rw", rwa: "rw",
+    botswana: "bw", bot: "bw", ghana: "gh", gha: "gh",
+    zambia: "zm", zam: "zm", mozambique: "mz", moz: "mz",
+    eswatini: "sz", swaziland: "sz", bhutan: "bt", bhu: "bt",
+    maldives: "mv", mdv: "mv", "cayman islands": "ky", cay: "ky",
+    jersey: "je", jer: "je", guernsey: "gg", gue: "gg",
+    "isle of man": "im", iom: "im", gibraltar: "gi", gib: "gi",
+    denmark: "dk", den: "dk", norway: "no", nor: "no",
+    sweden: "se", swe: "se", finland: "fi", fin: "fi",
+    france: "fr", fra: "fr", belgium: "be", bel: "be",
+    austria: "at", aut: "at", switzerland: "ch", sui: "ch",
+    portugal: "pt", por: "pt", "czech republic": "cz", czechia: "cz",
+    romania: "ro", rou: "ro", hungary: "hu", hun: "hu",
+    bulgaria: "bg", bul: "bg", croatia: "hr", cro: "hr",
+    serbia: "rs", srb: "rs", cyprus: "cy", cyp: "cy",
+    malta: "mt", mlt: "mt", luxembourg: "lu", lux: "lu",
+    greece: "gr", gre: "gr", turkey: "tr", turkiye: "tr", tur: "tr",
+    gambia: "gm", gam: "gm", lesotho: "ls", les: "ls",
+    cameroon: "cm", cmr: "cm", mali: "ml",
+    seychelles: "sc", sey: "sc", indonesia: "id", ina: "id",
+    argentina: "ar", arg: "ar", brazil: "br", bra: "br",
+    vanuatu: "vu", van: "vu"
   };
   const countryCodes = new Set([
     "af", "ae", "au", "bd", "ca", "gb", "ie", "in", "lk", "na", "nl",
-    "np", "nz", "om", "pg", "pk", "us", "za", "zw"
+    "np", "nz", "om", "pg", "pk", "us", "za", "zw", "kw", "gm",
+    "ls", "zm", "mz", "sz", "cm", "ml", "sc", "qa", "je", "gg",
+    "sg", "my", "it", "de", "es", "ke", "bm", "bh", "th", "jp",
+    "ng", "tz", "rw", "bw", "gh", "bt", "mv", "ky", "ar", "br",
+    "dk", "no", "se", "fi", "fr", "be", "at", "ch", "pt", "im",
+    "gi", "cz", "ro", "hu", "bg", "hr", "rs", "cy", "mt", "lu",
+    "gr", "tr", "id", "vu"
   ]);
   let code = null;
   for (const candidate of [name, shortName]) {

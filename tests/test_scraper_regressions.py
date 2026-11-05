@@ -17,6 +17,7 @@ from main import (
     v4_match,
     v4_records,
     _finished_match_watch_records,
+    _synthetic_stream_watch_records,
     _find_unique_stream_match,
     _match_stream_to_cb,
     is_cricket_content
@@ -632,6 +633,18 @@ class AutoStreamCleanupTests(unittest.TestCase):
         )
 
         self.assertEqual([record["id"] for record in deleted], ["manual-1", "auto-1"])
+
+    def test_synthetic_stream_records_are_removed_without_touching_real_matches(self):
+        records = [
+            {"id": "stale-1", "category": "__cricket_watch__:ex_fc_123_ENG"},
+            {"id": "stale-2", "public_id": "extra_ex_fc_456_ENG"},
+            {"id": "live-1", "category": "__cricket_watch__:123456"},
+            {"id": "manual-1", "category": "__cricket_watch__:123456", "public_id": "manual"}
+        ]
+
+        deleted = _synthetic_stream_watch_records(records)
+
+        self.assertEqual([record["id"] for record in deleted], ["stale-1", "stale-2"])
 
 
 class FanCodeMatchTests(unittest.TestCase):
