@@ -1690,7 +1690,7 @@
         notice.style.display = "flex";
         notice.style.alignItems = "center";
         notice.style.gap = "8px";
-        notice.innerHTML = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#ffb74d;box-shadow:0 0 6px #ffb74d;"></span><strong>Live Stream:</strong> Abhi live stream available nahi hai (match live stream aane par yahan Server 1 aa jayega)`;
+        notice.innerHTML = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#ffb74d;box-shadow:0 0 6px #ffb74d;"></span>The live stream hasn't started yet. Please wait a few minutes.`;
         bar.appendChild(notice);
       } else if (bar) {
         bar.remove();
