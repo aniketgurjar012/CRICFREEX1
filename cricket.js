@@ -1401,9 +1401,15 @@
     const autoItems = [];
     const seenAutoUrls = new Set();
     rawAuto.forEach(s => {
-      if (s && s.media_url && !seenAutoUrls.has(s.media_url)) {
-        seenAutoUrls.add(s.media_url);
-        autoItems.push(s);
+      if (s && s.media_url) {
+        // Enforce _ENG for all FanCode / iosfancode streams
+        if (s.media_url.includes("iosfancode") && !s.media_url.toUpperCase().includes("_ENG")) {
+          return;
+        }
+        if (!seenAutoUrls.has(s.media_url)) {
+          seenAutoUrls.add(s.media_url);
+          autoItems.push(s);
+        }
       }
     });
 
@@ -1426,10 +1432,16 @@
       } catch {}
     });
 
-    autoItems.forEach((autoS, idx) => {
+    let hasFanCodeServer = validLinks.some(v => v.sourceURL?.includes("iosfancode") || v.item?.source === "fancode");
+    autoItems.forEach((autoS) => {
       try {
         const parsed = new URL(autoS.media_url);
         if (["http:", "https:"].includes(parsed.protocol) && !seenUrls.has(parsed.href)) {
+          const isFc = autoS.source === "fancode" || parsed.href.includes("iosfancode");
+          if (isFc) {
+            if (hasFanCodeServer) return; // Exactly 1 FanCode server per match!
+            hasFanCodeServer = true;
+          }
           seenUrls.add(parsed.href);
           const sNum = validLinks.length + 1;
           validLinks.push({
@@ -1564,7 +1576,7 @@
       const stripped = name.split(" ").filter(w => !["women", "team", "men"].includes(w)).join(" ");
       if (stripped) terms.add(stripped);
       name.split(" ").forEach(w => {
-        if (w.length >= 5 && !["cricket", "club", "team", "kings", "royals", "super", "giants", "riders", "challengers", "knights", "stars", "titans"].includes(w)) {
+        if (w.length >= 4 && !["cricket", "club", "team", "kings", "royals", "super", "giants", "riders", "challengers", "knights", "stars", "titans", "strikers", "heat", "sixers", "thunder", "scorchers", "renegades", "hurricanes", "women", "mens", "eagles", "falcons", "patriots", "lions", "warriors"].includes(w)) {
           terms.add(w);
         }
       });
@@ -1656,7 +1668,33 @@
     const validLinks = getMatchServers(match, shouldAllowWatchLinks(match));
     let bar = parent.querySelector(".cricket-match-view-servers");
     if (!validLinks.length) {
-      if (bar) bar.remove();
+      if (isLiveMatch(match) || isMatchStartingSoon(match)) {
+        if (!bar) {
+          bar = element("div", "cricket-watch-links cricket-match-view-servers");
+          bar.style.margin = "12px 0 16px";
+          const nav = parent.querySelector(".cricket-tabs");
+          if (nav) {
+            parent.insertBefore(bar, nav);
+          } else {
+            parent.appendChild(bar);
+          }
+        }
+        bar.replaceChildren();
+        const notice = element("div", "cricket-stream-pending-notice");
+        notice.style.padding = "10px 14px";
+        notice.style.background = "rgba(255, 152, 0, 0.08)";
+        notice.style.border = "1px solid rgba(255, 152, 0, 0.28)";
+        notice.style.borderRadius = "8px";
+        notice.style.fontSize = "13px";
+        notice.style.color = "#ffb74d";
+        notice.style.display = "flex";
+        notice.style.alignItems = "center";
+        notice.style.gap = "8px";
+        notice.innerHTML = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#ffb74d;box-shadow:0 0 6px #ffb74d;"></span><strong>Live Stream:</strong> Abhi live stream available nahi hai (match live stream aane par yahan Server 1 aa jayega)`;
+        bar.appendChild(notice);
+      } else if (bar) {
+        bar.remove();
+      }
       return;
     }
     if (!bar) {
@@ -1825,8 +1863,10 @@
 
           const cat = String(fc.event_category || fc.category || "").toLowerCase();
           const rawTitle = fc.match_name || fc.title || "";
-          const matchId = String(fc.match_id || fc.id || "");
+          const matchId = String(fc.match_id || fc.id || "").trim();
           if (!matchId || !rawTitle) continue;
+          // Live streams from iosfancode ALWAYS end with _ENG
+          if (!matchId.toUpperCase().endsWith("_ENG")) continue;
           if (!isCricketStream(rawTitle, cat, fc.event_name || "")) continue;
 
           const playerUrl = `https://iosfancode.vercel.app/?watch=${encodeURIComponent(matchId)}`;
@@ -1835,38 +1875,32 @@
           let matched = false;
           for (const cb of candidateMatches) {
             if (matchStreamToCb(title, cb)) {
-              const cbIsLive = isLiveMatch(cb) || isMatchStartingSoon(cb);
-              // Attach server if FanCode says LIVE OR Cricbuzz match is live / starting soon
-              if (isFcLive || cbIsLive) {
-                matched = true;
-                const mid = String(cb.id);
-                if (!newAutoServers[mid]) newAutoServers[mid] = [];
-                const sNum = newAutoServers[mid].length + 1;
+              matched = true;
+              const mid = String(cb.id);
+              // Only 1 FanCode server per match (Server 1)
+              if (!newAutoServers[mid] || newAutoServers[mid].length === 0) {
                 const sObj = {
-                  id: `client_fc_${mid}_${sNum}`,
-                  title: `Server ${sNum}`,
-                  serverLabel: `Server ${sNum}`,
+                  id: `client_fc_${mid}_1`,
+                  title: "Server 1",
+                  serverLabel: "Server 1",
                   category: `${watchLinkPrefix}${mid}`,
                   media_type: "link",
                   media_url: playerUrl,
                   source: "fancode",
                   published: true,
-                  sort_order: sNum
+                  sort_order: 1
                 };
-                newAutoServers[mid].push(sObj);
-                if (!cb.auto_servers) cb.auto_servers = [];
-                if (!cb.auto_servers.some(s => s.media_url === playerUrl)) {
-                  cb.auto_servers.push(sObj);
-                }
-
-                const inMainGrid = (state.matches || []).some(m => String(m.id) === mid);
-                if (!inMainGrid && !isCompletedMatch(cb) && !extraCricbuzzLiveMatches.some(m => String(m.id) === mid)) {
-                  cb.isCricbuzzMatch = true;
-                  cb.state = "Live";
-                  extraCricbuzzLiveMatches.push(cb);
-                }
-                break;
+                newAutoServers[mid] = [sObj];
+                cb.auto_servers = [sObj];
               }
+
+              const inMainGrid = (state.matches || []).some(m => String(m.id) === mid);
+              if (!inMainGrid && !isCompletedMatch(cb) && !extraCricbuzzLiveMatches.some(m => String(m.id) === mid)) {
+                cb.isCricbuzzMatch = true;
+                cb.state = "Live";
+                extraCricbuzzLiveMatches.push(cb);
+              }
+              break;
             }
           }
           if (!matched && isFcLive) {

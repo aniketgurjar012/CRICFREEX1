@@ -629,7 +629,7 @@ function teamMatchesStream(team, streamStr) {
     const stripped = name.split(" ").filter(w => !["women", "team", "men"].includes(w)).join(" ");
     if (stripped) terms.add(stripped);
     name.split(" ").forEach(w => {
-      if (w.length >= 5 && !["cricket", "club", "team", "kings", "royals", "super", "giants", "riders", "challengers", "knights", "stars", "titans"].includes(w)) {
+      if (w.length >= 4 && !["cricket", "club", "team", "kings", "royals", "super", "giants", "riders", "challengers", "knights", "stars", "titans", "strikers", "heat", "sixers", "thunder", "scorchers", "renegades", "hurricanes", "women", "mens", "eagles", "falcons", "patriots", "lions", "warriors"].includes(w)) {
         terms.add(w);
       }
     });
@@ -680,20 +680,7 @@ function matchStreamToCb(streamTitle, cb) {
   const m1 = teamMatchesStream(t1, cleanTitle);
   const m2 = teamMatchesStream(t2, cleanTitle);
 
-  if (m1 && m2) return true;
-
-  if (m1 || m2) {
-    const seriesClean = cleanStreamStr(cb.series || "");
-    const descClean = cleanStreamStr(cb.description || "");
-    const words = streamTitle.split(/[\s\-_/:]+/).map(w => cleanStreamStr(w)).filter(w => w.length >= 4);
-    for (const w of words) {
-      if (seriesClean.includes(w) || descClean.includes(w)) {
-        return true;
-      }
-    }
-  }
-
-  return false;
+  return Boolean(m1 && m2);
 }
 
 let isAutoSyncingToDatabase = false;
@@ -770,8 +757,10 @@ async function syncAllrounderToDatabase(manual = false) {
       const status = String(fc.status || "").toUpperCase();
       const isFcLive = status.includes("LIVE") || fc.isLive === true;
 
-      const matchId = String(fc.match_id || fc.id || "");
+      const matchId = String(fc.match_id || fc.id || "").trim();
       if (!matchId || !rawTitle) continue;
+      // Live streams from iosfancode ALWAYS end with _ENG
+      if (!matchId.toUpperCase().endsWith("_ENG")) continue;
       if (!isCricketStreamAdmin(rawTitle, cat, eventName)) continue;
       const playerUrl = `https://iosfancode.vercel.app/?watch=${encodeURIComponent(matchId)}`;
       const cleanTitle = rawTitle.replace(/\[.*?\]|\(.*?\)/g, "").trim() || rawTitle;
@@ -779,31 +768,40 @@ async function syncAllrounderToDatabase(manual = false) {
       let matched = false;
       for (const cb of candidateMatches) {
         if (matchStreamToCb(cleanTitle, cb)) {
-          // Sync if FanCode is live OR match is live
-          const cbIsLive = String(cb.state || "").toLowerCase().includes("live") || String(cb.state || "").toLowerCase().includes("progress") || String(cb.state || "").toLowerCase().includes("stumps");
-          if (isFcLive || cbIsLive) {
-            matched = true;
+          matched = true;
+          const midStr = String(cb.id);
+          // Exactly 1 FanCode server per match (Server 1)
+          const alreadyQueued = liveStreamsToInsert.some(x => x.matchId === midStr && x.source === "fancode");
+          const alreadyInDb = content.some(c => isCricketWatchLink(c) && cricketWatchMatchId(c) === midStr && (String(c.media_url || "").includes("iosfancode") || String(c.public_id || "").startsWith("auto_")));
+          if (!alreadyQueued && !alreadyInDb) {
             liveStreamsToInsert.push({
-              matchId: String(cb.id),
+              matchId: midStr,
               source: "fancode",
               playerUrl,
               title: rawTitle
             });
-            break;
           }
+          break;
         }
       }
       if (!matched && isFcLive && isCricketStreamAdmin(rawTitle, cat, eventName)) {
-        liveStreamsToInsert.push({
-          matchId: `ex_fc_${matchId}`,
-          source: "fancode",
-          playerUrl,
-          title: rawTitle
-        });
+        const exMid = `ex_fc_${matchId}`;
+        const alreadyQueued = liveStreamsToInsert.some(x => x.matchId === exMid);
+        if (!alreadyQueued) {
+          liveStreamsToInsert.push({
+            matchId: exMid,
+            source: "fancode",
+            playerUrl,
+            title: rawTitle
+          });
+        }
       }
-      continue;
-    }
-
+      continue;
+
+    }
+
+
+
     const defaultSectionSlug = sections.find(x => x.slug === "sports")?.slug
       || sections[0]?.slug
       || "sports";

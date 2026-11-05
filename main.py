@@ -963,6 +963,14 @@ def _is_women_match(name_or_obj: Any) -> bool:
     return False
 
 
+GENERIC_MASCOTS = {
+    "team", "cricket", "club", "npl", "mens", "women", "womens", "the", "xi",
+    "kings", "royals", "lions", "titans", "warriors", "super", "knights",
+    "riders", "falcons", "patriots", "giants", "stars", "heat", "sixers",
+    "thunder", "strikers", "hurricanes", "renegades", "scorchers", "eagles",
+    "rhinos", "tuskers", "rocks", "division", "region", "patrons", "blues", "whites"
+}
+
 def _team_matches_stream(team_dict: dict[str, Any], clean_stream: str) -> bool:
     raw_name = str(team_dict.get("teamName", "")).lower().strip()
     raw_short = str(team_dict.get("teamSName", "")).lower().strip()
@@ -974,7 +982,7 @@ def _team_matches_stream(team_dict: dict[str, Any], clean_stream: str) -> bool:
     if clean_name:
         terms.add(clean_name)
         terms.add(re.sub(r"\s+", "", clean_name))
-        words = [w for w in clean_name.split() if w not in {"women", "team", "cricket", "club", "npl", "mens", "the", "xi", "division"}]
+        words = [w for w in clean_name.split() if w not in GENERIC_MASCOTS and len(w) >= 3]
         for w in words:
             if len(w) >= 3:
                 terms.add(w)
@@ -1029,13 +1037,7 @@ def _match_stream_to_cb(stream_title: str, cb_match: dict[str, Any]) -> bool:
     return _team_matches_stream(t1, clean_stream) and _team_matches_stream(t2, clean_stream)
 
 
-GENERIC_MASCOTS = {
-    "team", "cricket", "club", "npl", "mens", "women", "womens", "the", "xi",
-    "kings", "royals", "lions", "titans", "warriors", "super", "knights",
-    "riders", "falcons", "patriots", "giants", "stars", "heat", "sixers",
-    "thunder", "strikers", "hurricanes", "renegades", "scorchers", "eagles",
-    "rhinos", "tuskers", "rocks", "division", "region", "patrons", "blues", "whites"
-}
+
 
 
 def _clean_team_tokens(name: str) -> set[str]:
@@ -1625,8 +1627,12 @@ def sync_allrounder_streams() -> dict[str, list[dict[str, Any]]]:
                 cat = str(fc.get("event_category") or fc.get("category") or "").lower()
                 event_name = str(fc.get("event_name") or "")
                 raw_title = str(fc.get("match_name") or fc.get("title") or "")
-                match_id = str(fc.get("match_id") or fc.get("id") or "")
+                match_id = str(fc.get("match_id") or fc.get("id") or "").strip()
                 if not match_id or not raw_title:
+                    continue
+
+                # Live streams from iosfancode ALWAYS end with _ENG
+                if not match_id.upper().endswith("_ENG"):
                     continue
 
                 # Ensure only cricket events are processed (exclude football, tennis, etc.)
@@ -1635,8 +1641,7 @@ def sync_allrounder_streams() -> dict[str, list[dict[str, Any]]]:
 
                 # Direct web player URL for FanCode stream
                 player_url = f"https://iosfancode.vercel.app/?watch={match_id}"
-                if is_fc_live:
-                    fc_live_urls.add(player_url)
+                fc_live_urls.add(player_url)
 
                 # Clean title for matching (strip [English], [Hindi], etc.)
                 clean_title = re.sub(r'\[.*?\]|\(.*?\)', '', raw_title).strip()
@@ -1648,41 +1653,40 @@ def sync_allrounder_streams() -> dict[str, list[dict[str, Any]]]:
                     if classify_match(cb) == "recent":
                         continue
                     if _match_stream_to_cb(clean_title, cb):
-                        cb_is_live = (classify_match(cb) == "live")
-                        # Attach server if FanCode says LIVE OR Cricbuzz match is currently LIVE
-                        if is_fc_live or cb_is_live:
-                            matched = True
-                            fc_live_urls.add(player_url)
-                            mid = str(cb["id"])
-                            matched_servers.setdefault(mid, [])
-                            if not any(s.get("media_url") == player_url for s in matched_servers[mid]):
-                                matched_servers[mid].append({
-                                    "id": f"auto_fc_{mid}_{len(matched_servers[mid])}",
-                                    "title": f"Server {len(matched_servers[mid]) + 1}",
-                                    "serverLabel": f"Server {len(matched_servers[mid]) + 1}",
-                                    "category": f"__cricket_watch__:{mid}",
-                                    "media_type": "link",
-                                    "media_url": player_url,
-                                    "source": "fancode",
-                                    "published": True,
-                                    "sort_order": len(matched_servers[mid])
-                                })
+                        matched = True
+                        mid = str(cb["id"])
+                        matched_servers.setdefault(mid, [])
+                        # Attach AT MOST 1 FanCode server per match (Server 1)
+                        if len(matched_servers[mid]) == 0:
+                            matched_servers[mid].append({
+                                "id": f"auto_fc_{mid}_0",
+                                "title": "Server 1",
+                                "serverLabel": "Server 1",
+                                "category": f"__cricket_watch__:{mid}",
+                                "media_type": "link",
+                                "media_url": player_url,
+                                "source": "fancode",
+                                "published": True,
+                                "sort_order": 0
+                            })
+                        break
 
                 # Unmatched streams only appear in Live section if FanCode explicitly marked them LIVE
                 if not matched and is_fc_live and is_cricket_content(clean_title, cat, event_name):
                     ex_id = f"ex_fc_{match_id}"
                     matched_servers.setdefault(ex_id, [])
-                    matched_servers[ex_id].append({
-                        "id": f"auto_fc_{ex_id}_0",
-                        "title": "Server 1",
-                        "serverLabel": "Server 1",
-                        "category": f"__cricket_watch__:{ex_id}",
-                        "media_type": "link",
-                        "media_url": player_url,
-                        "source": "fancode",
-                        "published": True,
-                        "sort_order": 0
-                    })
+                    if len(matched_servers[ex_id]) == 0:
+                        matched_servers[ex_id].append({
+                            "id": f"auto_fc_{ex_id}_0",
+                            "title": "Server 1",
+                            "serverLabel": "Server 1",
+                            "category": f"__cricket_watch__:{ex_id}",
+                            "media_type": "link",
+                            "media_url": player_url,
+                            "source": "fancode",
+                            "published": True,
+                            "sort_order": 0
+                        })
                     teams = [clean_team_name(part.strip()) for part in re.split(r'\s+vs\s+|\s+v\s+', clean_title, flags=re.I)]
                     t1_n = teams[0] if len(teams) > 0 and teams[0] else "Team 1"
                     t2_n = teams[1] if len(teams) > 1 and teams[1] else "Team 2"
