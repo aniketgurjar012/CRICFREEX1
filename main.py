@@ -1620,8 +1620,7 @@ def sync_allrounder_streams() -> dict[str, list[dict[str, Any]]]:
             fc_live_urls = set()
             for fc in fc_matches:
                 fc_status = str(fc.get("status", "")).upper()
-                if "LIVE" not in fc_status and fc.get("isLive") is not True:
-                    continue
+                is_fc_live = ("LIVE" in fc_status) or (fc.get("isLive") is True)
 
                 cat = str(fc.get("event_category") or fc.get("category") or "").lower()
                 event_name = str(fc.get("event_name") or "")
@@ -1636,7 +1635,8 @@ def sync_allrounder_streams() -> dict[str, list[dict[str, Any]]]:
 
                 # Direct web player URL for FanCode stream
                 player_url = f"https://iosfancode.vercel.app/?watch={match_id}"
-                fc_live_urls.add(player_url)
+                if is_fc_live:
+                    fc_live_urls.add(player_url)
 
                 # Clean title for matching (strip [English], [Hindi], etc.)
                 clean_title = re.sub(r'\[.*?\]|\(.*?\)', '', raw_title).strip()
@@ -1648,23 +1648,28 @@ def sync_allrounder_streams() -> dict[str, list[dict[str, Any]]]:
                     if classify_match(cb) == "recent":
                         continue
                     if _match_stream_to_cb(clean_title, cb):
-                        matched = True
-                        mid = str(cb["id"])
-                        matched_servers.setdefault(mid, [])
-                        if not any(s.get("media_url") == player_url for s in matched_servers[mid]):
-                            matched_servers[mid].append({
-                                "id": f"auto_fc_{mid}_{len(matched_servers[mid])}",
-                                "title": f"Server {len(matched_servers[mid]) + 1}",
-                                "serverLabel": f"Server {len(matched_servers[mid]) + 1}",
-                                "category": f"__cricket_watch__:{mid}",
-                                "media_type": "link",
-                                "media_url": player_url,
-                                "source": "fancode",
-                                "published": True,
-                                "sort_order": len(matched_servers[mid])
-                            })
+                        cb_is_live = (classify_match(cb) == "live")
+                        # Attach server if FanCode says LIVE OR Cricbuzz match is currently LIVE
+                        if is_fc_live or cb_is_live:
+                            matched = True
+                            fc_live_urls.add(player_url)
+                            mid = str(cb["id"])
+                            matched_servers.setdefault(mid, [])
+                            if not any(s.get("media_url") == player_url for s in matched_servers[mid]):
+                                matched_servers[mid].append({
+                                    "id": f"auto_fc_{mid}_{len(matched_servers[mid])}",
+                                    "title": f"Server {len(matched_servers[mid]) + 1}",
+                                    "serverLabel": f"Server {len(matched_servers[mid]) + 1}",
+                                    "category": f"__cricket_watch__:{mid}",
+                                    "media_type": "link",
+                                    "media_url": player_url,
+                                    "source": "fancode",
+                                    "published": True,
+                                    "sort_order": len(matched_servers[mid])
+                                })
 
-                if not matched and is_cricket_content(clean_title, cat, event_name):
+                # Unmatched streams only appear in Live section if FanCode explicitly marked them LIVE
+                if not matched and is_fc_live and is_cricket_content(clean_title, cat, event_name):
                     ex_id = f"ex_fc_{match_id}"
                     matched_servers.setdefault(ex_id, [])
                     matched_servers[ex_id].append({

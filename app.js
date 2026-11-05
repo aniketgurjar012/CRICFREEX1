@@ -1563,8 +1563,22 @@ if ($("footerLogo")) {
   };
 }
 
-$("adminEntry").onclick = () =>
-  location.href = "./admin.html";
+const adminBtn = $("adminEntry");
+if (adminBtn) {
+  adminBtn.style.cursor = "pointer";
+  adminBtn.onclick = (e) => {
+    e.preventDefault();
+    location.href = "./admin.html";
+  };
+}
+const footerLogo = $("footerLogo");
+if (footerLogo) {
+  footerLogo.style.cursor = "pointer";
+  footerLogo.title = "Admin Panel";
+  footerLogo.onclick = () => {
+    location.href = "./admin.html";
+  };
+}
 
 let timer = null;
 

@@ -1125,27 +1125,33 @@
   async function request(path) {
     let response;
     const primaryUrl = apiURL(path);
+    const controller = new AbortController();
+    const fetchTimer = setTimeout(() => controller.abort(), 4500);
     try {
       response = await fetch(primaryUrl, {
+        signal: controller.signal,
         headers: { Accept: "application/json" }
       });
+      clearTimeout(fetchTimer);
     } catch {
-      // Fallback to remote Render API if localhost:8765 fails or is not running
+      clearTimeout(fetchTimer);
+      // Fallback to remote Render API if localhost fails
       const fallbackBase = String(config.CRICKET_API_URL || "https://cricfreex.onrender.com").replace(/\/+$/, "");
       if (fallbackBase && !primaryUrl.startsWith(fallbackBase)) {
+        const fallbackCtrl = new AbortController();
+        const fallbackTimer = setTimeout(() => fallbackCtrl.abort(), 6000);
         try {
           response = await fetch(`${fallbackBase}${path}`, {
+            signal: fallbackCtrl.signal,
             headers: { Accept: "application/json" }
           });
+          clearTimeout(fallbackTimer);
         } catch {
-          throw new Error(
-            "Cannot reach the cricket data service. Start CricFreeX with start-cricfreex.bat or check your connection."
-          );
+          clearTimeout(fallbackTimer);
+          throw new Error("Cannot reach the cricket data service. Please check your connection.");
         }
       } else {
-        throw new Error(
-          "Cannot reach the cricket data service. Start CricFreeX with start-cricfreex.bat or check your connection."
-        );
+        throw new Error("Cannot reach the cricket data service. Please check your connection.");
       }
     }
     let result;
@@ -1815,8 +1821,7 @@
         const fcMatches = Array.isArray(fcRes.value) ? fcRes.value : (Array.isArray(fcRes.value?.matches) ? fcRes.value.matches : []);
         for (const fc of fcMatches) {
           const status = String(fc.status || "").toUpperCase();
-          const isLive = status.includes("LIVE") || fc.isLive === true;
-          if (!isLive) continue;
+          const isFcLive = status.includes("LIVE") || fc.isLive === true;
 
           const cat = String(fc.event_category || fc.category || "").toLowerCase();
           const rawTitle = fc.match_name || fc.title || "";
@@ -1830,38 +1835,41 @@
           let matched = false;
           for (const cb of candidateMatches) {
             if (matchStreamToCb(title, cb)) {
-              matched = true;
-              const mid = String(cb.id);
-              if (!newAutoServers[mid]) newAutoServers[mid] = [];
-              const sNum = newAutoServers[mid].length + 1;
-              const sObj = {
-                id: `client_fc_${mid}_${sNum}`,
-                title: `Server ${sNum}`,
-                serverLabel: `Server ${sNum}`,
-                category: `${watchLinkPrefix}${mid}`,
-                media_type: "link",
-                media_url: playerUrl,
-                source: "fancode",
-                published: true,
-                sort_order: sNum
-              };
-              newAutoServers[mid].push(sObj);
-              if (!cb.auto_servers) cb.auto_servers = [];
-              if (!cb.auto_servers.some(s => s.media_url === playerUrl)) {
-                cb.auto_servers.push(sObj);
-              }
+              const cbIsLive = isLiveMatch(cb) || isMatchStartingSoon(cb);
+              // Attach server if FanCode says LIVE OR Cricbuzz match is live / starting soon
+              if (isFcLive || cbIsLive) {
+                matched = true;
+                const mid = String(cb.id);
+                if (!newAutoServers[mid]) newAutoServers[mid] = [];
+                const sNum = newAutoServers[mid].length + 1;
+                const sObj = {
+                  id: `client_fc_${mid}_${sNum}`,
+                  title: `Server ${sNum}`,
+                  serverLabel: `Server ${sNum}`,
+                  category: `${watchLinkPrefix}${mid}`,
+                  media_type: "link",
+                  media_url: playerUrl,
+                  source: "fancode",
+                  published: true,
+                  sort_order: sNum
+                };
+                newAutoServers[mid].push(sObj);
+                if (!cb.auto_servers) cb.auto_servers = [];
+                if (!cb.auto_servers.some(s => s.media_url === playerUrl)) {
+                  cb.auto_servers.push(sObj);
+                }
 
-              // If cb is NOT currently in the main live grid (state.matches), but stream is LIVE:
-              const inMainGrid = (state.matches || []).some(m => String(m.id) === mid);
-              if (!inMainGrid && !isCompletedMatch(cb) && !extraCricbuzzLiveMatches.some(m => String(m.id) === mid)) {
-                cb.isCricbuzzMatch = true;
-                cb.state = "Live";
-                extraCricbuzzLiveMatches.push(cb);
+                const inMainGrid = (state.matches || []).some(m => String(m.id) === mid);
+                if (!inMainGrid && !isCompletedMatch(cb) && !extraCricbuzzLiveMatches.some(m => String(m.id) === mid)) {
+                  cb.isCricbuzzMatch = true;
+                  cb.state = "Live";
+                  extraCricbuzzLiveMatches.push(cb);
+                }
+                break;
               }
-              break;
             }
           }
-          if (!matched) {
+          if (!matched && isFcLive) {
             unmatchedStreams.push({ source: "fancode", title, playerUrl });
           }
         }
@@ -1993,14 +2001,15 @@
           }
         });
 
-        renderMatchList(
-          state.matches,
-          m => openMatch(m, "live", "scorecard", true),
-          "No live matches are available right now."
-        );
-        const count = root.querySelector(".cricket-count");
-        if (count) {
-          count.textContent = `${filtered(state.matches, matchSearchText).length} of ${state.matches.length} matches`;
+        updateDomMatchServers();
+        // Only do full list re-render if synthetic/extra matches changed count
+        const grid = root.querySelector(".cricket-match-grid");
+        if (!grid || grid.children.length !== state.matches.length) {
+          renderMatchList(
+            state.matches,
+            m => openMatch(m, "live", "scorecard", true),
+            "No live matches are available right now."
+          );
         }
       }
     } catch (err) {
@@ -4656,34 +4665,4 @@
 
   preloadMatchData();
   restoreRoute(false);
-
-  // Fully automated background sync running every 30s (runs on live and match views)
-  setInterval(() => {
-    if (document.hidden) return;
-
-    // 1. Sync live matches from Cricbuzz
-    request("/api/matches/live").then(res => {
-      if (res && Array.isArray(res.matches)) {
-        const liveOnly = res.matches.filter(m => !isCompletedMatch(m));
-        _matchDataCache.live = liveOnly;
-        try {
-          localStorage.setItem("cricfreex_cached_live_matches", JSON.stringify(liveOnly));
-        } catch (e) {}
-        liveOnly.forEach(m => {
-          if (m?.id) {
-            if (!state.allKnownMatches) state.allKnownMatches = {};
-            state.allKnownMatches[String(m.id)] = m;
-          }
-        });
-        if (state.page === "live") {
-          state.matches = liveOnly;
-        }
-      }
-      // 2. Always sync FanCode streams seamlessly
-      syncAllrounderClient(true);
-    }).catch(() => {
-      // Even if Cricbuzz API is slow, still sync allrounder streams!
-      syncAllrounderClient(true);
-    });
-  }, 12000);
 })();

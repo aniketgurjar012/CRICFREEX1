@@ -762,14 +762,13 @@ async function syncAllrounderToDatabase(manual = false) {
 
     const liveStreamsToInsert = [];
 
-    // FanCode direct streams
+        // FanCode direct streams
     for (const fc of fcMatches) {
       const cat = String(fc.event_category || fc.category || "").toLowerCase();
       const eventName = String(fc.event_name || "");
       const rawTitle = String(fc.match_name || fc.title || "");
       const status = String(fc.status || "").toUpperCase();
-      const isLive = status.includes("LIVE") || fc.isLive === true;
-      if (!isLive) continue;
+      const isFcLive = status.includes("LIVE") || fc.isLive === true;
 
       const matchId = String(fc.match_id || fc.id || "");
       if (!matchId || !rawTitle) continue;
@@ -780,17 +779,21 @@ async function syncAllrounderToDatabase(manual = false) {
       let matched = false;
       for (const cb of candidateMatches) {
         if (matchStreamToCb(cleanTitle, cb)) {
-          matched = true;
-          liveStreamsToInsert.push({
-            matchId: String(cb.id),
-            source: "fancode",
-            playerUrl,
-            title: rawTitle
-          });
-          break;
+          // Sync if FanCode is live OR match is live
+          const cbIsLive = String(cb.state || "").toLowerCase().includes("live") || String(cb.state || "").toLowerCase().includes("progress") || String(cb.state || "").toLowerCase().includes("stumps");
+          if (isFcLive || cbIsLive) {
+            matched = true;
+            liveStreamsToInsert.push({
+              matchId: String(cb.id),
+              source: "fancode",
+              playerUrl,
+              title: rawTitle
+            });
+            break;
+          }
         }
       }
-      if (!matched && isCricketStreamAdmin(rawTitle, cat, eventName)) {
+      if (!matched && isFcLive && isCricketStreamAdmin(rawTitle, cat, eventName)) {
         liveStreamsToInsert.push({
           matchId: `ex_fc_${matchId}`,
           source: "fancode",
@@ -798,8 +801,9 @@ async function syncAllrounderToDatabase(manual = false) {
           title: rawTitle
         });
       }
-    }
-
+      continue;
+    }
+
     const defaultSectionSlug = sections.find(x => x.slug === "sports")?.slug
       || sections[0]?.slug
       || "sports";
