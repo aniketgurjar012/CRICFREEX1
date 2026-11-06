@@ -1140,18 +1140,16 @@ function shareTeamFlag(team, series = "") {
 function formatMatchShareMessage(match, streamUrl) {
   const teamLabel = team => {
     const name = typeof team === "object" && team
-      ? team.teamName || team.teamSName
+      ? team.teamName || team.name || team.teamSName
       : team;
-    const flag = shareTeamFlag(team, match?.series);
-    return `${name || "Team"}${flag ? ` ${flag}` : ""}`;
+    return name || "Team";
   };
+  const seriesTitle = match?.series || match?.seriesName || match?.description || "Live Cricket";
   return [
-    `🏆 ${match?.series || match?.description || "Live Cricket"}`,
+    `🏆 ${seriesTitle}`,
     `🏏 ${teamLabel(match?.team1)} vs ${teamLabel(match?.team2)}`,
     "",
-    `🔴 WATCH LIVE : ${streamUrl}`,
-    "",
-    "⚠️ Open in Chrome Browser"
+    `🔴 WATCH LIVE ON CRICFREEX : ${streamUrl}`
   ].join("\n");
 }
 
@@ -1239,14 +1237,14 @@ function updateWatchShareableLinks(matchId, records) {
     const copyBtn = document.createElement("button");
     copyBtn.type = "button";
     copyBtn.className = "ghost watch-share-copy-btn";
-    copyBtn.textContent = "📋 Copy Message";
+    copyBtn.textContent = "📋 Copy Link";
     copyBtn.addEventListener("click", async () => {
       try {
         await copyShareMessage(shareMessage);
         copyBtn.textContent = "✓ Copied!";
         copyBtn.style.color = "var(--green)";
         setTimeout(() => {
-          copyBtn.textContent = "📋 Copy Message";
+          copyBtn.textContent = "📋 Copy Link";
           copyBtn.style.color = "";
         }, 2000);
       } catch (error) {

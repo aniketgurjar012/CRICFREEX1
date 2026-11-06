@@ -1065,18 +1065,16 @@
   function formatMatchShareMessage(match, streamUrl) {
     const teamLabel = team => {
       const name = typeof team === "object" && team
-        ? (team.teamName || team.teamSName)
+        ? (team.teamName || team.name || team.teamSName)
         : team;
-      const flag = teamFlagEmoji(team, match?.series);
-      return `${name || "Team"}${flag ? ` ${flag}` : ""}`;
+      return name || "Team";
     };
+    const seriesTitle = match?.series || match?.seriesName || match?.description || "Live Cricket";
     return [
-      `🏆 ${match?.series || match?.description || "Live Cricket"}`,
+      `🏆 ${seriesTitle}`,
       `🏏 ${teamLabel(match?.team1)} vs ${teamLabel(match?.team2)}`,
       "",
-      `🔴 WATCH LIVE : ${streamUrl}`,
-      "",
-      "⚠️ Open in Chrome Browser"
+      `🔴 WATCH LIVE ON CRICFREEX : ${streamUrl}`
     ].join("\n");
   }
 
@@ -1780,7 +1778,7 @@
         notice.style.padding = "4px 0";
         notice.style.display = "inline-flex";
         notice.style.alignItems = "center";
-        notice.textContent = "Please wait...";
+        notice.textContent = "The live stream hasn't started yet. Please wait a few minutes.";
         bar.appendChild(notice);
       } else if (bar) {
         bar.remove();
@@ -2281,7 +2279,7 @@
     actions.style.gap = "8px";
     actions.style.alignItems = "center";
 
-    const shareBtn = element("button", "cricket-action-button", "📋 Copy Message");
+    const shareBtn = element("button", "cricket-action-button", "📋 Copy Link");
     shareBtn.type = "button";
     shareBtn.title = "Copy a shareable match message with this server link";
     shareBtn.addEventListener("click", async () => {
@@ -2295,7 +2293,7 @@
         );
         shareBtn.textContent = "✓ Copied!";
         showCricketToast("Match share message copied to clipboard!");
-        setTimeout(() => { shareBtn.textContent = "📋 Copy Message"; }, 2000);
+        setTimeout(() => { shareBtn.textContent = "📋 Copy Link"; }, 2000);
       } catch (error) {
         showCricketToast(`Could not copy share message: ${error.message}`);
       }
