@@ -1775,16 +1775,12 @@
         }
         bar.replaceChildren();
         const notice = element("div", "cricket-stream-pending-notice");
-        notice.style.padding = "10px 14px";
-        notice.style.background = "rgba(255, 152, 0, 0.08)";
-        notice.style.border = "1px solid rgba(255, 152, 0, 0.28)";
-        notice.style.borderRadius = "8px";
         notice.style.fontSize = "13px";
-        notice.style.color = "#ffb74d";
-        notice.style.display = "flex";
+        notice.style.color = "rgba(255, 255, 255, 0.65)";
+        notice.style.padding = "4px 0";
+        notice.style.display = "inline-flex";
         notice.style.alignItems = "center";
-        notice.style.gap = "8px";
-        notice.innerHTML = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#ffb74d;box-shadow:0 0 6px #ffb74d;"></span>The live stream hasn't started yet. Please wait a few minutes.`;
+        notice.textContent = "Please wait...";
         bar.appendChild(notice);
       } else if (bar) {
         bar.remove();
