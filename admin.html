@@ -140,6 +140,20 @@ if(localStorage.getItem("cricfreex_theme")==="light"){
 <div class="list" id="contentList"></div>
 </section>
 
+<section id="editorPanel" class="panel hidden">
+<div class="panel-head"><div><h2 id="editorHeading">Add Content</h2><p class="muted">Create or update public content.</p></div><button class="ghost" id="closeEditor">Close</button></div>
+<form id="contentForm" class="editor" novalidate>
+<input type="hidden" id="contentId">
+<label>Title<input id="contentTitle" required maxlength="150"></label>
+<label>Display ID<input id="publicId" maxlength="100"></label>
+<label>Section<select id="contentSection"></select></label>
+<label>Category<input id="contentCategory" placeholder="Star Sports / Sony Sports / Other"></label>
+<label class="wide">Media URL / Stream Link<input id="mediaUrl" type="text" placeholder="https://... or m3u8 or iframe embed"></label>
+<label>Order<input id="sortOrder" type="number" value="0"></label>
+<div class="editor-actions"><button type="button" class="danger hidden" id="deleteContent">Delete</button><button class="primary" id="saveContent">Save Content</button></div>
+</form>
+</section>
+
 <section id="watchLinksPanel" class="panel hidden">
 <div class="panel-head"><div><h2>Cricket Watch Links</h2><p class="muted">Live and upcoming matches automatically sync streams 24/7. Add custom links below if needed.</p></div><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;"><button class="ghost" id="refreshWatchMatches" type="button">Refresh Matches</button></div></div>
 <div id="autoSyncStatus" class="notice hidden" style="margin-bottom:12px;background:rgba(22,163,74,0.15);border:1px solid rgba(22,163,74,0.4);color:#22c55e;"></div>
@@ -210,25 +224,11 @@ if(localStorage.getItem("cricfreex_theme")==="light"){
 <div class="panel-head"><div><h2>Sections</h2><p class="muted">Manage the published sections shown on the website.</p></div></div>
 <div class="section-list" id="sectionList"></div>
 </section>
-
-<section id="editorPanel" class="panel hidden">
-<div class="panel-head"><div><h2 id="editorHeading">Add Content</h2><p class="muted">Create or update public content.</p></div><button class="ghost" id="closeEditor">Close</button></div>
-<form id="contentForm" class="editor">
-<input type="hidden" id="contentId">
-<label>Title<input id="contentTitle" required maxlength="150"></label>
-<label>Display ID<input id="publicId" maxlength="100"></label>
-<label>Section<select id="contentSection" required></select></label>
-<label>Category<input id="contentCategory" placeholder="Star Sports / Sony Sports / Other"></label>
-<label class="wide">Media URL<input id="mediaUrl" type="url" placeholder="https://..."></label>
-<label>Order<input id="sortOrder" type="number" value="0"></label>
-<div class="editor-actions"><button type="button" class="danger hidden" id="deleteContent">Delete</button><button class="primary" id="saveContent">Save Content</button></div>
-</form>
-</section>
 </main>
 </section>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="./config.js?v=2"></script>
-<script src="./admin.js?v=16"></script>
+<script src="./admin.js?v=17"></script>
 </body>
 </html>

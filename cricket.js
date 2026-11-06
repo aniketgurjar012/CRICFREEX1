@@ -1180,36 +1180,59 @@
     return url.href;
   }
 
+  let localBackendFailed = false;
+
   async function request(path) {
     let response;
-    const primaryUrl = apiURL(path);
-    const controller = new AbortController();
-    const fetchTimer = setTimeout(() => controller.abort(), 4500);
-    try {
-      response = await fetch(primaryUrl, {
-        signal: controller.signal,
-        headers: { Accept: "application/json" }
-      });
-      clearTimeout(fetchTimer);
-    } catch {
-      clearTimeout(fetchTimer);
-      // Fallback to remote Render API if localhost fails
-      const fallbackBase = String(config.CRICKET_API_URL || "https://cricfreex.onrender.com").replace(/\/+$/, "");
-      if (fallbackBase && !primaryUrl.startsWith(fallbackBase)) {
-        const fallbackCtrl = new AbortController();
-        const fallbackTimer = setTimeout(() => fallbackCtrl.abort(), 6000);
-        try {
-          response = await fetch(`${fallbackBase}${path}`, {
-            signal: fallbackCtrl.signal,
-            headers: { Accept: "application/json" }
-          });
-          clearTimeout(fallbackTimer);
-        } catch {
-          clearTimeout(fallbackTimer);
+    const fallbackBase = String(config.CRICKET_API_URL || "https://cricfreex.onrender.com").replace(/\/+$/, "");
+    const isLocalAttempt = isLocalHost && !isPort8765 && !localBackendFailed;
+    const primaryUrl = isLocalAttempt ? `http://127.0.0.1:8765${path}` : apiURL(path);
+
+    // If local backend already failed or wasn't reachable, skip straight to remote fallbackBase
+    if (isLocalHost && !isPort8765 && localBackendFailed && fallbackBase) {
+      const fallbackCtrl = new AbortController();
+      const fallbackTimer = setTimeout(() => fallbackCtrl.abort(), 15000);
+      try {
+        response = await fetch(`${fallbackBase}${path}`, {
+          signal: fallbackCtrl.signal,
+          headers: { Accept: "application/json" }
+        });
+        clearTimeout(fallbackTimer);
+      } catch {
+        clearTimeout(fallbackTimer);
+        throw new Error("Cannot reach the cricket data service. Please check your connection.");
+      }
+    } else {
+      const controller = new AbortController();
+      const fetchTimer = setTimeout(() => controller.abort(), isLocalAttempt ? 1200 : 8000);
+      try {
+        response = await fetch(primaryUrl, {
+          signal: controller.signal,
+          headers: { Accept: "application/json" }
+        });
+        clearTimeout(fetchTimer);
+      } catch {
+        clearTimeout(fetchTimer);
+        if (isLocalAttempt) {
+          localBackendFailed = true;
+        }
+        // Fallback to remote Render API if localhost or primary fails
+        if (fallbackBase && !primaryUrl.startsWith(fallbackBase)) {
+          const fallbackCtrl = new AbortController();
+          const fallbackTimer = setTimeout(() => fallbackCtrl.abort(), 15000);
+          try {
+            response = await fetch(`${fallbackBase}${path}`, {
+              signal: fallbackCtrl.signal,
+              headers: { Accept: "application/json" }
+            });
+            clearTimeout(fallbackTimer);
+          } catch {
+            clearTimeout(fallbackTimer);
+            throw new Error("Cannot reach the cricket data service. Please check your connection.");
+          }
+        } else {
           throw new Error("Cannot reach the cricket data service. Please check your connection.");
         }
-      } else {
-        throw new Error("Cannot reach the cricket data service. Please check your connection.");
       }
     }
     let result;
@@ -1921,9 +1944,12 @@
 
     try {
       // Fetch FanCode and backend auto-servers IN PARALLEL with cache-busting timestamp
+      const autoServerBase = (isLocalHost && !isPort8765 && localBackendFailed)
+        ? String(config.CRICKET_API_URL || "https://cricfreex.onrender.com").replace(/\/+$/, "")
+        : apiBase;
       const [fcRes, beRes] = await Promise.allSettled([
         fetchWithTimeout(`https://raw.githubusercontent.com/drmlive/fancode-live-events/main/fancode.json?t=${Date.now()}`, 3500),
-        fetchWithTimeout(`${apiBase}/api/auto-servers?t=${Date.now()}`, 2500)
+        fetchWithTimeout(`${autoServerBase}/api/auto-servers?t=${Date.now()}`, 2500)
       ]);
 
       const mergedServers = {};
@@ -4604,68 +4630,74 @@
     restoreRoute(false);
   });
 
+  let silentUpdateInProgress = false;
   async function updateLiveScoresSilent() {
+    if (silentUpdateInProgress) return;
     if (root.hidden || document.hidden) return;
-
-    if (state.page === "live") {
-      try {
-        const result = await request("/api/matches/live");
-        const matches = result.matches || [];
-        if (!matches.length) return;
-        const pool = Object.values(state.allKnownMatches || {});
-        pool.forEach(um => {
-          if ((isMatchStartingSoon(um) || isLiveMatch(um)) && !isCompletedMatch(um)) {
-            if (!matches.some(m => String(m.id) === String(um.id))) {
-              matches.push(um);
+    silentUpdateInProgress = true;
+    try {
+      if (state.page === "live") {
+        try {
+          const result = await request("/api/matches/live");
+          const matches = result.matches || [];
+          if (!matches.length) return;
+          const pool = Object.values(state.allKnownMatches || {});
+          pool.forEach(um => {
+            if ((isMatchStartingSoon(um) || isLiveMatch(um)) && !isCompletedMatch(um)) {
+              if (!matches.some(m => String(m.id) === String(um.id))) {
+                matches.push(um);
+              }
             }
-          }
-        });
-        state.matches = matches;
+          });
+          state.matches = matches;
 
-        matches.forEach(m => {
-          if (m.auto_servers?.length) {
-            state.autoServers[String(m.id)] = m.auto_servers;
-          }
-        });
-        syncAllrounderClient();
-
-        // Update cards in-place with state, scores, and watch server links
-        matches.forEach(match => {
-          const card = root.querySelector(`.cricket-match-card[data-card-match-id="${match.id}"]`);
-          if (card) {
-            updateMatchCardInPlace(card, match, shouldAllowWatchLinks(match));
-          }
-        });
-      } catch (err) {
-        // silent fail on network glitch
-      }
-    } else if (state.page === "match" && state.selectedMatch && isLiveMatch(state.selectedMatch)) {
-      // If user is inside a live match view, update commentary/scorecard silently
-      try {
-        const mid = state.selectedMatch.id;
-        const tab = state.matchTab || "scorecard";
-        if (["scorecard", "commentary", "overs"].includes(tab)) {
-          const apiVersion = tab === "overs" ? "v4" : "v3";
-          const res = await request(`/api/${apiVersion}/match/${mid}/${tab}`);
-          if (res?.data && state.selectedMatch?.id === mid && state.matchTab === tab) {
-            const target = root.querySelector(".cricket-match-data");
-            if (target && !target.classList.contains("is-loading")) {
-              target.textContent = "";
-              renderMatchData(tab, res.data, target, state.selectedMatch);
+          matches.forEach(m => {
+            if (m.auto_servers?.length) {
+              state.autoServers[String(m.id)] = m.auto_servers;
             }
-          }
+          });
+          syncAllrounderClient();
+
+          // Update cards in-place with state, scores, and watch server links
+          matches.forEach(match => {
+            const card = root.querySelector(`.cricket-match-card[data-card-match-id="${match.id}"]`);
+            if (card) {
+              updateMatchCardInPlace(card, match, shouldAllowWatchLinks(match));
+            }
+          });
+        } catch (err) {
+          // silent fail on network glitch
         }
-      } catch (e) {}
-    }
+      } else if (state.page === "match" && state.selectedMatch && isLiveMatch(state.selectedMatch)) {
+        // If user is inside a live match view, update commentary/scorecard silently
+        try {
+          const mid = state.selectedMatch.id;
+          const tab = state.matchTab || "scorecard";
+          if (["scorecard", "commentary", "overs"].includes(tab)) {
+            const apiVersion = tab === "overs" ? "v4" : "v3";
+            const res = await request(`/api/${apiVersion}/match/${mid}/${tab}`);
+            if (res?.data && state.selectedMatch?.id === mid && state.matchTab === tab) {
+              const target = root.querySelector(".cricket-match-data");
+              if (target && !target.classList.contains("is-loading")) {
+                target.textContent = "";
+                renderMatchData(tab, res.data, target, state.selectedMatch);
+              }
+            }
+          }
+        } catch (e) {}
+      }
 
-    if (watchLinks.length) {
-      pruneCompletedWatchLinks();
+      if (watchLinks.length) {
+        pruneCompletedWatchLinks();
+      }
+    } finally {
+      silentUpdateInProgress = false;
     }
   }
 
   window.setInterval(() => {
     updateLiveScoresSilent();
-  }, 4000);
+  }, 10000);
 
   window.setInterval(() => {
     syncAllrounderClient();

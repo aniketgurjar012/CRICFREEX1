@@ -1621,6 +1621,16 @@ function editContent(item){
   $("contentId").value=item.id;
   $("contentTitle").value=item.title||"";
   $("publicId").value=item.public_id||"";
+
+  if(item.section_slug){
+    const hasOption=Array.from($("contentSection").options).some(o=>o.value===item.section_slug);
+    if(!hasOption){
+      const opt=document.createElement("option");
+      opt.value=item.section_slug;
+      opt.textContent=item.section_slug;
+      $("contentSection").appendChild(opt);
+    }
+  }
   $("contentSection").value=item.section_slug||"";
   $("contentCategory").value=item.category||"";
   $("mediaUrl").value=item.media_url||"";
@@ -1762,10 +1772,10 @@ $("contentForm").onsubmit=async event=>{
   let uploadedVideo=null;
 
   try{
-    const id=$("contentId").value;
+    const id=$("contentId").value.trim();
 
     const existing=id
-      ?content.find(x=>x.id===id)
+      ?content.find(x=>String(x.id)===String(id))
       :null;
 
     const title=$("contentTitle")
@@ -1783,14 +1793,28 @@ $("contentForm").onsubmit=async event=>{
       ||
       null;
 
+    if(mediaUrl && /<iframe/i.test(mediaUrl)){
+      const srcMatch=mediaUrl.match(/src=["']([^"']+)["']/i);
+      if(srcMatch && srcMatch[1]){
+        mediaUrl=srcMatch[1].trim();
+      }
+    }
+    if(mediaUrl && mediaUrl.startsWith("//")){
+      mediaUrl=`https:${mediaUrl}`;
+    }
+
+    const sectionSlug=
+      $("contentSection").value.trim()||
+      existing?.section_slug||
+      (sections[0]?.slug||"channels");
+
     const payload={
       title,
       public_id:
         $("publicId").value.trim()||
         null,
 
-      section_slug:
-        $("contentSection").value,
+      section_slug: sectionSlug,
 
       category:
         $("contentCategory").value.trim()||null,
@@ -1812,7 +1836,7 @@ $("contentForm").onsubmit=async event=>{
       result=await db
         .from("content")
         .update(payload)
-        .eq("id",id);
+        .eq("id",isNaN(Number(id))?id:Number(id));
     }else{
       result=await db
         .from("content")
@@ -1856,6 +1880,7 @@ $("contentForm").onsubmit=async event=>{
       .classList
       .add("hidden");
 
+    alert("Channel saved successfully!");
     await loadAll();
 
   }catch(error){
@@ -1957,7 +1982,7 @@ async function removeContent(item){
     const {error}=await db
       .from("content")
       .delete()
-      .eq("id",item.id);
+      .eq("id",isNaN(Number(item.id))?item.id:Number(item.id));
 
     if(error)throw error;
 
@@ -2003,10 +2028,11 @@ async function removeContent(item){
 }
 
 $("deleteContent").onclick=()=>{
+  const curId=$("contentId").value.trim();
   const item=content.find(
     x=>
-      x.id===
-      $("contentId").value
+      String(x.id)===
+      String(curId)
   );
 
   if(item){
