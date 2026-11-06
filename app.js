@@ -1748,7 +1748,7 @@ function initTelegramJoinPopup() {
   setTimeout(() => {
     show();
     setInterval(show, 2 * 60 * 1000);
-  }, 5 * 1000);
+  }, 3 * 1000);
 }
 
 async function start() {
