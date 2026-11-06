@@ -614,6 +614,31 @@ def classify_match(match):
     return "upcoming"
 
 
+_STREAM_LISTING_PATTERN = re.compile(
+    r"\b(?:fancode|allrounder|willow|ios|live\s+cricket\s+stream|live\s+streaming)\b",
+    re.IGNORECASE
+)
+
+
+def is_stream_listing(match: dict[str, Any]) -> bool:
+    teams = [match.get("team1") or {}, match.get("team2") or {}]
+    fields = [
+        match.get("series"),
+        match.get("description"),
+        match.get("status"),
+        *(team.get("teamName") for team in teams),
+        *(team.get("teamSName") for team in teams),
+    ]
+    if _STREAM_LISTING_PATTERN.search(" ".join(str(value or "") for value in fields)):
+        return True
+
+    team_names = {
+        str(team.get("teamName") or "").strip().casefold()
+        for team in teams
+    }
+    return {"world feed", "opponent"}.issubset(team_names)
+
+
 def extract_page(html, path):
 
     soup = BeautifulSoup(html, "html.parser")
@@ -1001,7 +1026,8 @@ def fetch_cricinfo_matches() -> list[dict[str, Any]]:
                             "_category": cat,
                             "source": "cricinfo"
                         }
-                        ci_matches.append(match_obj)
+                        if not is_stream_listing(match_obj):
+                            ci_matches.append(match_obj)
                     except Exception as ev_err:
                         logger.warning("Error parsing Cricinfo event: %s", ev_err)
 
@@ -1370,7 +1396,7 @@ def get_matches(category: str):
         matches = [
             match
             for match in raw_matches
-            if classify_match(match) == category
+            if classify_match(match) == category and not is_stream_listing(match)
         ]
 
         IST = timezone(timedelta(hours=5, minutes=30))
@@ -1408,6 +1434,8 @@ def get_matches(category: str):
         try:
             ci_all = fetch_cricinfo_matches()
             for ci_m in ci_all:
+                if is_stream_listing(ci_m):
+                    continue
                 ci_cls = classify_match(ci_m)
                 if ci_cls != category:
                     continue

@@ -691,6 +691,33 @@ class MatchCategoryTests(unittest.TestCase):
             ["ci_123"]
         )
 
+    def test_match_feed_excludes_streaming_provider_placeholders(self):
+        streaming_listing = {
+            "id": "stream_1",
+            "series": "Live Cricket Stream",
+            "state": "In Progress",
+            "status": "Live Streaming",
+            "team1": {"teamName": "World Feed"},
+            "team2": {"teamName": "Opponent"}
+        }
+        cricket_match = {
+            "id": "match_1",
+            "series": "Test Series",
+            "state": "In Progress",
+            "team1": {"teamName": "Team A"},
+            "team2": {"teamName": "Team B"}
+        }
+        with patch("main.fetch", return_value="<html>matches</html>"), patch(
+            "main.extract_matches",
+            return_value=[streaming_listing, cricket_match]
+        ), patch("main.fetch_cricinfo_matches", return_value=[]):
+            result = get_matches("live")
+
+        self.assertEqual(
+            [match["id"] for match in result["matches"]],
+            ["match_1"]
+        )
+
     def test_match_deduplication_preserves_distinct_team_variants(self):
         self.assertTrue(_team_token_match("Auckland Aces", "Auckland"))
         self.assertTrue(_team_token_match("Australia", "AUS"))
