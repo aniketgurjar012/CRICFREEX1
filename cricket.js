@@ -1075,9 +1075,7 @@
       `🏆 ${match?.series || match?.description || "Live Cricket"}`,
       `🏏 ${teamLabel(match?.team1)} vs ${teamLabel(match?.team2)}`,
       "",
-      `🔴 WATCH LIVE : ${streamUrl}`,
-      "",
-      "⚠️ Open in Chrome Browser"
+      `🔴 WATCH LIVE ON CRICFREEX : ${streamUrl}`
     ].join("\n");
   }
 

@@ -1199,7 +1199,11 @@ function shareTeamFlag(team, series = "") {
   return [...code].map(char => String.fromCodePoint(0x1F1E6 + char.charCodeAt(0) - 97)).join("");
 }
 
-function formatMatchShareMessage(match, shareUrl, linkLabel = "🔴 WATCH LIVE") {
+function formatMatchShareMessage(
+  match,
+  shareUrl,
+  linkLabel = "🔴 WATCH LIVE ON CRICFREEX"
+) {
   const teamLabel = team => {
     const name = typeof team === "object" && team
       ? team.teamName || team.teamSName
@@ -1211,9 +1215,7 @@ function formatMatchShareMessage(match, shareUrl, linkLabel = "🔴 WATCH LIVE")
     `🏆 ${match?.series || match?.description || "Live Cricket"}`,
     `🏏 ${teamLabel(match?.team1)} vs ${teamLabel(match?.team2)}`,
     "",
-    `${linkLabel} : ${shareUrl}`,
-    "",
-    "⚠️ Open in Chrome Browser"
+    `${linkLabel} : ${shareUrl}`
   ].join("\n");
 }
 
@@ -1266,7 +1268,7 @@ function updateWatchShareableLinks(matchId, records) {
   items.push({
     label: "Match Link",
     url: `${base}/?match=${matchId}`,
-    linkLabel: "🔗 MATCH LINK",
+    linkLabel: "🔴 WATCH LIVE ON CRICFREEX",
     serverIndex: 0,
     desc: "Opens the match page without auto-playing a server"
   });
@@ -1276,7 +1278,7 @@ function updateWatchShareableLinks(matchId, records) {
     items.push({
       label: `Server ${sNum} Link`,
       url: `${base}/?match=${matchId}&server=${sNum}`,
-      linkLabel: "🔴 WATCH LIVE",
+      linkLabel: "🔴 WATCH LIVE ON CRICFREEX",
       serverIndex: i,
       desc: `Directly launches Server ${sNum} for ${matchTitle}`
     });
