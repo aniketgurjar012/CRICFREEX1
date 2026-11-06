@@ -80,111 +80,23 @@ window.setSiteMode = setSiteMode;
 let settings = null;
 let sections = [];
 let content = [];
-
-const CRICKET_WATCH_LINK_PREFIX = "__cricket_watch__:";
-
 let section = "sports";
 let filter = "all";
 let activeSeries = null;
 let selected = "";
 let restored = false;
 
-const esc = v =>
-  String(v ?? "").replace(
+const esc = value =>
+  String(value ?? "").replace(
     /[&<>"']/g,
-    c => ({
+    character => ({
       "&": "&amp;",
       "<": "&lt;",
       ">": "&gt;",
       '"': "&quot;",
       "'": "&#039;"
-    }[c])
+    }[character])
   );
-
-const SITE_ACCESS_PREFIX = "__site_access__";
-
-function isCricketWatchLink(item) {
-  return String(item?.category || "")
-    .startsWith(CRICKET_WATCH_LINK_PREFIX);
-}
-
-function isSiteAccessItem(item) {
-  return String(item?.public_id || "") === SITE_ACCESS_PREFIX ||
-         String(item?.category || "") === SITE_ACCESS_PREFIX;
-}
-
-function cricketWatchMatchId(item) {
-  return String(item?.category || "")
-    .slice(CRICKET_WATCH_LINK_PREFIX.length);
-}
-
-async function cleanupFinishedWatchLinks() {
-  const watchItems = content.filter(isCricketWatchLink);
-  if (!watchItems.length) return;
-
-  try {
-    const response = await fetch(`${C.CRICKET_API_URL}/api/matches/recent`, {
-      headers: { Accept: "application/json" }
-    });
-    if (!response.ok) return;
-    const result = await response.json();
-    const recentMatches = Array.isArray(result.matches) ? result.matches : [];
-    const finishedMatchIds = new Set();
-    recentMatches.forEach(m => {
-      const s = String(m.state || "").trim().toLowerCase();
-      const st = String(m.status || "").trim().toLowerCase();
-      if ([
-        "complete", "completed", "abandon", "abandoned",
-        "cancelled", "canceled", "no result", "drawn", "forfeit"
-      ].includes(s) || st.includes("won by") || st.includes("match tied") || st.includes("no result") || st.includes("match drawn") || st.includes("match abandoned") || st.includes("match cancelled")) {
-        finishedMatchIds.add(String(m.id));
-      }
-    });
-
-    const autoResponse = await fetch(`${C.CRICKET_API_URL}/api/auto-servers`, {
-      headers: { Accept: "application/json" }
-    });
-    if (!autoResponse.ok) return;
-    const autoResult = await autoResponse.json();
-    const lastSync = Number(autoResult.last_sync || 0);
-    if (!lastSync || Date.now() / 1000 - lastSync > 120) return;
-    const activeMatchIds = new Set(
-      Object.entries(autoResult.servers || {})
-        .filter(([, servers]) => Array.isArray(servers) && servers.length)
-        .map(([matchId]) => String(matchId))
-    );
-    const itemsToDelete = watchItems.filter(item =>
-      finishedMatchIds.has(cricketWatchMatchId(item)) &&
-      !activeMatchIds.has(cricketWatchMatchId(item))
-    );
-
-    if (!itemsToDelete.length) return;
-
-    const idsToDelete = itemsToDelete.map(item => item.id);
-
-    content = content.filter(item => !idsToDelete.includes(item.id));
-    window.CRICFREEX_CONTENT = content;
-    try {
-      localStorage.setItem("cricfreex_cached_content", JSON.stringify(content));
-    } catch (e) {}
-    window.dispatchEvent(
-      new CustomEvent(
-        "cricfreex:content-updated",
-        { detail: content }
-      )
-    );
-
-    const { error } = await db.from("content")
-      .delete()
-      .in("id", idsToDelete);
-
-    if (error) {
-      console.warn("Could not delete completed watch links:", error.message);
-    }
-  } catch (err) {
-    console.warn("cleanupFinishedWatchLinks error:", err);
-  }
-}
 
 function brand(name) {
   if (/^cricfreex$/i.test(name || "")) {
@@ -300,7 +212,12 @@ async function load() {
 
     settings = a.data || null;
     sections = b.data || [];
-    content = c.data || [];
+    content = (c.data || []).filter(item =>
+      item.kind !== "series" &&
+      item.kind !== "episode" &&
+      !String(item.category || "").startsWith("__cricket_watch__:") &&
+      String(item.public_id || "") !== "__site_access__"
+    );
     window.CRICFREEX_CONTENT = content;
     try {
       localStorage.setItem("cricfreex_cached_content", JSON.stringify(content));
@@ -322,7 +239,6 @@ async function load() {
     }
 
     renderAll();
-    cleanupFinishedWatchLinks();
 
   } catch (error) {
     console.error(error);
@@ -385,8 +301,8 @@ function renderFilters() {
       content
         .filter(
           x =>
-            !isCricketWatchLink(x) &&
-            !isSiteAccessItem(x) &&
+            x.kind !== "series" &&
+            x.kind !== "episode" &&
             x.section_slug === section &&
             !x.parent_id
         )
@@ -575,8 +491,8 @@ function render() {
     sectionName(s);
 
   const list = content.filter(x =>
-    !isCricketWatchLink(x) &&
-    !isSiteAccessItem(x) &&
+    x.kind !== "series" &&
+    x.kind !== "episode" &&
     x.section_slug === section &&
     !x.parent_id &&
     x.kind !== "episode" &&
@@ -871,11 +787,6 @@ function play(item, update = true) {
       section;
 
     activeSeries = null;
-  }
-
-  // Single Active Stream: Stop cricket match stream if running
-  if (window.CricfreexCricket?.closeWatchPlayer) {
-    window.CricfreexCricket.closeWatchPlayer(false);
   }
 
   /*
@@ -1455,13 +1366,6 @@ function restoreURL() {
   const view = p.get("view");
   const tab = p.get("tab");
 
-  if (location.hash === "#suggestion" || view === "suggestion" || tab === "request") {
-    setTimeout(() => {
-      $("suggestionSection")?.scrollIntoView({ behavior: "smooth", block: "center" });
-      $("suggestionInput")?.focus();
-    }, 400);
-  }
-
   if (view === "channels") {
     openChannelsView(false);
     return;
@@ -1497,10 +1401,7 @@ function restoreURL() {
 
   if (channelId) {
     const channel = content.find(
-      x =>
-        x.kind !== "episode" &&
-        x.kind !== "series" &&
-        matchItem(x, channelId)
+      x => x.kind === "channel" && matchItem(x, channelId)
     );
 
     if (channel) {
@@ -1516,9 +1417,7 @@ function restoreURL() {
         matchItem(x, showId)
     );
 
-    if (show) {
-      openSeries(show, false);
-    }
+    if (show) openChannelsView(false);
   }
 
   if (!view && !channelId && !episodeId && !showId) {
@@ -1759,155 +1658,6 @@ function initActiveUsersTracking() {
   }
 }
 
-/* =========================================================
-   SUGGESTION / REQUEST BOX
-========================================================= */
-
-function countWords(str) {
-  return (str || "").trim().split(/\s+/).filter(Boolean).length;
-}
-
-function initSuggestionBox() {
-  const form = $("suggestionForm");
-  const input = $("suggestionInput");
-  const countEl = $("suggestionWordCount");
-  const alertEl = $("suggestionAlert");
-  const btn = $("suggestionSubmitBtn");
-  const section = $("suggestionSection");
-
-  if (!form || !input || !countEl || !alertEl || !btn) return;
-
-  function updateSuggestionURL() {
-    const p = new URLSearchParams(location.search);
-    if (p.get("view") !== "suggestion") {
-      const u = new URL(location.href);
-      [
-        "channel", "show", "episode", "match", "tab",
-        "server", "news", "series", "seriesTab", "team", "teamTab", "archive"
-      ].forEach(k => u.searchParams.delete(k));
-      u.searchParams.set("view", "suggestion");
-      u.hash = "";
-      const path = cleanAppPath(u);
-      history.pushState({}, "", `${path}?${u.searchParams.toString()}`);
-    }
-  }
-
-  section?.addEventListener("click", () => {
-    updateSuggestionURL();
-  });
-
-  input.addEventListener("focus", () => {
-    updateSuggestionURL();
-  });
-
-  function updateCount() {
-    const words = countWords(input.value);
-    const isValid = words >= 5 && words <= 100;
-    countEl.textContent = `${words} word${words === 1 ? "" : "s"} `;
-
-    const hint = document.createElement("span");
-    hint.className = "suggestion-hint";
-    hint.textContent = "(min 5, max 100)";
-    countEl.appendChild(hint);
-
-    countEl.classList.toggle("is-valid", isValid);
-    countEl.classList.toggle("is-invalid", words > 0 && !isValid);
-  }
-
-  input.addEventListener("input", () => {
-    updateCount();
-    if (alertEl.classList.contains("show")) {
-      alertEl.className = "suggestion-alert";
-      alertEl.textContent = "";
-    }
-  });
-
-  form.addEventListener("submit", async event => {
-    event.preventDefault();
-    const text = input.value.trim();
-    const words = countWords(text);
-
-    if (words < 5) {
-      alertEl.className = "suggestion-alert show is-error";
-      alertEl.textContent = "Please enter at least 5 words to describe your request or suggestion.";
-      input.focus();
-      return;
-    }
-
-    if (words > 100) {
-      alertEl.className = "suggestion-alert show is-error";
-      alertEl.textContent = "Word limit exceeded. Maximum 100 words allowed.";
-      input.focus();
-      return;
-    }
-
-    btn.disabled = true;
-    const btnSpan = btn.querySelector("span");
-    if (btnSpan) btnSpan.textContent = "Sending...";
-    alertEl.className = "suggestion-alert";
-    alertEl.textContent = "";
-
-    let saved = false;
-
-    // 1. Try Supabase insert if table exists
-    try {
-      if (db) {
-        const { error } = await db.from("suggestions").insert({
-          message: text,
-          word_count: words
-        });
-        if (!error) saved = true;
-      }
-    } catch (e) {
-      console.warn("Supabase suggestion insert error:", e);
-    }
-
-    // 2. Dual-save to backend API (/api/suggestions)
-    const endpoints = [];
-    if (location.origin && location.origin.startsWith("http")) {
-      endpoints.push(`${location.origin}/api/suggestions`);
-    }
-    endpoints.push("/api/suggestions");
-    const configuredApi = String(C?.CRICKET_API_URL || window.CRICFREEX_CONFIG?.CRICKET_API_URL || "").replace(/\/+$/, "");
-    if (configuredApi && !endpoints.includes(`${configuredApi}/api/suggestions`)) {
-      endpoints.push(`${configuredApi}/api/suggestions`);
-    }
-
-    for (const url of endpoints) {
-      if (saved) break;
-      try {
-        const res = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: text, word_count: words })
-        });
-        if (res.ok) {
-          saved = true;
-          break;
-        }
-      } catch (e) { }
-    }
-
-    btn.disabled = false;
-    if (btnSpan) btnSpan.textContent = "Send Request";
-
-    if (saved) {
-      input.value = "";
-      updateCount();
-      alertEl.className = "suggestion-alert show is-success";
-      alertEl.textContent = "✓ Thank you! Your request has been sent to the admin team.";
-      setTimeout(() => {
-        alertEl.classList.remove("show");
-      }, 7000);
-    } else {
-      alertEl.className = "suggestion-alert show is-error";
-      alertEl.textContent = "Could not send your request right now. Please check your connection and try again.";
-    }
-  });
-
-  updateCount();
-}
-
 function closeChannelPlayer(update = true) {
   const wrap = $("playerWrap");
   if (wrap) {
@@ -1926,7 +1676,7 @@ function closeChannelPlayer(update = true) {
     wrap.replaceChildren();
     wrap.innerHTML = `
       <div class="player-empty">
-        <div><strong>Choose your content</strong>Select an available channel or episode above.</div>
+        <div><strong>Choose a channel</strong>Select an available channel above.</div>
       </div>
     `;
   }
@@ -1953,6 +1703,20 @@ function initChannelClose() {
     };
   }
 
+  const copyButton = $("copyChannelLink");
+  if (copyButton) {
+    copyButton.onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(location.href);
+        copyButton.textContent = "Copied!";
+        setTimeout(() => { copyButton.textContent = "Copy Link"; }, 2000);
+      } catch (error) {
+        console.error("Could not copy channel link:", error);
+        alert("Could not copy the channel link. Please copy the page URL manually.");
+      }
+    };
+  }
+
   window.addEventListener("cricfreex:stop-channel-stream", () => {
     closeChannelPlayer(true);
   });
@@ -1960,310 +1724,46 @@ function initChannelClose() {
   window.CricfreexApp = { closeChannelPlayer, openChannelsView };
 }
 
-/* =========================================================
-   SITE ACCESS / PASSWORD GATEKEEPER
-========================================================= */
+function initTelegramJoinPopup() {
+  const popup = $("telegramJoinPopup");
+  const closeButton = $("telegramPopupClose");
+  if (!popup || !closeButton) return;
 
-let siteAccessConfig = {
-  enabled: true,
-  password: "ROKO",
-  telegram_url: "https://t.me/cricxcreate",
-  delay_seconds: 0
-};
+  const close = () => {
+    popup.hidden = true;
+    try { sessionStorage.setItem("cricfreex_telegram_popup_seen", "1"); } catch (e) {}
+  };
 
-let siteAccessUnlocked = false;
-let gateTimer = null;
+  closeButton.addEventListener("click", close);
+  popup.querySelector(".site-access-backdrop")?.addEventListener("click", close);
+  window.addEventListener("keydown", event => {
+    if (event.key === "Escape" && !popup.hidden) close();
+  });
 
-function isSiteUnlocked() {
-  if (!siteAccessConfig.enabled || !siteAccessConfig.password) return true;
-  return siteAccessUnlocked;
-}
-window.isSiteUnlocked = isSiteUnlocked;
-
-async function fetchSiteAccessConfig() {
-  // 1. Dedicated site_access table in Supabase
-  if (db) {
-    try {
-      const { data } = await db.from("site_access")
-        .select("*")
-        .eq("id", 1)
-        .maybeSingle();
-      if (data && data.password) {
-        siteAccessConfig = {
-          enabled: data.enabled !== false,
-          password: String(data.password).trim(),
-          telegram_url: String(data.telegram_url || "https://t.me/cricxcreate").trim(),
-          delay_seconds: Math.max(1, Math.min(60, parseInt(data.delay_seconds || 3, 10)))
-        };
-        return siteAccessConfig;
-      }
-    } catch (e) {}
-  }
-
-  // 2. Content table fallback
-  let item = (content || []).find(isSiteAccessItem);
-
-  if (!item && db) {
-    try {
-      const { data } = await db.from("content")
-        .select("*")
-        .eq("public_id", SITE_ACCESS_PREFIX)
-        .maybeSingle();
-      if (data) item = data;
-    } catch (e) {}
-  }
-
-  if (item) {
-    siteAccessConfig = {
-      enabled: item.published !== false,
-      password: String(item.title || "").trim(),
-      telegram_url: String(item.media_url || "https://t.me/cricxcreate").trim(),
-      delay_seconds: Math.max(1, Math.min(60, parseInt(item.sort_order || 3, 10)))
-    };
-    return siteAccessConfig;
-  }
-
-  // 3. Backend API fallback
   try {
-    const endpoints = [];
-    if (C.CRICKET_API_URL) endpoints.push(`${C.CRICKET_API_URL}/api/access-control`);
-    endpoints.push("/api/access-control");
-
-    for (const ep of endpoints) {
-      try {
-        const res = await fetch(ep, { headers: { Accept: "application/json" } });
-        if (res.ok) {
-          const json = await res.json();
-          if (json && json.password) {
-            siteAccessConfig = {
-              enabled: json.enabled !== false,
-              password: String(json.password || "").trim(),
-              telegram_url: String(json.telegram_url || "https://t.me/cricxcreate").trim(),
-              delay_seconds: Math.max(1, Math.min(60, parseInt(json.delay_seconds || 3, 10)))
-            };
-            return siteAccessConfig;
-          }
-        }
-      } catch (e) {}
+    if (!sessionStorage.getItem("cricfreex_telegram_popup_seen")) {
+      setTimeout(() => {
+        popup.hidden = false;
+        sessionStorage.setItem("cricfreex_telegram_popup_seen", "1");
+      }, 3000);
     }
-  } catch (e) {}
-
-  return siteAccessConfig;
-}
-
-function initSiteAccessGate() {
-  const modal = document.getElementById("siteAccessModal");
-  if (!modal) return;
-
-  const form = document.getElementById("siteAccessForm");
-  const input = document.getElementById("gatePasswordInput");
-  const submitBtn = document.getElementById("gateSubmitBtn");
-  const tgBtn = document.getElementById("gateTelegramBtn");
-  const errorMsg = document.getElementById("gateErrorMsg");
-  const card = document.getElementById("siteAccessCard");
-
-  function showGate() {
-    if (siteAccessUnlocked || isSiteUnlocked()) return;
-    if (!siteAccessConfig.enabled || !siteAccessConfig.password) return;
-    modal.hidden = false;
-    modal.removeAttribute("hidden");
-    document.documentElement.classList.add("site-access-locked");
-    document.body.classList.add("site-access-locked");
-
-    try {
-      const channelIframe = document.querySelector("#channelPlayer iframe");
-      if (channelIframe && !channelIframe.dataset.paused) {
-        channelIframe.dataset.paused = "true";
-      }
-      const cricketIframe = document.querySelector("#cricketWatchPlayer iframe");
-      if (cricketIframe && !cricketIframe.dataset.paused) {
-        cricketIframe.dataset.paused = "true";
-      }
-    } catch (e) {}
-
-    setTimeout(() => {
-      input?.focus();
-    }, 150);
+  } catch (error) {
+    console.warn("Could not manage Telegram popup session state:", error);
   }
-
-  function hideGate() {
-    modal.hidden = true;
-    modal.setAttribute("hidden", "");
-    document.documentElement.classList.remove("site-access-locked");
-    document.body.classList.remove("site-access-locked");
-  }
-
-  function checkStoredAuth() {
-    if (!siteAccessConfig.enabled) {
-      siteAccessUnlocked = true;
-      hideGate();
-      return true;
-    }
-
-    if (siteAccessUnlocked) return true;
-
-    const stored = (sessionStorage.getItem("cricfreex_auth_pass") || "").trim();
-    const expected = (siteAccessConfig.password || "").trim();
-    if (expected && stored && stored.toLowerCase() === expected.toLowerCase()) {
-      siteAccessUnlocked = true;
-      hideGate();
-      return true;
-    }
-
-    return false;
-  }
-
-  async function syncAndSchedule() {
-    // Show gate immediately on load if not authenticated (0ms wait)
-    if (!checkStoredAuth()) {
-      showGate();
-    }
-
-    await fetchSiteAccessConfig();
-
-    if (tgBtn && siteAccessConfig.telegram_url) {
-      tgBtn.href = siteAccessConfig.telegram_url;
-    }
-    document.querySelectorAll(".telegram-banner-btn").forEach(btn => {
-      if (siteAccessConfig.telegram_url) btn.href = siteAccessConfig.telegram_url;
-    });
-
-    if (siteAccessUnlocked || checkStoredAuth()) {
-      if (gateTimer) {
-        clearTimeout(gateTimer);
-        gateTimer = null;
-      }
-      hideGate();
-      return;
-    }
-
-    showGate();
-  }
-
-  function clearError() {
-    if (!errorMsg) return;
-    errorMsg.textContent = "";
-    errorMsg.className = "site-access-error hidden";
-    errorMsg.style.display = "none";
-  }
-
-  function showError(msg) {
-    if (!errorMsg) return;
-    errorMsg.textContent = msg;
-    errorMsg.className = "site-access-error visible";
-    errorMsg.style.display = "block";
-  }
-
-  function verifyPassword() {
-    const val = (input?.value || "").trim().toLowerCase();
-    if (!val) {
-      showError("Please enter the access password.");
-      input?.focus();
-      return;
-    }
-
-    const expected = (siteAccessConfig.password || "").trim();
-    if (expected && val.toLowerCase() === expected.toLowerCase()) {
-      siteAccessUnlocked = true;
-      if (gateTimer) {
-        clearTimeout(gateTimer);
-        gateTimer = null;
-      }
-      try {
-        sessionStorage.setItem("cricfreex_auth_pass", val);
-        localStorage.removeItem("cricfreex_auth_pass");
-      } catch (e) {}
-
-      if (errorMsg) {
-        errorMsg.textContent = "✅ Password verified! Unlocking website...";
-        errorMsg.className = "site-access-error visible success";
-        errorMsg.style.display = "block";
-      }
-
-      submitBtn.disabled = true;
-      submitBtn.innerHTML = '<span>Access Granted!</span>';
-
-      hideGate();
-      clearError();
-      submitBtn.disabled = false;
-      submitBtn.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg><span>Unlock Live Stream</span>';
-
-      if (window.CricketCenter?.restoreRoute) {
-        window.CricketCenter.restoreRoute(false);
-      }
-      window.dispatchEvent(new CustomEvent("cricfreex:unlocked"));
-    } else {
-      showError("Invalid password. Please get today's password from our Telegram channel and try again.");
-      if (card) {
-        card.classList.remove("gate-shake");
-        void card.offsetWidth;
-        card.classList.add("gate-shake");
-      }
-      input?.focus();
-      input?.select();
-    }
-  }
-
-  input?.addEventListener("input", () => {
-    clearError();
-  });
-
-  form?.addEventListener("submit", (e) => {
-    e.preventDefault();
-    verifyPassword();
-  });
-
-  submitBtn?.addEventListener("click", (e) => {
-    e.preventDefault();
-    verifyPassword();
-  });
-
-  window.addEventListener("keydown", (e) => {
-    if (!isSiteUnlocked() && !modal.hidden) {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        e.stopPropagation();
-      }
-    }
-  }, true);
-
-  if (window.MutationObserver) {
-    const observer = new MutationObserver(() => {
-      if (!isSiteUnlocked()) {
-        if (modal.hidden || modal.hasAttribute("hidden") || modal.style.display === "none") {
-          modal.hidden = false;
-          modal.removeAttribute("hidden");
-          modal.style.removeProperty("display");
-          document.body.classList.add("site-access-locked");
-        }
-      }
-    });
-    observer.observe(modal, { attributes: true, attributeFilter: ["hidden", "style", "class"] });
-  }
-
-  // Initial trigger: runs once on page load
-  syncAndSchedule();
 }
 
 async function start() {
   setupThemeToggle();
   initActiveUsersTracking();
-  initSuggestionBox();
   initChannelClose();
-  initSiteAccessGate();
+  initTelegramJoinPopup();
   await load();
-
-  // Re-sync with loaded content
-  if (typeof fetchSiteAccessConfig === "function") {
-    fetchSiteAccessConfig();
-  }
 
   if (!restored) {
     restored = true;
     restoreURL();
   }
 
-  setInterval(cleanupFinishedWatchLinks, 30000);
 }
 
 start();

@@ -2,7 +2,6 @@ import json
 import re
 import time
 import threading
-import uuid
 from datetime import datetime, timezone, timedelta
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -20,7 +19,6 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
 
 from scrapers.details import extract_news
 from scrapers.normalized import (
@@ -560,43 +558,6 @@ def parse_start_date_sec(dt_val):
     return None
 
 
-def is_cricket_content(title: str = "", category: str = "", event_name: str = "") -> bool:
-    t = (title or "").lower()
-    c = (category or "").lower()
-    e = (event_name or "").lower()
-    combined = f"{t} {c} {e}"
-
-    non_cricket_words = (
-        "football", "soccer", "futsal", "basketball", "nba", "tennis", "atp", "wta",
-        "hockey", "fih", "badminton", "bwf", "volleyball", "table tennis", "golf",
-        "baseball", "mlb", "rugby", "motorsport", "formula 1", "formula one", "f1",
-        "motogp", "wrestling", "wwe", "mma", "ufc", "boxing", "kabaddi", "handball",
-        "athletics", "swimming", "snooker", "darts", "cycling", "skiing", "judo",
-        "karate", "taekwondo", "polo", "chess", "euroleague", "la liga", "serie a",
-        "bundesliga", "ligue 1", "champions league", "europa league", "carabao cup",
-        "copa del rey", "isl", "fa cup", "durand cup"
-    )
-    for bad in non_cricket_words:
-        if re.search(rf"(?<![a-z0-9]){re.escape(bad)}(?![a-z0-9])", combined):
-            return False
-
-    if c in ("cricket", "cricket-match"):
-        return True
-
-    cricket_indicators = (
-        "cricket", "t20", "t10", "odi", "test match", "test", "ipl", "bbl", "cpl", "psl",
-        "bpl", "lpl", "wpl", "ilt20", "sa20", "mlc", "hundred", "super smash", "ranji",
-        "syed mushtaq", "vijay hazare", "dulip", "irani", "deodhar", "sheffield", "county",
-        "blast", "npl", "nepal premier", "icc", "asia cup", "world cup", "trophy", "shield",
-        "stumps", "innings", "under-19", "u19", "women"
-    )
-    cricket_context = re.sub(r"\blive cricket stream\b", " ", combined)
-    return any(
-        re.search(rf"(?<![a-z0-9]){re.escape(ind)}(?![a-z0-9])", cricket_context)
-        for ind in cricket_indicators
-    )
-
-
 def classify_match(match):
     state = " ".join(str(match.get("state") or "").lower().split())
     status = str(match.get("status") or "").lower()
@@ -618,13 +579,6 @@ def classify_match(match):
         "no result", "match abandoned", "abandon", "match cancelled"
     )):
         return "recent"
-
-    # If active FanCode live stream is attached to this match, it MUST be LIVE!
-    mid_str = str(match.get("id") or "")
-    if mid_str:
-        with AUTO_SERVERS_LOCK:
-            if mid_str in AUTO_MATCH_SERVERS:
-                return "live"
 
     # 2. Check startDate:
     # If match is within 1 hour before start time (diff_sec <= 3600) OR
@@ -821,241 +775,6 @@ def extract_page(html, path):
         "paragraphs": paragraphs[:120],
         "links": links,
     }
-
-
-
-# =========================================================
-# FANCODE 24/7 AUTO STREAM SYNC (iosfancode.vercel.app)
-# =========================================================
-AUTO_MATCH_SERVERS: dict[str, list[dict[str, Any]]] = {}
-EXTRA_LIVE_MATCHES: dict[str, dict[str, Any]] = {}
-AUTO_SERVERS_LOCK = threading.Lock()
-LAST_AUTO_SYNC_TIME: float = 0.0
-
-try:
-    _cached_sv_path = PROJECT_DIR / "auto_servers.json"
-    if _cached_sv_path.exists():
-        with open(_cached_sv_path, "r", encoding="utf-8") as _f:
-            _loaded_sv = json.load(_f)
-            if isinstance(_loaded_sv, dict):
-                AUTO_MATCH_SERVERS.update(_loaded_sv)
-except Exception:
-    pass
-
-
-TEAM_ALIASES: dict[str, list[str]] = {
-    "south africa": ["south africa", "rsa", "sa", "proteas"],
-    "rsa": ["south africa", "rsa", "sa", "proteas"],
-    "sa": ["south africa", "rsa", "sa", "proteas"],
-
-    "australia": ["australia", "aus", "aussies"],
-    "aus": ["australia", "aus", "aussies"],
-
-    "united arab emirates": ["united arab emirates", "uae", "u a e"],
-    "uae": ["united arab emirates", "uae", "u a e"],
-
-    "papua new guinea": ["papua new guinea", "png"],
-    "png": ["papua new guinea", "png"],
-
-    "west indies": ["west indies", "wi", "windies"],
-    "wi": ["west indies", "wi", "windies"],
-
-    "new zealand": ["new zealand", "nz", "blackcaps", "black caps"],
-    "nz": ["new zealand", "nz", "blackcaps", "black caps"],
-
-    "india": ["india", "ind"],
-    "ind": ["india", "ind"],
-
-    "pakistan": ["pakistan", "pak"],
-    "pak": ["pakistan", "pak"],
-
-    "sri lanka": ["sri lanka", "sl"],
-    "sl": ["sri lanka", "sl"],
-
-    "bangladesh": ["bangladesh", "ban", "bd", "tigers"],
-    "ban": ["bangladesh", "ban", "bd", "tigers"],
-
-    "afghanistan": ["afghanistan", "afg"],
-    "afg": ["afghanistan", "afg"],
-
-    "england": ["england", "eng"],
-    "eng": ["england", "eng"],
-
-    "netherlands": ["netherlands", "ned", "dutch", "holland"],
-    "ned": ["netherlands", "ned", "dutch", "holland"],
-
-    "ireland": ["ireland", "ire"],
-    "ire": ["ireland", "ire"],
-
-    "zimbabwe": ["zimbabwe", "zim"],
-    "zim": ["zimbabwe", "zim"],
-
-    "scotland": ["scotland", "sco"],
-    "sco": ["scotland", "sco"],
-
-    "namibia": ["namibia", "nam"],
-    "nam": ["namibia", "nam"],
-
-    "nepal": ["nepal", "nep"],
-    "nep": ["nepal", "nep"],
-
-    "united states": ["united states", "usa", "us"],
-    "usa": ["united states", "usa", "us"],
-
-    "hong kong": ["hong kong", "hk", "hkg"],
-    "hk": ["hong kong", "hk", "hkg"],
-
-    "oman": ["oman", "oma", "omn"],
-    "canada": ["canada", "can"],
-    "uganda": ["uganda", "uga"],
-    "kenya": ["kenya", "ken"],
-    "jersey": ["jersey", "jer"],
-    "kuwait": ["kuwait", "kuw"],
-    "qatar": ["qatar", "qat"],
-    "denmark": ["denmark", "den"],
-    "singapore": ["singapore", "sin"],
-    "malaysia": ["malaysia", "mas"],
-    "italy": ["italy", "ita"],
-    "germany": ["germany", "ger"],
-
-    # WBBL / BBL teams
-    "melbourne renegades": ["melbourne renegades", "renegades", "mlrw", "mlr"],
-    "perth scorchers": ["perth scorchers", "scorchers", "prsw", "prs"],
-    "sydney thunder": ["sydney thunder", "thunder", "sytw", "syt"],
-    "sydney sixers": ["sydney sixers", "sixers", "sysw", "sys"],
-    "brisbane heat": ["brisbane heat", "heat", "bhw", "bwhw", "bwh"],
-    "hobart hurricanes": ["hobart hurricanes", "hurricanes", "hbhw", "hbh"],
-    "adelaide strikers": ["adelaide strikers", "strikers", "asw", "as"],
-    "melbourne stars": ["melbourne stars", "stars", "msw", "mlsw"]
-}
-
-
-def _clean_stream_str(text: str) -> str:
-    if not text:
-        return ""
-    t = re.sub(r"\(.*?\)", " ", str(text).lower())
-    t = re.sub(r"[^a-zA-Z0-9\s]", " ", t)
-    return " ".join(t.split())
-
-
-def _is_a_team(name: str) -> bool:
-    if not name:
-        return False
-    # Isolated single letter 'a' following a word, e.g. "india a", "nz a", "australia a"
-    return bool(re.search(r'\b[a-z0-9-]+\s+a\b', str(name).lower()))
-
-
-def _is_women_match(name_or_obj: Any) -> bool:
-    if isinstance(name_or_obj, dict):
-        text = " ".join([
-            str(name_or_obj.get("team1", {}).get("teamName", "")),
-            str(name_or_obj.get("team2", {}).get("teamName", "")),
-            str(name_or_obj.get("series", "")),
-            str(name_or_obj.get("description", ""))
-        ]).lower()
-        t1_s = str(name_or_obj.get("team1", {}).get("teamSName", "")).strip()
-        t2_s = str(name_or_obj.get("team2", {}).get("teamSName", "")).strip()
-        if t1_s.endswith("W") or t2_s.endswith("W"):
-            return True
-    else:
-        text = str(name_or_obj).lower()
-
-    if bool(re.search(r'\b(women|womens|wbbl)\b', text)):
-        return True
-    if "-w" in text:
-        return True
-    return False
-
-
-GENERIC_MASCOTS = {
-    "team", "cricket", "club", "npl", "mens", "women", "womens", "the", "xi",
-    "kings", "royals", "lions", "titans", "warriors", "super", "knights",
-    "riders", "falcons", "patriots", "giants", "stars", "heat", "sixers",
-    "thunder", "strikers", "hurricanes", "renegades", "scorchers", "eagles",
-    "rhinos", "tuskers", "rocks", "division", "region", "patrons", "blues", "whites"
-}
-
-
-def _normalize_stream_team_side(value: str) -> str:
-    side = re.sub(r"\b(english|hindi|live|stream|match)\b", " ", value)
-    side = re.sub(r"\bunder\s*19\b", "u19", side)
-    side = re.sub(
-        r"\b(?:men|t20i?|odi|test|day|session|innings|20\d{2})\b",
-        " ",
-        side
-    )
-    side = re.sub(r"\b(?:1st|2nd|3rd|[4-9]th)\b", " ", side)
-    return " ".join(side.split())
-
-
-def _team_matches_stream(team_dict: dict[str, Any], clean_stream: str) -> bool:
-    raw_name = str(team_dict.get("teamName", "")).lower().strip()
-    raw_short = str(team_dict.get("teamSName", "")).lower().strip()
-    clean_name = _clean_stream_str(raw_name)
-    clean_short = _clean_stream_str(raw_short)
-    terms = {clean_name}
-    if len(clean_short) >= 2:
-        terms.add(clean_short)
-
-    for key in (clean_name, clean_short, raw_name, raw_short):
-        if key in TEAM_ALIASES:
-            for alias in TEAM_ALIASES[key]:
-                clean_alias = _clean_stream_str(alias)
-                if clean_alias and (
-                    len(clean_alias) > 3
-                    or len(clean_alias.split()) > 1
-                ):
-                    terms.add(clean_alias)
-
-    normalized_terms = {_normalize_stream_team_side(term) for term in terms}
-    return _normalize_stream_team_side(clean_stream) in normalized_terms
-
-
-def _match_stream_to_cb(stream_title: str, cb_match: dict[str, Any]) -> bool:
-    clean_stream = _clean_stream_str(stream_title)
-    sides = re.split(r"\b(?:vs|v|versus)\b", clean_stream, maxsplit=1)
-    if len(sides) != 2:
-        return False
-    left = re.split(r"\s(?:-|:|\|)\s", sides[0])[-1].strip()
-    right = re.split(r"\s(?:-|:|\|)\s|,", sides[1])[0].strip()
-    right = re.sub(r"\s+in\s+.+$", "", right).strip()
-    if not left or not right:
-        return False
-
-    cb_women = _is_women_match(cb_match)
-    st_women = _is_women_match(clean_stream)
-    if cb_women != st_women:
-        return False
-
-    t1_name = str(cb_match.get("team1", {}).get("teamName", ""))
-    t2_name = str(cb_match.get("team2", {}).get("teamName", ""))
-    cb_a = _is_a_team(t1_name) or _is_a_team(t2_name)
-    st_a = _is_a_team(clean_stream)
-    if cb_a != st_a:
-        return False
-
-    t1 = cb_match.get("team1", {})
-    t2 = cb_match.get("team2", {})
-
-    return (
-        _team_matches_stream(t1, left) and _team_matches_stream(t2, right)
-    ) or (
-        _team_matches_stream(t1, right) and _team_matches_stream(t2, left)
-    )
-
-
-def _find_unique_stream_match(
-    stream_title: str,
-    matches: list[dict[str, Any]]
-) -> dict[str, Any] | None:
-    matched = {
-        str(match.get("id")): match
-        for match in matches
-        if match.get("id") and _match_stream_to_cb(stream_title, match)
-    }
-    return next(iter(matched.values())) if len(matched) == 1 else None
-
-
 
 
 
@@ -1293,7 +1012,6 @@ def fetch_cricinfo_matches() -> list[dict[str, Any]]:
     return _CRICINFO_CACHE.get("matches", [])
 
 
-_WILLOW_COOLDOWN_UNTIL = 0.0
 _CRICINFO_SUMMARY_CACHE: dict[str, Any] = {}
 
 
@@ -1567,413 +1285,6 @@ def get_cricinfo_tab_data(match_id: str, tab: str) -> dict[str, Any]:
     return data
 
 
-SUPABASE_URL = "https://zcdujcunojbzsvcmzifr.supabase.co"
-SUPABASE_KEY = "sb_publishable_qLoe2BZoZXPGoyavUS4rXg_BwonZQt-"
-SUPABASE_ADMIN_EMAIL = "aniketgurjar012@gmail.com"
-SUPABASE_ADMIN_PASSWORD = "MP47ca1025"
-_SUPABASE_AUTH_TOKEN: str | None = None
-_SUPABASE_TOKEN_EXPIRES_AT: float = 0.0
-
-
-def _get_supabase_auth_headers() -> dict[str, str]:
-    global _SUPABASE_AUTH_TOKEN, _SUPABASE_TOKEN_EXPIRES_AT
-    now = time.time()
-    if _SUPABASE_AUTH_TOKEN and now < _SUPABASE_TOKEN_EXPIRES_AT - 60:
-        return {
-            "apikey": SUPABASE_KEY,
-            "Authorization": f"Bearer {_SUPABASE_AUTH_TOKEN}",
-            "Content-Type": "application/json"
-        }
-
-    try:
-        auth_url = f"{SUPABASE_URL}/auth/v1/token?grant_type=password"
-        payload = json.dumps({
-            "email": SUPABASE_ADMIN_EMAIL,
-            "password": SUPABASE_ADMIN_PASSWORD
-        }).encode("utf-8")
-        req = urllib.request.Request(
-            auth_url,
-            data=payload,
-            headers={
-                "apikey": SUPABASE_KEY,
-                "Content-Type": "application/json"
-            },
-            method="POST"
-        )
-        with urllib.request.urlopen(req, timeout=6) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            _SUPABASE_AUTH_TOKEN = data.get("access_token")
-            expires_in = data.get("expires_in", 3600)
-            _SUPABASE_TOKEN_EXPIRES_AT = now + float(expires_in)
-            logger.info("Supabase admin auth token refreshed successfully")
-            return {
-                "apikey": SUPABASE_KEY,
-                "Authorization": f"Bearer {_SUPABASE_AUTH_TOKEN}",
-                "Content-Type": "application/json"
-            }
-    except Exception as e:
-        logger.warning("Failed to authenticate Supabase admin: %s", e)
-        return {
-            "apikey": SUPABASE_KEY,
-            "Authorization": f"Bearer {SUPABASE_KEY}",
-            "Content-Type": "application/json"
-        }
-
-
-def deduplicate_supabase_content():
-    try:
-        headers = _get_supabase_auth_headers()
-        url = f"{SUPABASE_URL}/rest/v1/content?select=id,title,media_url,category,section_slug,public_id,sort_order"
-        req = urllib.request.Request(url, headers=headers)
-        with urllib.request.urlopen(req, timeout=10) as r:
-            all_content = json.loads(r.read().decode("utf-8"))
-
-        seen_keys = {}
-        duplicate_ids = []
-        for item in all_content:
-            cat = str(item.get("category") or "").strip().lower()
-            title = str(item.get("title") or "").strip().lower()
-            m_url = str(item.get("media_url") or "").strip()
-            row_id = item.get("id")
-            if not row_id or not m_url:
-                continue
-
-            # Unique key for channels/links
-            key = (cat, title, m_url)
-            if key in seen_keys:
-                duplicate_ids.append(row_id)
-            else:
-                seen_keys[key] = row_id
-
-        if duplicate_ids:
-            logger.info("Found %d duplicate content rows in Supabase. Deleting...", len(duplicate_ids))
-            for i in range(0, len(duplicate_ids), 20):
-                batch = duplicate_ids[i:i+20]
-                ids_param = ",".join(batch)
-                del_url = f"{SUPABASE_URL}/rest/v1/content?id=in.({ids_param})"
-                del_req = urllib.request.Request(del_url, headers=headers, method="DELETE")
-                try:
-                    with urllib.request.urlopen(del_req, timeout=6):
-                        pass
-                except Exception as ex:
-                    logger.warning("Error deleting duplicate batch: %s", ex)
-            logger.info("Deduplication completed. Removed %d duplicate rows.", len(duplicate_ids))
-    except Exception as e:
-        logger.warning("deduplicate_supabase_content error: %s", e)
-
-
-def _finished_match_watch_records(
-    existing_records: list[dict[str, Any]],
-    recent_match_ids: set[str],
-    matched_servers: dict[str, list[dict[str, Any]]]
-) -> list[dict[str, Any]]:
-    finished_ids_without_streams = recent_match_ids - set(matched_servers)
-    return [
-        record
-        for record in existing_records
-        if str(record.get("category") or "").startswith("__cricket_watch__:")
-        and str(record["category"]).split(":", 1)[1] in finished_ids_without_streams
-    ]
-
-
-
-def _sync_to_supabase(matched_servers: dict[str, list[dict[str, Any]]]):
-    try:
-        headers = _get_supabase_auth_headers()
-        url = f"{SUPABASE_URL}/rest/v1/content?select=id,public_id,category,media_url&category=like.__cricket_watch__*"
-        req = urllib.request.Request(url, headers=headers)
-        with urllib.request.urlopen(req, timeout=6) as r:
-            existing_records = json.loads(r.read().decode("utf-8"))
-
-        existing_urls = {r.get("media_url") for r in existing_records if r.get("media_url")}
-        # 1. Insert new streams
-        for mid, servers in matched_servers.items():
-            cat = f"__cricket_watch__:{mid}"
-            for s in servers:
-                m_url = s.get("media_url")
-                if m_url and m_url not in existing_urls:
-                    payload = json.dumps({
-                        "title": s.get("title", "Server 1"),
-                        "public_id": s.get("id", f"auto_{mid}_{int(time.time())}"),
-                        "section_slug": "sports",
-                        "category": cat,
-                        "kind": "channel",
-                        "media_type": "link",
-                        "media_url": m_url,
-                        "sort_order": s.get("sort_order", 0) + 1,
-                        "published": True
-                    }).encode("utf-8")
-                    post_req = urllib.request.Request(
-                        f"{SUPABASE_URL}/rest/v1/content",
-                        data=payload,
-                        headers=headers,
-                        method="POST"
-                    )
-                    try:
-                        with urllib.request.urlopen(post_req, timeout=5):
-                            pass
-                        existing_urls.add(m_url)
-                    except Exception as error:
-                        logger.warning(
-                            "Failed to save auto stream for match %s: %s",
-                            mid,
-                            error
-                        )
-
-        # 2. Delete ended match servers from Supabase
-        recent_mids = set()
-        try:
-            rec_html = fetch(PAGES["recent"], 10)
-            for rm in extract_matches(rec_html):
-                if classify_match(rm) == "recent":
-                    recent_mids.add(str(rm.get("id")))
-        except Exception:
-            pass
-
-        for record in _finished_match_watch_records(
-            existing_records,
-            recent_mids,
-            matched_servers
-        ):
-            row_id = record.get("id")
-            if not row_id:
-                continue
-            del_req = urllib.request.Request(
-                f"{SUPABASE_URL}/rest/v1/content?id=eq.{row_id}",
-                headers=headers,
-                method="DELETE"
-            )
-            try:
-                with urllib.request.urlopen(del_req, timeout=5):
-                    pass
-            except Exception as error:
-                logger.warning(
-                    "Failed to delete finished-match stream %s: %s",
-                    row_id,
-                    error
-                )
-
-        # 3. Delete any old Allrounder FanCode servers, Willow servers, or ended FanCode auto servers
-        active_auto_urls = {
-            s.get("media_url")
-            for servers in matched_servers.values()
-            for s in servers
-            if s.get("media_url")
-        }
-        for r in existing_records:
-            m_url = str(r.get("media_url") or "")
-            pub_id = str(r.get("public_id") or "")
-            row_id = r.get("id")
-            # If it's an old Allrounder / Willow link OR an auto_ link no longer active:
-            if "allrounderlive.in" in m_url or (pub_id.startswith("auto_") and m_url not in active_auto_urls):
-                if row_id:
-                    del_req = urllib.request.Request(
-                        f"{SUPABASE_URL}/rest/v1/content?id=eq.{row_id}",
-                        headers=headers,
-                        method="DELETE"
-                    )
-                    try:
-                        with urllib.request.urlopen(del_req, timeout=5):
-                            pass
-                    except Exception as error:
-                        logger.warning(
-                            "Failed to delete inactive auto stream %s: %s",
-                            row_id,
-                            error
-                        )
-    except Exception as sup_err:
-        logger.warning("Supabase auto-sync error: %s", sup_err)
-
-
-def sync_allrounder_streams() -> dict[str, list[dict[str, Any]]]:
-    global LAST_AUTO_SYNC_TIME
-    try:
-        cb_matches: list[dict[str, Any]] = []
-        try:
-            live_html = fetch(PAGES["live"], 10)
-            cb_matches.extend(extract_matches(live_html))
-        except Exception:
-            pass
-        try:
-            up_html = fetch(PAGES["upcoming"], 10)
-            cb_matches.extend(extract_matches(up_html))
-        except Exception:
-            pass
-        for sched_p in (
-            "/cricket-schedule/upcoming-series/international",
-            "/cricket-schedule/upcoming-series/league"
-        ):
-            try:
-                s_html = fetch(sched_p, 60)
-                cb_matches.extend(extract_matches(s_html))
-            except Exception:
-                pass
-        try:
-            for ci_m in fetch_cricinfo_matches():
-                if ci_m.get("_category") in ("live", "upcoming"):
-                    cb_matches.append(ci_m)
-        except Exception:
-            pass
-
-        unique_cb: dict[str, dict[str, Any]] = {
-            str(m["id"]): m for m in cb_matches if m.get("id")
-        }
-        def _match_priority(m: dict[str, Any]) -> int:
-            st = str(m.get("state", "")).strip().lower()
-            if st in ("in progress", "live", "innings break", "toss", "drinks", "rain delay", "delayed", "stumps"):
-                return 0
-            if st in ("preview", "upcoming", "scheduled"):
-                return 1
-            return 2
-
-        cb_list = sorted(list(unique_cb.values()), key=_match_priority)
-
-        matched_servers: dict[str, list[dict[str, Any]]] = {}
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
-
-        # 1. FanCode streams directly from FanCode live feed (iosfancode.vercel.app)
-        try:
-            fc_url = f"https://raw.githubusercontent.com/drmlive/fancode-live-events/main/fancode.json?t={int(time.time() * 1000)}"
-            req = urllib.request.Request(fc_url, headers=headers)
-            with urllib.request.urlopen(req, timeout=6) as r:
-                fc_raw = json.loads(r.read().decode("utf-8"))
-            if isinstance(fc_raw, list):
-                fc_matches = fc_raw
-            elif isinstance(fc_raw, dict) and isinstance(fc_raw.get("matches"), list):
-                fc_matches = fc_raw["matches"]
-            else:
-                raise ValueError("FanCode feed did not contain a match list")
-
-            for fc in fc_matches:
-                fc_status = str(fc.get("status", "")).upper()
-                is_fc_live = ("LIVE" in fc_status) or (fc.get("isLive") is True)
-
-                cat = str(fc.get("event_category") or fc.get("category") or "").lower()
-                event_name = str(fc.get("event_name") or "")
-                raw_title = str(fc.get("match_name") or fc.get("title") or "")
-                match_id = str(fc.get("match_id") or fc.get("id") or "").strip()
-                if not match_id or not raw_title:
-                    continue
-
-                # Live streams from iosfancode ALWAYS end with _ENG
-                if not match_id.upper().endswith("_ENG"):
-                    continue
-
-                # Ensure only cricket events are processed (exclude football, tennis, etc.)
-                if not is_cricket_content(raw_title, cat, event_name):
-                    continue
-                if not is_fc_live:
-                    continue
-
-                # Direct web player URL for FanCode stream
-                player_url = f"https://iosfancode.vercel.app/?watch={match_id}"
-
-                # Clean title for matching (strip [English], [Hindi], etc.)
-                clean_title = re.sub(r'\[.*?\]|\(.*?\)', '', raw_title).strip()
-                if not clean_title:
-                    clean_title = raw_title
-
-                cb = _find_unique_stream_match(clean_title, [
-                    match for match in cb_list
-                    if classify_match(match) == "live"
-                ])
-                if not cb:
-                    continue
-
-                mid = str(cb["id"])
-                matched_servers.setdefault(mid, [])
-                if not matched_servers[mid]:
-                    matched_servers[mid].append({
-                        "id": f"auto_fc_{mid}_0",
-                        "title": "Server 1",
-                        "serverLabel": "Server 1",
-                        "category": f"__cricket_watch__:{mid}",
-                        "media_type": "link",
-                        "media_url": player_url,
-                        "source": "fancode",
-                        "published": True,
-                        "sort_order": 0
-                    })
-        except Exception as e:
-            logger.warning("AutoStreamSync FanCode direct error: %s", e)
-            with AUTO_SERVERS_LOCK:
-                return {
-                    mid: list(servers)
-                    for mid, servers in AUTO_MATCH_SERVERS.items()
-                }
-
-        with AUTO_SERVERS_LOCK:
-            AUTO_MATCH_SERVERS.clear()
-            AUTO_MATCH_SERVERS.update(matched_servers)
-            EXTRA_LIVE_MATCHES.clear()
-            LAST_AUTO_SYNC_TIME = time.time()
-
-        # Save to disk for instant restore on server restart
-        try:
-            with open(PROJECT_DIR / "auto_servers.json", "w", encoding="utf-8") as f:
-                json.dump(matched_servers, f)
-        except Exception as error:
-            logger.warning("Failed to persist auto-server cache: %s", error)
-
-        # 3. Direct background sync to Supabase database (zero admin manual work)
-        _sync_to_supabase(matched_servers)
-
-        return matched_servers
-    except Exception as e:
-        logger.error("AutoStreamSync top-level error: %s", e)
-        return {}
-
-
-def _auto_sync_background_loop():
-    # Run channel deduplication once on startup
-    try:
-        deduplicate_supabase_content()
-    except Exception as e:
-        logger.warning("Startup deduplication error: %s", e)
-
-    sync_counter = 0
-    while True:
-        try:
-            sync_allrounder_streams()
-            sync_counter += 1
-            if sync_counter >= 120:
-                sync_counter = 0
-                deduplicate_supabase_content()
-        except Exception as e:
-            logger.error("Background stream sync error: %s", e)
-        time.sleep(5)
-
-
-_sync_thread = threading.Thread(
-    target=_auto_sync_background_loop,
-    daemon=True,
-    name="AutoStreamSyncThread"
-)
-_sync_thread.start()
-
-
-@app.get("/api/auto-servers")
-def get_auto_servers():
-    with AUTO_SERVERS_LOCK:
-        return {
-            "success": True,
-            "count": len(AUTO_MATCH_SERVERS),
-            "servers": AUTO_MATCH_SERVERS,
-            "last_sync": LAST_AUTO_SYNC_TIME
-        }
-
-
-@app.get("/api/auto-servers/refresh")
-def force_refresh_auto_servers():
-    result = sync_allrounder_streams()
-    return {
-        "success": True,
-        "count": len(result),
-        "servers": result,
-        "last_sync": LAST_AUTO_SYNC_TIME
-    }
-
-
 @app.get("/api/team-logos")
 def get_team_logos():
     merged: dict[str, Any] = {}
@@ -2072,12 +1383,8 @@ def get_matches(category: str):
         # Rolls over automatically at midnight (12:00 AM IST)
         if category == "upcoming":
             valid_upcoming = []
-            with AUTO_SERVERS_LOCK:
-                active_live_mids = set(AUTO_MATCH_SERVERS.keys())
             for m in matches:
-                m_id = str(m.get("id"))
-                # If match is starting within 1 hour or already live or has active stream, do NOT include in upcoming
-                if m_id in active_live_mids or classify_match(m) == "live":
+                if classify_match(m) == "live":
                     continue
                 sd = m.get("startDate")
                 if not sd:
@@ -2146,28 +1453,6 @@ def get_matches(category: str):
         if category == "upcoming":
             # Chronological sort so closest upcoming match appears first
             matches.sort(key=lambda m: float(parse_start_date_sec(m.get("startDate")) or 0))
-
-        # Unmatched FanCode live streams included in Live section (cricket only)
-        if category == "live":
-            with AUTO_SERVERS_LOCK:
-                active_live_mids = set(AUTO_MATCH_SERVERS.keys())
-
-            # Also ensure ANY raw_match that has an active live stream in AUTO_MATCH_SERVERS is in Live!
-            for raw_m in raw_matches:
-                m_id = str(raw_m.get("id"))
-                if m_id in active_live_mids and not any(str(m.get("id")) == m_id for m in matches):
-                    raw_m["state"] = "Live"
-                    matches.append(raw_m)
-
-        with AUTO_SERVERS_LOCK:
-            for match in matches:
-                mid_str = str(match.get("id"))
-                if category == "live" and mid_str in AUTO_MATCH_SERVERS:
-                    match["auto_servers"] = AUTO_MATCH_SERVERS[mid_str]
-                    match["servers"] = AUTO_MATCH_SERVERS[mid_str]
-                else:
-                    match["auto_servers"] = []
-                    match["servers"] = []
 
         return {
             "success": True,
@@ -2435,25 +1720,12 @@ def get_match(match_id: str):
     try:
         mid_str = str(match_id).strip()
 
-        with AUTO_SERVERS_LOCK:
-            if mid_str in EXTRA_LIVE_MATCHES:
-                match_obj = dict(EXTRA_LIVE_MATCHES[mid_str])
-                if mid_str in AUTO_MATCH_SERVERS:
-                    match_obj["auto_servers"] = AUTO_MATCH_SERVERS[mid_str]
-                return {
-                    "success": True,
-                    "match": match_obj
-                }
-
         # 1. Search in Cricbuzz categories (live, recent, upcoming)
         for cat in ("live", "recent", "upcoming"):
             try:
                 html = fetch(PAGES[cat], MATCH_CACHE_TTL)
                 for match in extract_matches(html):
                     if str(match.get("id")) == mid_str:
-                        with AUTO_SERVERS_LOCK:
-                            if mid_str in AUTO_MATCH_SERVERS:
-                                match["auto_servers"] = AUTO_MATCH_SERVERS[mid_str]
                         return {
                             "success": True,
                             "match": match
@@ -2472,9 +1744,6 @@ def get_match(match_id: str):
                 s_html = fetch(sched_p, 60)
                 for match in extract_matches(s_html):
                     if str(match.get("id")) == mid_str:
-                        with AUTO_SERVERS_LOCK:
-                            if mid_str in AUTO_MATCH_SERVERS:
-                                match["auto_servers"] = AUTO_MATCH_SERVERS[mid_str]
                         return {
                             "success": True,
                             "match": match
@@ -2485,10 +1754,6 @@ def get_match(match_id: str):
         # 2. Search Cricinfo fallback matches
         for ci_m in fetch_cricinfo_matches():
             if str(ci_m.get("id")) == mid_str or str(ci_m.get("id")) == f"ci_{mid_str}":
-                with AUTO_SERVERS_LOCK:
-                    cid = str(ci_m.get("id"))
-                    if cid in AUTO_MATCH_SERVERS:
-                        ci_m["auto_servers"] = AUTO_MATCH_SERVERS[cid]
                 return {
                     "success": True,
                     "match": ci_m
@@ -2500,9 +1765,6 @@ def get_match(match_id: str):
                 facts_html = fetch(f"/cricket-match-facts/{mid_str}", MATCH_CACHE_TTL)
                 for match in extract_matches(facts_html):
                     if str(match.get("id")) == mid_str:
-                        with AUTO_SERVERS_LOCK:
-                            if mid_str in AUTO_MATCH_SERVERS:
-                                match["auto_servers"] = AUTO_MATCH_SERVERS[mid_str]
                         return {
                             "success": True,
                             "match": match
@@ -2521,9 +1783,6 @@ def get_match(match_id: str):
                     }
                     attach_cricinfo_logo(constructed["team1"])
                     attach_cricinfo_logo(constructed["team2"])
-                    with AUTO_SERVERS_LOCK:
-                        if mid_str in AUTO_MATCH_SERVERS:
-                            constructed["auto_servers"] = AUTO_MATCH_SERVERS[mid_str]
                     return {
                         "success": True,
                         "match": constructed
@@ -3124,151 +2383,6 @@ def v4_article(path: str):
 
     except Exception as error:
         raise HTTPException(502, str(error))
-
-
-SUGGESTIONS_FILE = PROJECT_DIR / "suggestions.json"
-suggestions_lock = threading.Lock()
-
-
-def load_suggestions():
-    if not SUGGESTIONS_FILE.exists():
-        return []
-    try:
-        with open(SUGGESTIONS_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            return data if isinstance(data, list) else []
-    except Exception:
-        return []
-
-
-def save_suggestions(items):
-    with open(SUGGESTIONS_FILE, "w", encoding="utf-8") as f:
-        json.dump(items, f, indent=2, ensure_ascii=False)
-
-
-class SuggestionPayload(BaseModel):
-    message: str
-    word_count: Optional[int] = None
-
-    class Config:
-        extra = "allow"
-
-
-@app.get("/api/suggestions")
-@app.get("/api/suggestions/")
-def get_suggestions():
-    with suggestions_lock:
-        items = load_suggestions()
-    return {
-        "success": True,
-        "suggestions": sorted(
-            items,
-            key=lambda x: str(x.get("created_at", "")),
-            reverse=True
-        )
-    }
-
-
-@app.post("/api/suggestions")
-@app.post("/api/suggestions/")
-def create_suggestion(payload: SuggestionPayload):
-    text = (payload.message or "").strip()
-    words = [w for w in text.split() if w]
-    word_count = len(words)
-    if word_count < 5:
-        raise HTTPException(status_code=400, detail="Message must contain at least 5 words.")
-    if word_count > 100:
-        raise HTTPException(status_code=400, detail="Message cannot exceed 100 words.")
-
-    new_item = {
-        "id": str(uuid.uuid4()),
-        "message": text,
-        "word_count": word_count,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "status": "pending"
-    }
-
-    with suggestions_lock:
-        items = load_suggestions()
-        items.insert(0, new_item)
-        save_suggestions(items)
-
-    return {"success": True, "suggestion": new_item}
-
-
-@app.delete("/api/suggestions/{item_id}")
-@app.delete("/api/suggestions/{item_id}/")
-def delete_suggestion(item_id: str):
-    with suggestions_lock:
-        items = load_suggestions()
-        initial_len = len(items)
-        items = [x for x in items if str(x.get("id")) != str(item_id)]
-        save_suggestions(items)
-
-    return {"success": True, "deleted": initial_len > len(items)}
-
-
-ACCESS_CONTROL_FILE = PROJECT_DIR / "access_control.json"
-access_lock = threading.Lock()
-
-
-def load_access_control():
-    if not ACCESS_CONTROL_FILE.exists():
-        return {
-            "enabled": True,
-            "password": "CRIC",
-            "telegram_url": "https://t.me/cricxcreate",
-            "delay_seconds": 3,
-            "updated_at": datetime.now(timezone.utc).isoformat()
-        }
-    try:
-        with open(ACCESS_CONTROL_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            if not isinstance(data, dict):
-                raise ValueError("Invalid format")
-            return data
-    except Exception:
-        return {
-            "enabled": True,
-            "password": "CRIC",
-            "telegram_url": "https://t.me/cricxcreate",
-            "delay_seconds": 3,
-            "updated_at": datetime.now(timezone.utc).isoformat()
-        }
-
-
-def save_access_control(data):
-    with open(ACCESS_CONTROL_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
-
-
-@app.get("/api/access-control")
-@app.get("/api/access-control/")
-def get_access_control():
-    with access_lock:
-        return load_access_control()
-
-
-class AccessControlPayload(BaseModel):
-    enabled: bool = True
-    password: str
-    telegram_url: str = "https://t.me/cricxcreate"
-    delay_seconds: int = 3
-
-
-@app.post("/api/access-control")
-@app.post("/api/access-control/")
-def update_access_control(payload: AccessControlPayload):
-    with access_lock:
-        data = {
-            "enabled": payload.enabled,
-            "password": payload.password.strip(),
-            "telegram_url": payload.telegram_url.strip(),
-            "delay_seconds": max(1, min(60, int(payload.delay_seconds or 3))),
-            "updated_at": datetime.now(timezone.utc).isoformat()
-        }
-        save_access_control(data)
-        return {"success": True, "data": data}
 
 
 @app.get("/googlee3d9dcf01c7729e6.html")

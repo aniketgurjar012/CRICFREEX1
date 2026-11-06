@@ -7,4 +7,3 @@ dist/
 __pycache__/
 *.py[cod]
 .venv/
-auto_servers.json

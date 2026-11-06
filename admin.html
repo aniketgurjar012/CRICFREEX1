@@ -18,31 +18,6 @@ if(localStorage.getItem("cricfreex_theme")==="light"){
 .topbar{height:72px;position:sticky;top:0;z-index:100;display:flex;align-items:center;padding:0 max(18px,4vw);background:#050507ed;backdrop-filter:blur(15px);border-bottom:1px solid var(--border)}.top-right{margin-left:auto;display:flex;gap:8px}.shell{width:min(var(--max),94%);margin:32px auto 80px}.welcome{padding:32px;border:1px solid #ffffff12;border-radius:24px;background:radial-gradient(circle at 90% 0,#e509142f,transparent 35%),linear-gradient(135deg,#111117,#09090d);display:flex;justify-content:space-between;align-items:center}.welcome small{color:#ff5d66;font-weight:850;letter-spacing:1.5px}.welcome h1{font-size:34px;margin:8px 0}.live{font-size:11px;color:var(--green);border:1px solid #20df7b33;background:#20df7b0e;padding:9px 12px;border-radius:30px}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:18px 0}.stat{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px}.stat span{font-size:10px;color:var(--muted);font-weight:800}.stat b{display:block;font-size:27px;margin-top:5px}.tabs{display:flex;gap:7px;overflow:auto;margin:28px 0 15px;scrollbar-width:none}.tab{white-space:nowrap;border:1px solid var(--border);background:var(--card);color:#92929d;border-radius:30px;padding:10px 15px;font-size:11px;font-weight:750}.tab.active{background:#fff;color:#050507}.panel{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:22px;margin-bottom:15px}.panel-head{display:flex;align-items:center;justify-content:space-between;gap:15px;margin-bottom:18px}.panel h2{margin:0;font-size:21px}.search{width:min(450px,100%);border:1px solid var(--border);background:#09090d;color:#fff;border-radius:30px;padding:11px 15px;outline:0}.list{display:grid;gap:8px}.row{display:grid;grid-template-columns:55px 1fr auto;align-items:center;gap:12px;border:1px solid var(--border);border-radius:12px;padding:11px}.thumb{width:55px;height:55px;background:#131319;border-radius:9px;object-fit:cover}.thumb-placeholder{width:55px;height:55px;border-radius:9px;background:linear-gradient(135deg,#251014,#101014);display:grid;place-items:center;color:#ff5862;font-weight:900}.row b,.row small{display:block}.row small{color:var(--muted);font-size:10px;margin-top:5px}.actions{display:flex;gap:6px}.actions button{padding:8px 10px;font-size:11px}.empty{text-align:center;padding:45px;color:var(--muted)}.editor{display:grid;grid-template-columns:1fr 1fr;gap:12px}.editor label{font-size:11px;font-weight:750}.editor .wide{grid-column:1/-1}.editor textarea{min-height:90px;resize:vertical}.editor-actions{grid-column:1/-1;display:flex;justify-content:flex-end;gap:8px;margin-top:5px}.upload{border:1px dashed #ffffff28!important;padding:13px;border-radius:11px}.section-list{display:grid;gap:8px}.section-row{display:grid;grid-template-columns:1fr 100px auto;gap:8px;align-items:center;border:1px solid var(--border);border-radius:11px;padding:11px}.notice{font-size:11px;color:#a4a4ad;background:#ffffff07;border:1px solid var(--border);padding:12px;border-radius:10px;margin-bottom:15px}
 .load-status{color:#ff9aa0;border-color:#ff344044;background:#ff34400c}
 @media(max-width:800px){.stats{grid-template-columns:1fr 1fr}.editor{grid-template-columns:1fr}.editor .wide,.editor-actions{grid-column:auto}.welcome{display:block}.live{display:inline-block;margin-top:15px}.panel-head{align-items:flex-start;flex-direction:column}.search{width:100%}}@media(max-width:560px){.shell{width:calc(100% - 20px);margin-top:15px}.topbar{height:58px;padding:0 10px;gap:6px}.brand{font-size:16px;gap:6px}.brand-mark{width:28px;height:28px;font-size:10px;border-radius:7px}.top-right{gap:5px;align-items:center}.top-right .ghost{padding:6px 10px;font-size:11px;border-radius:8px;white-space:nowrap}.top-right .theme-toggle{width:32px;height:32px;border-radius:8px}.top-right .theme-icon{width:15px;height:15px}.stats{grid-template-columns:1fr 1fr}.stat{padding:15px}.stat b{font-size:23px}.panel{padding:14px}.row{grid-template-columns:42px 1fr}.thumb,.thumb-placeholder{width:42px;height:42px}.actions{grid-column:2/3}.section-row{grid-template-columns:1fr 65px;gap:8px;padding:10px}.section-row input{margin-top:0;padding:8px 10px;font-size:12px}.section-row .actions{grid-column:1/-1;display:flex;gap:6px;margin-top:2px}.section-row .actions button{flex:1;padding:8px 10px;font-size:11px;border-radius:8px}.welcome{padding:22px}.welcome h1{font-size:27px}}
-.watch-link-list{display:grid;gap:10px;grid-column:1/-1}
-.watch-link-row{display:grid;grid-template-columns:minmax(150px,1fr) minmax(200px,2fr) auto;gap:9px;align-items:end;padding:12px;border:1px solid var(--border);border-radius:12px;background:#09090d}
-.watch-link-row label{min-width:0}
-.watch-link-row input{margin-top:7px}
-.watch-link-row button{height:42px}
-.watch-match-status{grid-column:1/-1}
-@media(max-width:700px){.watch-link-row{grid-template-columns:1fr}.watch-link-list,.watch-match-status{grid-column:auto}}
-.watch-shareable-box{margin-top:20px;padding:16px;border:1px solid #20df7b44;border-radius:12px;background:#09140f;display:flex;flex-direction:column;gap:12px}
-[data-theme="light"] .watch-shareable-box{background:#f0fbf5;border-color:#0d8a4333}
-.watch-shareable-head h3{margin:0 0 4px;font-size:15px;color:var(--green);display:flex;align-items:center;gap:6px}
-.watch-shareable-head p{margin:0;font-size:12px}
-.watch-shareable-list{display:flex;flex-direction:column;gap:8px}
-.watch-share-item{display:grid;grid-template-columns:110px 1fr auto;gap:10px;align-items:center;padding:10px 12px;background:#0d0e12;border:1px solid var(--border);border-radius:8px}
-[data-theme="light"] .watch-share-item{background:#fff;border-color:rgba(0,0,0,.1)}
-.watch-share-label{font-size:12px;font-weight:700;color:var(--white)}
-.watch-share-url{font-size:12px;color:#7bf0ae;background:rgba(0,0,0,.3);padding:6px 10px;border-radius:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:monospace;border:1px solid #ffffff12}
-[data-theme="light"] .watch-share-url{background:#f4f5f8;color:#0b7337;border-color:rgba(0,0,0,.08)}
-.watch-share-copy-btn{padding:6px 14px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap}
-@media(max-width:700px){.watch-share-item{grid-template-columns:1fr;gap:6px}}
-.suggestion-item{border:1px solid var(--border);border-radius:12px;padding:16px;background:#09090d;display:flex;flex-direction:column;gap:10px}
-.suggestion-header{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
-.suggestion-badge{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:800;color:var(--green);border:1px solid #20df7b33;background:#20df7b0e;padding:4px 8px;border-radius:20px}
-.suggestion-time{font-size:11px;color:var(--muted)}
-.suggestion-text{font-size:13px;line-height:1.6;color:#e8e8ed;white-space:pre-wrap;word-break:break-word;margin:0}
-.suggestion-actions{display:flex;gap:8px;justify-content:flex-end}
 .theme-toggle{display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;padding:0;border:1px solid var(--border);border-radius:10px;background:#18181e;color:#fff;cursor:pointer;transition:background .15s ease}
 .theme-toggle:hover{background:#22222a}
 .theme-icon{width:18px;height:18px;display:block}
@@ -59,9 +34,6 @@ if(localStorage.getItem("cricfreex_theme")==="light"){
 [data-theme="light"] .tab{background:#ffffff;border-color:rgba(0,0,0,.1);color:#565d6b}
 [data-theme="light"] .tab.active{background:#0a0b0d;color:#ffffff}
 [data-theme="light"] .search{background:#ffffff;border-color:rgba(0,0,0,.14);color:#0a0b0d}
-[data-theme="light"] .watch-link-row{background:#f9fafb;border-color:rgba(0,0,0,.1)}
-[data-theme="light"] .suggestion-item{background:#f9fafb;border-color:rgba(0,0,0,.1)}
-[data-theme="light"] .suggestion-text{color:#1f242e}
 [data-theme="light"] .notice{background:#f4f5f8;border-color:rgba(0,0,0,.1);color:#4b5260}
 [data-theme="light"] .theme-toggle{background:#eef1f6;border-color:rgba(0,0,0,.12);color:#0a0b0d}
 [data-theme="light"] .login-card{box-shadow:0 30px 80px rgba(0,0,0,.08)}
@@ -116,23 +88,17 @@ if(localStorage.getItem("cricfreex_theme")==="light"){
 <section class="stats">
 <div class="stat"><span>SECTIONS</span><b id="statSections">0</b></div>
 <div class="stat"><span>CONTENT</span><b id="statContent">0</b></div>
-<div class="stat"><span>SHOWS</span><b id="statShows">0</b></div>
-<div class="stat"><span>EPISODES</span><b id="statEpisodes">0</b></div>
-<div class="stat"><span>REQUESTS</span><b id="statRequests">0</b></div>
 </section>
 
 <div class="tabs">
 <button class="tab active" data-tab="content">Content</button>
-<button class="tab" data-tab="watchLinks">Cricket Watch Links</button>
-<button class="tab" data-tab="suggestions">Requests &amp; Suggestions</button>
-<button class="tab" data-tab="password">Password</button>
 <button class="tab" data-tab="website">Website</button>
 <button class="tab" data-tab="sections">Sections</button>
 </div>
 
 <section id="contentPanel" class="panel">
 <div class="panel-head">
-<div><h2>Content Manager</h2><p class="muted">Channels, shows, episodes and videos.</p></div>
+<div><h2>Content Manager</h2><p class="muted">Manage live channels.</p></div>
 <div class="actions"><button class="primary" id="addContent">+ Add</button></div>
 </div>
 <input class="search" id="contentSearch" placeholder="Search content...">
@@ -148,64 +114,9 @@ if(localStorage.getItem("cricfreex_theme")==="light"){
 <label>Display ID<input id="publicId" maxlength="100"></label>
 <label>Section<select id="contentSection"></select></label>
 <label>Category<input id="contentCategory" placeholder="Star Sports / Sony Sports / Other"></label>
-<label class="wide">Media URL / Stream Link<input id="mediaUrl" type="text" placeholder="https://... or m3u8 or iframe embed"></label>
+<label class="wide">Channel URL<input id="mediaUrl" type="text" placeholder="https://..."></label>
 <label>Order<input id="sortOrder" type="number" value="0"></label>
 <div class="editor-actions"><button type="button" class="danger hidden" id="deleteContent">Delete</button><button class="primary" id="saveContent">Save Content</button></div>
-</form>
-</section>
-
-<section id="watchLinksPanel" class="panel hidden">
-<div class="panel-head"><div><h2>Cricket Watch Links</h2><p class="muted">Live and upcoming matches automatically sync streams 24/7. Add custom links below if needed.</p></div><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;"><button class="ghost" id="refreshWatchMatches" type="button">Refresh Matches</button></div></div>
-<div id="autoSyncStatus" class="notice hidden" style="margin-bottom:12px;background:rgba(22,163,74,0.15);border:1px solid rgba(22,163,74,0.4);color:#22c55e;"></div>
-<form id="watchLinksForm" class="editor">
-<label>Match Category<select id="watchMatchCategory"><option value="live">Live matches</option><option value="upcoming">Upcoming matches</option></select></label>
-<label>Match<select id="watchMatch" required><option value="">Load a match list first</option></select></label>
-<div id="watchLinkStatus" class="notice watch-match-status" role="status">Choose a live or upcoming match to manage its watch links. Upcoming match links are saved in advance and will automatically appear to viewers once the match goes live.</div>
-<div id="watchLinkRows" class="watch-link-list"></div>
-<div class="editor-actions"><button class="ghost" type="button" id="addWatchLink">+ Add another link</button><button class="primary" id="saveWatchLinks">Save Match Links</button></div>
-</form>
-<div id="watchShareableLinksBox" class="watch-shareable-box hidden">
-<div class="watch-shareable-head">
-<h3>🔗 Match &amp; Server Shareable Links (For Telegram / Socials)</h3>
-<p class="muted">Copy a ready-to-share match message with the series, team flags and the selected stream link:</p>
-</div>
-<div id="watchShareableLinksList" class="watch-shareable-list"></div>
-</div>
-</section>
-
-<section id="suggestionsPanel" class="panel hidden">
-<div class="panel-head">
-<div><h2>User Requests &amp; Suggestions</h2><p class="muted">Live match link requests and viewer messages.</p></div>
-<div class="actions"><button class="ghost" id="refreshSuggestions" type="button">Refresh</button></div>
-</div>
-<div class="list" id="suggestionsList"></div>
-</section>
-
-<section id="passwordPanel" class="panel hidden">
-<div class="panel-head">
-<div><h2>Password &amp; Telegram Channel</h2><p class="muted">Set daily access password and Telegram channel required for viewers to unlock the website.</p></div>
-<div class="actions"><button class="ghost" id="refreshPasswordGate" type="button">Refresh</button></div>
-</div>
-<form id="passwordGateForm" class="editor">
-<label>Gate Status
-<select id="accessGateEnabled">
-<option value="true">Active (Password Required for All Viewers)</option>
-<option value="false">Disabled (Free Access / No Password)</option>
-</select>
-</label>
-<label>Daily Access Password / Code
-<input type="text" id="accessGatePassword" required placeholder="e.g. CRIC2026" maxlength="50" autocomplete="off">
-</label>
-<label class="wide">Telegram Channel Link (Where viewers get the password)
-<input type="url" id="accessGateTelegramUrl" required placeholder="https://t.me/cricxcreate">
-</label>
-<label>Popup Trigger Delay (Seconds)
-<input type="number" id="accessGateDelay" value="3" min="1" max="60">
-</label>
-<div id="passwordGateStatus" class="notice watch-match-status hidden" role="status"></div>
-<div class="editor-actions">
-<button class="primary" id="savePasswordGateBtn" type="submit">Save Password &amp; Link</button>
-</div>
 </form>
 </section>
 
