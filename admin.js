@@ -1284,9 +1284,10 @@ function updateWatchShareableLinks(matchId, records) {
     });
   }
 
+  const availableServers = records?.length ? records : selectedMatchLinks;
   list.replaceChildren();
   items.forEach(it => {
-    const copyUrl = it.url;
+    const copyUrl = availableServers[it.serverIndex]?.media_url || it.url;
     const shareMessage = formatMatchShareMessage(
       matchObj,
       copyUrl,
