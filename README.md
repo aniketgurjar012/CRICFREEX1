@@ -21,7 +21,8 @@ Port 8765 keeps CricFreeX separate from other local cricket apps that commonly u
 - Admin content editing is for live channels; series and episode entries are not shown. If the sections table is empty, new content can still be assigned to the built-in **Live Channels** section slug without creating a database section.
 - Channel players are shown when a channel is selected, including after restoring a shared channel URL. Sources on `localhost` or `127.0.0.1` only work for viewers whose own device runs that source service.
 - Match scores refresh every 10 seconds while the site is open. Stale streaming placeholders are excluded from browser caches and removed from the match list on refresh. Published live channels continue to use Supabase Realtime.
-- The site includes a join-CRICFREEX Telegram popup and per-channel copy-link action.
+- Manual page refreshes return to the top of the home page. The Telegram popup appears 5 seconds after opening the site and repeats every 2 minutes; it can be closed until the next interval.
+- The site includes a per-channel copy-link action.
 - Rankings, team player roles, available series/match statistics and historical scorecards come from the configured cricket data provider. Unsupported or unavailable information is not fabricated.
 The **Records** section uses the provider's current records endpoint and offers batting/bowling categories with format, year, team and opponent filters. Match **Overs** and **Graphs** use every innings and over list present in the provider's over-by-over feed, ordered from the first available over onward. Graphs visualize cumulative innings runs; they do not estimate win probability. A source that omits earlier innings cannot provide those missing overs.
 

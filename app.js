@@ -1731,7 +1731,9 @@ function initTelegramJoinPopup() {
 
   const close = () => {
     popup.hidden = true;
-    try { sessionStorage.setItem("cricfreex_telegram_popup_seen", "1"); } catch (e) {}
+  };
+  const show = () => {
+    if (popup.hidden) popup.hidden = false;
   };
 
   closeButton.addEventListener("click", close);
@@ -1740,19 +1742,19 @@ function initTelegramJoinPopup() {
     if (event.key === "Escape" && !popup.hidden) close();
   });
 
-  try {
-    if (!sessionStorage.getItem("cricfreex_telegram_popup_seen")) {
-      setTimeout(() => {
-        popup.hidden = false;
-        sessionStorage.setItem("cricfreex_telegram_popup_seen", "1");
-      }, 3000);
-    }
-  } catch (error) {
-    console.warn("Could not manage Telegram popup session state:", error);
-  }
+  setTimeout(() => {
+    show();
+    setInterval(show, 2 * 60 * 1000);
+  }, 5 * 1000);
 }
 
 async function start() {
+  const navigation = performance.getEntriesByType?.("navigation")?.[0];
+  if (navigation?.type === "reload") {
+    if ("scrollRestoration" in history) history.scrollRestoration = "manual";
+    window.scrollTo(0, 0);
+  }
+
   setupThemeToggle();
   initActiveUsersTracking();
   initChannelClose();
