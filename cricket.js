@@ -1228,6 +1228,31 @@
     ].filter(Boolean).join(" ").toLowerCase();
   }
 
+  const streamListingPattern =
+    /\b(?:fancode|all[\s-]?rounder|willow|i[\s-]?o[\s-]?s|live[\s-]+cricket[\s-]+stream|live[\s-]+stream(?:ing)?)\b/i;
+
+  function isStreamListing(match) {
+    const teams = [match?.team1 || {}, match?.team2 || {}];
+    const searchableText = [
+      match?.series,
+      match?.description,
+      match?.status,
+      ...teams.flatMap(team => [team.teamName, team.teamSName])
+    ].filter(Boolean).join(" ");
+
+    if (streamListingPattern.test(searchableText)) return true;
+
+    const teamNames = teams.map(team =>
+      String(team.teamName || "").trim().toLowerCase()
+    );
+    return teamNames.includes("opponent") &&
+      teamNames.some(name => name === "world feed" || /^court\s+\d+$/i.test(name));
+  }
+
+  function cricketMatchesOnly(matches) {
+    return matches.filter(match => match && !isStreamListing(match));
+  }
+
   function filtered(items, getSearchText) {
     const query = state.query.trim().toLowerCase();
     if (!query) return items;
@@ -1461,14 +1486,15 @@
   }
 
   function renderMatchList(matches, onSelect, noMatchesMessage) {
-    const list = filtered(matches, matchSearchText);
+    const cricketMatches = cricketMatchesOnly(matches);
+    const list = filtered(cricketMatches, matchSearchText);
     const content = root.querySelector(".cricket-content") || root;
 
     if (!list.length) {
       const existingGrid = content.querySelector(".cricket-match-grid");
       if (existingGrid) existingGrid.remove();
       showMessage(
-        matches.length
+        cricketMatches.length
           ? "No matches match your search."
           : noMatchesMessage
       );
@@ -1732,26 +1758,30 @@
     if (_cachedL) {
       const _parsed = JSON.parse(_cachedL);
       if (Array.isArray(_parsed) && _parsed.length) {
-        _matchDataCache.live = _parsed;
+        _matchDataCache.live = cricketMatchesOnly(_parsed);
       }
     }
     const _cachedUp = localStorage.getItem("cricfreex_cached_upcoming_matches");
     if (_cachedUp) {
       const _parsedUp = JSON.parse(_cachedUp);
       if (Array.isArray(_parsedUp) && _parsedUp.length) {
-        _matchDataCache.upcoming = _parsedUp.filter(m => isMatchIn2DayUpcomingWindow(m));
+        _matchDataCache.upcoming = cricketMatchesOnly(_parsedUp)
+          .filter(m => isMatchIn2DayUpcomingWindow(m));
       }
     }
     const _cachedRec = localStorage.getItem("cricfreex_cached_recent_matches");
     if (_cachedRec) {
       const _parsedRec = JSON.parse(_cachedRec);
       if (Array.isArray(_parsedRec) && _parsedRec.length) {
-        _matchDataCache.recent = _parsedRec;
+        _matchDataCache.recent = cricketMatchesOnly(_parsedRec);
       }
     }
     const _cachedAll = localStorage.getItem("cricfreex_all_matches");
     if (_cachedAll) {
-      state.allKnownMatches = JSON.parse(_cachedAll) || {};
+      state.allKnownMatches = Object.fromEntries(
+        Object.entries(JSON.parse(_cachedAll) || {})
+          .filter(([, match]) => match && !isStreamListing(match))
+      );
     }
     if (!state.allKnownMatches) state.allKnownMatches = {};
     Object.values(_matchDataCache).forEach(arr => {
@@ -1768,7 +1798,8 @@
 
     request("/api/matches/live").then(res => {
       if (res && Array.isArray(res.matches)) {
-        const liveOnly = res.matches.filter(m => !isCompletedMatch(m));
+        const liveOnly = cricketMatchesOnly(res.matches)
+          .filter(m => !isCompletedMatch(m));
         _matchDataCache.live = liveOnly;
         try {
           localStorage.setItem("cricfreex_cached_live_matches", JSON.stringify(liveOnly));
@@ -1789,19 +1820,22 @@
 
     request("/api/matches/recent").then(res => {
       if (res && Array.isArray(res.matches)) {
-        _matchDataCache.recent = res.matches;
+        _matchDataCache.recent = cricketMatchesOnly(res.matches);
         try {
-          localStorage.setItem("cricfreex_cached_recent_matches", JSON.stringify(res.matches));
+          localStorage.setItem("cricfreex_cached_recent_matches", JSON.stringify(_matchDataCache.recent));
           localStorage.setItem("cricfreex_all_matches", JSON.stringify(state.allKnownMatches || {}));
         } catch (e) {}
         if (!state.allKnownMatches) state.allKnownMatches = {};
-        res.matches.forEach(m => { if (m?.id) state.allKnownMatches[String(m.id)] = m; });
+        _matchDataCache.recent.forEach(m => {
+          if (m?.id) state.allKnownMatches[String(m.id)] = m;
+        });
       }
     }).catch(() => {});
 
     request("/api/matches/upcoming").then(res => {
       if (res && Array.isArray(res.matches)) {
-        const rawUpcoming = res.matches.filter(m => isMatchIn2DayUpcomingWindow(m));
+        const rawUpcoming = cricketMatchesOnly(res.matches)
+          .filter(m => isMatchIn2DayUpcomingWindow(m));
         if (!state.allKnownMatches) state.allKnownMatches = {};
         rawUpcoming.forEach(m => { if (m?.id) state.allKnownMatches[String(m.id)] = m; });
 
@@ -1853,15 +1887,16 @@
       );
       const countEl = root.querySelector(".cricket-count");
       if (countEl) countEl.remove();
+      const visibleMatches = cricketMatchesOnly(matches);
       root.querySelector(".cricket-content")?.prepend(
-        element("p", "cricket-count", `${filtered(matches, matchSearchText).length} of ${matches.length} matches`)
+        element("p", "cricket-count", `${filtered(visibleMatches, matchSearchText).length} of ${visibleMatches.length} matches`)
       );
     }
 
     try {
       const result = await request(`/api/matches/${category}`);
       if (requestId !== state.request) return;
-      matches = result.matches || [];
+      matches = cricketMatchesOnly(result.matches || []);
       if (category === "upcoming") {
         matches = matches.filter(m => isMatchIn2DayUpcomingWindow(m) && !isMatchStartingSoon(m) && !isLiveMatch(m));
         matches.sort((a, b) => (Number(a.startDate || 0) - Number(b.startDate || 0)));
@@ -1869,7 +1904,9 @@
         // Collect from all master pool matches (live or starting within 1 hour)
         const pool = Object.values(state.allKnownMatches || {});
         pool.forEach(um => {
-          if ((isMatchStartingSoon(um) || isLiveMatch(um)) && !isCompletedMatch(um)) {
+          if (!isStreamListing(um) &&
+            (isMatchStartingSoon(um) || isLiveMatch(um)) &&
+            !isCompletedMatch(um)) {
             if (!matches.some(m => String(m.id) === String(um.id))) {
               matches.push(um);
             }
@@ -1897,8 +1934,9 @@
       );
       const countEl = root.querySelector(".cricket-count");
       if (countEl) countEl.remove();
+      const visibleMatches = cricketMatchesOnly(matches);
       root.querySelector(".cricket-content")?.prepend(
-        element("p", "cricket-count", `${filtered(matches, matchSearchText).length} of ${matches.length} matches`)
+        element("p", "cricket-count", `${filtered(visibleMatches, matchSearchText).length} of ${visibleMatches.length} matches`)
       );
     } catch (e) {
       if (!matches || !matches.length) {
@@ -3488,25 +3526,28 @@
       if (state.page === "live") {
         try {
           const result = await request("/api/matches/live");
-          const matches = result.matches || [];
-          if (!matches.length) return;
+          const matches = cricketMatchesOnly(result.matches || []);
           const pool = Object.values(state.allKnownMatches || {});
           pool.forEach(um => {
-            if ((isMatchStartingSoon(um) || isLiveMatch(um)) && !isCompletedMatch(um)) {
+            if (!isStreamListing(um) &&
+              (isMatchStartingSoon(um) || isLiveMatch(um)) &&
+              !isCompletedMatch(um)) {
               if (!matches.some(m => String(m.id) === String(um.id))) {
                 matches.push(um);
               }
             }
           });
           state.matches = matches;
+          _matchDataCache.live = matches;
+          try {
+            localStorage.setItem("cricfreex_cached_live_matches", JSON.stringify(matches));
+          } catch (e) {}
 
-          // Update visible match scores and status without rebuilding the list.
-          matches.forEach(match => {
-            const card = root.querySelector(`.cricket-match-card[data-card-match-id="${match.id}"]`);
-            if (card) {
-              updateMatchCardInPlace(card, match);
-            }
-          });
+          renderMatchList(
+            matches,
+            match => openMatch(match, "live", "scorecard", true),
+            "No live matches are available right now."
+          );
         } catch (err) {
           // silent fail on network glitch
         }
