@@ -1707,7 +1707,10 @@ function initChannelClose() {
   if (copyButton) {
     copyButton.onclick = async () => {
       try {
-        await navigator.clipboard.writeText(location.href);
+        const channelTitle = $("playingTitle").textContent
+          .replace(/\s+/g, " ")
+          .trim();
+        await navigator.clipboard.writeText(`${channelTitle}\n${location.href}`);
         copyButton.textContent = "Copied!";
         setTimeout(() => { copyButton.textContent = "Copy Link"; }, 2000);
       } catch (error) {
