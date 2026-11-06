@@ -1748,12 +1748,6 @@
 
     if (state.page === "match" && state.selectedMatch) {
       renderMatchViewServers(state.selectedMatch);
-      if (!state.activeWatch || String(state.activeWatch.match?.id) !== String(state.selectedMatch.id)) {
-        const p = new URLSearchParams(location.search);
-        const sParam = p.get("server");
-        const sIdx = sParam ? Math.max(0, parseInt(sParam, 10) - 1) : 0;
-        startMatchServer(state.selectedMatch, sIdx, false);
-      }
     }
   }
 
@@ -3442,17 +3436,17 @@
   const renderMatchHeading = updateMatchHeaderDOM;
 
   async function openMatch(match, returnPage, initialTab = "scorecard", updateUrl = true) {
+    if (
+      state.activeWatch &&
+      String(state.activeWatch.match?.id) !== String(match.id)
+    ) {
+      closeCricketPlayer(false);
+    }
     state.selectedMatch = match;
     state.scorecardInning = 0;
     state.returnPage = returnPage || state.returnPage || "live";
     state.page = "match";
     state.matchTab = initialTab;
-
-    // Auto-select Server 1 if match has streams
-    const validLinks = getMatchServers(match, true);
-    if (validLinks.length > 0 && String(state.activeWatch?.match?.id) !== String(match.id)) {
-      startMatchServer(match, 0, false);
-    }
 
     if (updateUrl) {
       updateCricketURL({
@@ -4446,7 +4440,7 @@
     document.querySelector(".cricket-main-tab")?.setAttribute("aria-pressed", "true");
   }
 
-  async function openMatchById(matchId, tab = "scorecard", serverNum = 1, updateUrl = false) {
+  async function openMatchById(matchId, tab = "scorecard", serverNum = null, updateUrl = false) {
     let match = state.allKnownMatches?.[String(matchId)]
       || state.matches?.find(m => String(m.id) === String(matchId))
       || _matchDataCache.live?.find(m => String(m.id) === String(matchId))
@@ -4499,19 +4493,23 @@
     // Open match view INSTANTLY (0ms)
     await openMatch(match, "live", tab || "scorecard", updateUrl);
 
-    // Start target server as soon as ready
-    const targetIdx = (serverNum && !isNaN(serverNum) && serverNum > 0) ? (serverNum - 1) : 0;
-    const started = startMatchServer(match, targetIdx, updateUrl);
-    if (!started) {
-      [50, 150, 300, 600, 1000, 1800].forEach(d => {
-        setTimeout(() => {
-          if (state.selectedMatch && String(state.selectedMatch.id) === String(matchId)) {
-            if (!state.activeWatch || String(state.activeWatch.match?.id) !== String(matchId)) {
+    if (Number.isInteger(serverNum) && serverNum > 0) {
+      const targetIdx = serverNum - 1;
+      const started = startMatchServer(match, targetIdx, updateUrl);
+      if (!started) {
+        [50, 150, 300, 600, 1000, 1800].forEach(delay => {
+          setTimeout(() => {
+            if (
+              state.selectedMatch &&
+              String(state.selectedMatch.id) === String(matchId) &&
+              (!state.activeWatch ||
+                String(state.activeWatch.match?.id) !== String(matchId))
+            ) {
               startMatchServer(state.selectedMatch, targetIdx, updateUrl);
             }
-          }
-        }, d);
-      });
+          }, delay);
+        });
+      }
     }
   }
 

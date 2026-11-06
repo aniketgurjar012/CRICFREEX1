@@ -40,6 +40,7 @@ function setSiteMode(mode) {
   if (mainTabs) mainTabs.hidden = true;
 
   if (mode === "channels") {
+    window.CricfreexCricket?.closeWatchPlayer(false);
     document.body.classList.remove("cricket-active");
     document.body.classList.add("channels-active");
 

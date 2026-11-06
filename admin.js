@@ -471,33 +471,51 @@ async function loadCricketMatches(category){
   const requestId=++matchRequest;
   setWatchLinkStatus(`Loading ${category} matches…`);
   try{
-    const response=await fetch(
-      `${CRICKET_API_BASE}/api/matches/${category}`,
-      {headers:{Accept:"application/json"}}
-    );
-    let result;
-    try{
-      result=await response.json();
-    }catch{
-      throw new Error(
-        `Cricket API returned an unreadable response (HTTP ${response.status}).`
+    const fetchCategory = async matchCategory => {
+      const response=await fetch(
+        `${CRICKET_API_BASE}/api/matches/${matchCategory}`,
+        {headers:{Accept:"application/json"}}
       );
-    }
-    if(!response.ok){
-      throw new Error(
-        typeof result.detail==="string"
-          ?result.detail
-          :`Cricket API request failed (HTTP ${response.status}).`
-      );
-    }
-    if(result.success===false){
-      throw new Error(result.detail||"Could not load cricket matches.");
-    }
+      let result;
+      try{
+        result=await response.json();
+      }catch{
+        throw new Error(
+          `Cricket API returned an unreadable response (HTTP ${response.status}).`
+        );
+      }
+      if(!response.ok){
+        throw new Error(
+          typeof result.detail==="string"
+            ?result.detail
+            :`Cricket API request failed (HTTP ${response.status}).`
+        );
+      }
+      if(result.success===false){
+        throw new Error(result.detail||"Could not load cricket matches.");
+      }
+      return Array.isArray(result.matches) ? result.matches : [];
+    };
+
+    const matches = await fetchCategory(category);
     if(requestId!==matchRequest)return;
 
-    watchMatches[category]=Array.isArray(result.matches)
-      ?result.matches
-      :[];
+    if(category==="live"){
+      let upcomingMatches=[];
+      try{
+        upcomingMatches=await fetchCategory("upcoming");
+      }catch(error){
+        console.warn("Could not check upcoming fixtures for starting matches:",error);
+      }
+      if(requestId!==matchRequest)return;
+      const byId=new Map();
+      [...matches,...upcomingMatches.filter(isAdminLiveOrStartingSoon)]
+        .filter(match=>match?.id&&!match?.isSynthetic&&!String(match.id).startsWith("ex_"))
+        .forEach(match=>byId.set(String(match.id),match));
+      watchMatches.live=[...byId.values()];
+    }else{
+      watchMatches[category]=matches;
+    }
     renderWatchMatchOptions(category);
     cleanupFinishedWatchLinks();
     setWatchLinkStatus(
@@ -701,10 +719,17 @@ function findUniqueStreamMatch(streamTitle, matches) {
 function isAdminLiveOrStartingSoon(match) {
   const state = String(match?.state || "").toLowerCase();
   const status = String(match?.status || "").toLowerCase();
+  if (/\b(complete|completed|result|abandoned|cancelled|canceled|no result|drawn)\b/.test(`${state} ${status}`)) {
+    return false;
+  }
   if (/\b(live|in progress|innings break|stumps|toss|delayed|rain delay)\b/.test(`${state} ${status}`)) {
     return true;
   }
-  const start = Number(match?.startDate);
+  const rawStart = match?.startDate;
+  let start = Number(rawStart);
+  if (!Number.isFinite(start) && typeof rawStart === "string") {
+    start = Date.parse(rawStart);
+  }
   if (!start || !Number.isFinite(start)) return false;
   const startMs = start < 1e11 ? start * 1000 : start;
   const delta = startMs - Date.now();
