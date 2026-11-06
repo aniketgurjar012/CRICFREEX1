@@ -1199,7 +1199,7 @@ function shareTeamFlag(team, series = "") {
   return [...code].map(char => String.fromCodePoint(0x1F1E6 + char.charCodeAt(0) - 97)).join("");
 }
 
-function formatMatchShareMessage(match, streamUrl) {
+function formatMatchShareMessage(match, shareUrl, linkLabel = "🔴 WATCH LIVE") {
   const teamLabel = team => {
     const name = typeof team === "object" && team
       ? team.teamName || team.teamSName
@@ -1211,7 +1211,7 @@ function formatMatchShareMessage(match, streamUrl) {
     `🏆 ${match?.series || match?.description || "Live Cricket"}`,
     `🏏 ${teamLabel(match?.team1)} vs ${teamLabel(match?.team2)}`,
     "",
-    `🔴 WATCH LIVE : ${streamUrl}`,
+    `${linkLabel} : ${shareUrl}`,
     "",
     "⚠️ Open in Chrome Browser"
   ].join("\n");
@@ -1266,8 +1266,9 @@ function updateWatchShareableLinks(matchId, records) {
   items.push({
     label: "Match Link",
     url: `${base}/?match=${matchId}`,
+    linkLabel: "🔗 MATCH LINK",
     serverIndex: 0,
-    desc: "Opens match page & auto-plays Server 1"
+    desc: "Opens the match page without auto-playing a server"
   });
 
   for (let i = 0; i < count; i++) {
@@ -1275,17 +1276,20 @@ function updateWatchShareableLinks(matchId, records) {
     items.push({
       label: `Server ${sNum} Link`,
       url: `${base}/?match=${matchId}&server=${sNum}`,
+      linkLabel: "🔴 WATCH LIVE",
       serverIndex: i,
       desc: `Directly launches Server ${sNum} for ${matchTitle}`
     });
   }
 
-  const availableServers = records?.length ? records : selectedMatchLinks;
   list.replaceChildren();
   items.forEach(it => {
-    const streamUrl = availableServers[it.serverIndex]?.media_url;
-    const copyUrl = streamUrl || it.url;
-    const shareMessage = formatMatchShareMessage(matchObj, copyUrl);
+    const copyUrl = it.url;
+    const shareMessage = formatMatchShareMessage(
+      matchObj,
+      copyUrl,
+      it.linkLabel
+    );
     const row = document.createElement("div");
     row.className = "watch-share-item";
 
