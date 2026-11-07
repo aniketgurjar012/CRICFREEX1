@@ -206,6 +206,7 @@ body.cricket-active .cricket-center {
 .cricket-watch-provider {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   min-height: 38px;
   padding: 8px 13px;
   border: 1px solid var(--cricket-line);
@@ -215,6 +216,7 @@ body.cricket-active .cricket-center {
   font-size: 12px;
   font-weight: 700;
   text-decoration: none;
+  text-align: center;
   transition: filter .18s, transform .18s;
 }
 
