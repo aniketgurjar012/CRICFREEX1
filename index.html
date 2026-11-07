@@ -2387,7 +2387,7 @@
                       </div>
                   </div>
                   <div>
-                      <a href="./CX-Live-Channels.apk" download="CX-Live-Channels.apk" style="padding:14px 28px;border-radius:14px;background:#e50914;color:#fff;border:none;font-size:13px;font-weight:800;letter-spacing:.5px;box-shadow:0 8px 25px rgba(229,9,20,0.4);cursor:pointer;display:inline-flex;align-items:center;gap:10px;text-decoration:none;transition:all 0.2s;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:16px;height:16px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Download App</a>
+                      <button onclick="triggerPwaInstall()" style="padding:14px 28px;border-radius:14px;background:#e50914;color:#fff;border:none;font-size:13px;font-weight:800;letter-spacing:.5px;box-shadow:0 8px 25px rgba(229,9,20,0.4);cursor:pointer;display:inline-flex;align-items:center;gap:10px;text-decoration:none;transition:all 0.2s;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:16px;height:16px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Download App</button>
                   </div>
               </div>
           </section>
@@ -2447,13 +2447,19 @@
             if (btn) btn.style.display = 'inline-flex';
         });
         function triggerPwaInstall() {
-          const a = document.createElement('a');
-          a.href = './CX-Live-Channels.apk';
-          a.download = 'CX-Live-Channels.apk';
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-      }
+            if (deferredInstallPrompt) {
+                deferredInstallPrompt.prompt();
+                deferredInstallPrompt.userChoice.then((choiceResult) => {
+                    deferredInstallPrompt = null;
+                });
+            } else {
+                const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+                if (isIOS) {
+                    alert('To install CX-Live Channels on iPhone:\n1. Tap the Share button at bottom.\n2. Scroll down and tap "Add to Home Screen".');
+                } else {
+                    alert('To install: Tap browser menu (⋮) -> "Install App" or "Add to Home Screen"');
+                }
+            }
         }
     </script>
 </body>
