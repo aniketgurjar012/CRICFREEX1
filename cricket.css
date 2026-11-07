@@ -185,6 +185,45 @@ body.cricket-active .cricket-center {
   font-size: 12px;
 }
 
+.cricket-watch-heading {
+  margin: 14px 0 8px;
+  color: var(--cricket-ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.cricket-watch-providers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.cricket-watch-provider {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  padding: 8px 13px;
+  border: 1px solid var(--cricket-line);
+  border-radius: 9px;
+  background: linear-gradient(135deg, #ff5964, #e31925);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: filter .18s, transform .18s;
+}
+
+.cricket-watch-provider:hover {
+  filter: brightness(1.12);
+  transform: translateY(-1px);
+}
+
+.cricket-watch-provider:focus-visible {
+  outline: 2px solid var(--cricket-accent);
+  outline-offset: 3px;
+}
+
 .cricket-state {
   font-size: 10px;
 }

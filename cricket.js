@@ -2491,6 +2491,25 @@
       `Venue: ${venue || "Not available"}`
     ));
 
+    content.appendChild(element(
+      "h4",
+      "cricket-watch-heading",
+      "Watch live where it's available"
+    ));
+    const watchLinks = element("div", "cricket-watch-providers");
+    [
+      ["Live Sports Channels", "https://cricfreex-freecricket.vercel.app/?view=channels"],
+      ["Fancode Live", "https://cricfreex-fancode.pages.dev/"],
+      ["Willow Sports", "https://cricfreex-willow.pages.dev/"]
+    ].forEach(([label, href]) => {
+      const link = element("a", "cricket-watch-provider", label);
+      link.href = href;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      watchLinks.appendChild(link);
+    });
+    content.appendChild(watchLinks);
+
     const navigation = element("div", "cricket-tabs cricket-match-tabs");
     const matchTabs = [
       ["scorecard", "Scorecard"],
