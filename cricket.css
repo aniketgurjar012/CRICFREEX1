@@ -185,6 +185,10 @@ body.cricket-active .cricket-center {
   font-size: 12px;
 }
 
+.cricket-watch-section {
+  margin-top: 12px;
+}
+
 .cricket-watch-heading {
   margin: 14px 0 8px;
   color: var(--cricket-ink);

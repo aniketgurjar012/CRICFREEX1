@@ -1402,6 +1402,41 @@
     return parts.join(" & ") || (isCb ? "Yet to bat" : "LIVE");
   }
 
+  function createWatchProviderLinks() {
+    const section = element("div", "cricket-watch-section");
+    section.appendChild(element(
+      "h4",
+      "cricket-watch-heading",
+      "Watch live where it's available"
+    ));
+
+    const links = element("div", "cricket-watch-providers");
+    [
+      ["Live Sports Channels", "https://cricfreex-freecricket.vercel.app/?view=channels"],
+      ["Fancode Live", "https://cricfreex-fancode.pages.dev/"],
+      ["Willow Sports", "https://cricfreex-willow.pages.dev/"]
+    ].forEach(([label, href]) => {
+      const link = element("a", "cricket-watch-provider", label);
+      link.href = href;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      links.appendChild(link);
+    });
+
+    section.appendChild(links);
+    return section;
+  }
+
+  function updateMatchWatchLinks(card, match) {
+    const isAvailable = isLiveMatch(match) || isUpcomingMatch(match);
+    const existing = card.querySelector(".cricket-watch-section");
+    if (isAvailable && !existing) {
+      card.appendChild(createWatchProviderLinks());
+    } else if (!isAvailable && existing) {
+      existing.remove();
+    }
+  }
+
   function matchCard(match, onSelect) {
     const card = element("article", "cricket-match-card");
     card.setAttribute("data-card-match-id", String(match.id));
@@ -1456,6 +1491,7 @@
     summary.append(top, teams, status);
     if (venue) summary.appendChild(element("div", "cricket-match-meta", venue));
     card.appendChild(summary);
+    updateMatchWatchLinks(card, match);
 
     return card;
   }
@@ -1483,6 +1519,7 @@
       }
     });
 
+    updateMatchWatchLinks(card, match);
   }
 
   function renderMatchList(matches, onSelect, noMatchesMessage) {
@@ -2491,24 +2528,7 @@
       `Venue: ${venue || "Not available"}`
     ));
 
-    content.appendChild(element(
-      "h4",
-      "cricket-watch-heading",
-      "Watch live where it's available"
-    ));
-    const watchLinks = element("div", "cricket-watch-providers");
-    [
-      ["Live Sports Channels", "https://cricfreex-freecricket.vercel.app/?view=channels"],
-      ["Fancode Live", "https://cricfreex-fancode.pages.dev/"],
-      ["Willow Sports", "https://cricfreex-willow.pages.dev/"]
-    ].forEach(([label, href]) => {
-      const link = element("a", "cricket-watch-provider", label);
-      link.href = href;
-      link.target = "_blank";
-      link.rel = "noopener noreferrer";
-      watchLinks.appendChild(link);
-    });
-    content.appendChild(watchLinks);
+    content.appendChild(createWatchProviderLinks());
 
     const navigation = element("div", "cricket-tabs cricket-match-tabs");
     const matchTabs = [
