@@ -9,7 +9,18 @@
     <meta name="theme-color" content="#050507">
     <meta name="referrer" content="strict-origin-when-cross-origin">
     <meta name="google-site-verification" content="googlee3d9dcf01c7729e6">
-    <title>CricFreeX — Cricket Centre</title>
+    <title>CX-Live Channels — CricFreeX</title>
+
+    <!-- PWA & Mobile Standalone App Support -->
+    <link rel="manifest" href="./manifest.json">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="CX-Live">
+    <meta name="application-name" content="CX-Live Channels">
+    <link rel="apple-touch-icon" href="./logo.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="./logo.png">
+    <meta property="og:image" content="./logo.png">
     <script>
         if (localStorage.getItem("cricfreex_theme") === "light") {
             document.documentElement.setAttribute("data-theme", "light");
@@ -2244,12 +2255,16 @@
 <body>
     <header class="nav">
         <div class="brand" id="brand">
-            <div class="brand-mark">CX</div><span class="brand-word" id="brandWord">CRIC<span
-                    class="brand-red">FREEX</span></span>
+            <img src="./logo.png" alt="CX-Live" style="height:38px;width:auto;border-radius:10px;object-fit:contain;box-shadow:0 4px 15px rgba(229,9,20,0.35);">
+            <span class="brand-word" id="brandWord">CRIC<span class="brand-red">FREEX</span></span>
         </div>
         <nav class="nav-links"><a href="/" id="navCricket" class="active">Live Matches</a><a href="?view=channels"
                 id="navChannels">Live Channels</a></nav>
         <div class="nav-right">
+            <button id="pwa-install-btn" onclick="triggerPwaInstall()" style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:50px;background:#e50914;color:#fff;border:none;font-size:11px;font-weight:800;letter-spacing:.5px;box-shadow:0 4px 15px rgba(229,9,20,0.4);cursor:pointer;transition:transform .2s;" title="Install CX-Live Channels App">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                <span>Install App</span>
+            </button>
             <div class="live-chip" id="userCountChip"><span class="pulse"></span><span id="activeUserCount">1</span>
             </div>
             <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle dark/light theme"
@@ -2357,13 +2372,36 @@
                 </a>
             </div>
         </section>
+        <!-- ================= DOWNLOAD APP BANNER ================= -->
+        <section style="max-width:1200px;margin:30px auto 10px;padding:0 20px;">
+            <div style="background:linear-gradient(135deg,rgba(229,9,20,0.15),rgba(18,18,24,0.95));border:1px solid rgba(229,9,20,0.35);border-radius:24px;padding:24px 28px;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:20px;box-shadow:0 20px 50px rgba(0,0,0,0.6);">
+                <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;">
+                    <img src="./logo.png" alt="CX-Live Channels" style="width:68px;height:68px;border-radius:18px;object-fit:contain;box-shadow:0 8px 25px rgba(229,9,20,0.35);">
+                    <div>
+                        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                            <span style="font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:1px;padding:3px 8px;border-radius:6px;background:rgba(229,9,20,0.25);color:#ff3440;border:1px solid rgba(229,9,20,0.4);">OFFICIAL PWA APP</span>
+                            <span style="font-size:11px;color:#8b8b96;">Android · iOS · Windows · Mac</span>
+                        </div>
+                        <h3 style="margin:0;font-size:20px;font-weight:900;letter-spacing:-0.5px;color:#fff;">Download CX-Live Channels App</h3>
+                        <p style="margin:4px 0 0;font-size:12px;color:#c7c7cd;max-width:540px;line-height:1.5;">Install our official standalone Web App for 1-click launch, fullscreen playback without browser tabs, and buffer-free live sports channels!</p>
+                    </div>
+                </div>
+                <div>
+                    <button onclick="triggerPwaInstall()" style="padding:12px 24px;border-radius:14px;background:#e50914;color:#fff;border:none;font-size:13px;font-weight:800;letter-spacing:.5px;box-shadow:0 8px 25px rgba(229,9,20,0.4);cursor:pointer;display:inline-flex;align-items:center;gap:8px;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                        <span>Install CX-Live</span>
+                    </button>
+                </div>
+            </div>
+        </section>
     </main>
     <footer>
         <div class="footer">
-            <div class="footer-brand-wrap">
+            <div class="footer-brand-wrap" style="display:flex;align-items:center;gap:10px;">
+                <img src="./logo.png" alt="CX" style="height:26px;width:auto;border-radius:6px;object-fit:contain;">
                 <div class="footer-logo" id="footerLogo">CRIC<span>FREEX</span></div><button class="admin-entry"
                     id="adminEntry" aria-label=" " tabindex="-1"></button>
-            </div><small>© 2026 CricFreeX</small>
+            </div><small>© 2026 CricFreeX · CX-Live Channels</small>
         </div>
     </footer>
 
@@ -2398,6 +2436,35 @@
     <script src="./config.js?v=2"></script>
     <script src="./app.js?v=54"></script>
     <script src="./cricket.js?v=56"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js').then(r => r.update()).catch(() => {});
+            });
+        }
+        let deferredInstallPrompt = null;
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredInstallPrompt = e;
+            const btn = document.getElementById('pwa-install-btn');
+            if (btn) btn.style.display = 'inline-flex';
+        });
+        function triggerPwaInstall() {
+            if (deferredInstallPrompt) {
+                deferredInstallPrompt.prompt();
+                deferredInstallPrompt.userChoice.then(() => {
+                    deferredInstallPrompt = null;
+                });
+            } else {
+                const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+                if (isIOS) {
+                    alert('To install CX-Live Channels App on iPhone:\n1. Tap the Share button (square with arrow) at the bottom.\n2. Scroll down and tap "Add to Home Screen".');
+                } else {
+                    alert('To install: Click the (⋮) menu in your browser and tap "Install App" or "Add to Home screen"');
+                }
+            }
+        }
+    </script>
 </body>
 
 </html>
