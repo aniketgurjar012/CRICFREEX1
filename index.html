@@ -903,10 +903,42 @@
 
         .watch-head {
             display: flex;
-            justify-content: space-between;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 14px;
+            width: 100%;
+        }
+
+        .watch-left {
+            display: flex;
+            gap: 12px;
             align-items: center;
-            gap: 20px;
-            margin-bottom: 14px
+            width: 100%;
+        }
+
+        .watch-actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            width: 100%;
+        }
+
+        @media (max-width: 768px) {
+            .watch-head {
+                flex-direction: column;
+                gap: 12px;
+            }
+            .watch-actions {
+                width: 100%;
+                display: flex;
+                gap: 8px;
+            }
+            .channel-close-btn {
+                flex: 1;
+                padding: 10px 14px;
+                justify-content: center;
+                text-align: center;
+            }
         }
 
         .watch-left {
@@ -2405,7 +2437,6 @@
     <div id="telegramJoinPopup" class="site-access-modal" role="dialog" aria-modal="true" aria-labelledby="telegramPopupTitle" hidden>
         <div class="site-access-backdrop"></div>
         <div class="site-access-card">
-            <button type="button" class="telegram-popup-close" id="telegramPopupClose" aria-label="Close popup">×</button>
             <div class="site-access-badge">
                 <span class="site-access-pulse-dot"></span>
                 CRICFREEX UPDATES
@@ -2426,6 +2457,9 @@
                     <polyline points="7 7 17 7 17 17"></polyline>
                 </svg>
             </a>
+            <button type="button" id="telegramPopupDismiss" class="site-access-dismiss-btn" style="width:100%;margin-top:10px;padding:12px 18px;border-radius:12px;background:#141620;color:#9ca3af;border:1px solid #232738;font-size:12px;font-weight:700;cursor:pointer;transition:all 0.2s;">
+                I've Already Joined
+            </button>
         </div>
     </div>
 

@@ -1710,12 +1710,11 @@ function initChannelClose() {
         const channelTitle = $("playingTitle").textContent
           .replace(/\s+/g, " ")
           .trim();
-        await navigator.clipboard.writeText(`${channelTitle}\n${location.href}`);
+        await navigator.clipboard.writeText(`${channelTitle} - Watch Live on CricFreeX\n${location.href}`);
         copyButton.textContent = "Copied!";
         setTimeout(() => { copyButton.textContent = "Copy Link"; }, 2000);
       } catch (error) {
-        console.error("Could not copy channel link:", error);
-        alert("Could not copy the channel link. Please copy the page URL manually.");
+        prompt("Copy channel link:", `${$("playingTitle").textContent.trim()} - Watch Live on CricFreeX\n${location.href}`);
       }
     };
   }
@@ -1727,28 +1726,33 @@ function initChannelClose() {
   window.CricfreexApp = { closeChannelPlayer, openChannelsView };
 }
 
+let livePopupTimer1 = null;
+let livePopupTimer2 = null;
+
 function initTelegramJoinPopup() {
   const popup = $("telegramJoinPopup");
-  const closeButton = $("telegramPopupClose");
-  if (!popup || !closeButton) return;
+  const dismissBtn = $("telegramPopupDismiss");
+  if (!popup) return;
 
   const close = () => {
     popup.hidden = true;
   };
   const show = () => {
-    if (popup.hidden) popup.hidden = false;
+    popup.hidden = false;
   };
 
-  closeButton.addEventListener("click", close);
-  popup.querySelector(".site-access-backdrop")?.addEventListener("click", close);
-  window.addEventListener("keydown", event => {
-    if (event.key === "Escape" && !popup.hidden) close();
-  });
+  if (dismissBtn) dismissBtn.onclick = close;
 
-  setTimeout(() => {
+  if (livePopupTimer1) clearTimeout(livePopupTimer1);
+  if (livePopupTimer2) clearTimeout(livePopupTimer2);
+
+  // Exactly 5 seconds after load
+  livePopupTimer1 = setTimeout(() => {
     show();
-    setInterval(show, 2 * 60 * 1000);
-  }, 3 * 1000);
+
+    // Exactly 2 minutes after 1st popup
+    livePopupTimer2 = setInterval(show, 2 * 60 * 1000);
+  }, 5000);
 }
 
 async function start() {
@@ -1756,6 +1760,7 @@ async function start() {
   if (navigation?.type === "reload") {
     if ("scrollRestoration" in history) history.scrollRestoration = "manual";
     window.scrollTo(0, 0);
+    history.replaceState(null, "", location.pathname);
   }
 
   setupThemeToggle();
@@ -1764,7 +1769,7 @@ async function start() {
   initTelegramJoinPopup();
   await load();
 
-  if (!restored) {
+  if (!restored && navigation?.type !== "reload") {
     restored = true;
     restoreURL();
   }
