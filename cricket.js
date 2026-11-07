@@ -1404,26 +1404,11 @@
 
   function createWatchProviderLinks() {
     const section = element("div", "cricket-watch-section");
-    section.appendChild(element(
-      "h4",
-      "cricket-watch-heading",
-      "Watch live where it's available"
-    ));
-
-    const links = element("div", "cricket-watch-providers");
-    [
-      ["Live Sports Channels", "https://cricfreex-freecricket.vercel.app/?view=channels"],
-      ["Fancode Live", "https://cricfreex-fancode.pages.dev/"],
-      ["Willow Sports", "https://cricfreex-willow.pages.dev/"]
-    ].forEach(([label, href]) => {
-      const link = element("a", "cricket-watch-provider", label);
-      link.href = href;
-      link.target = "_blank";
-      link.rel = "noopener noreferrer";
-      links.appendChild(link);
-    });
-
-    section.appendChild(links);
+    const link = element("a", "cricket-watch-provider", "Watch Live");
+    link.href = "https://t.me/cricfreex";
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    section.appendChild(link);
     return section;
   }
 
